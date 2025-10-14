@@ -20,3 +20,4 @@ results/
 
 # Backup files
 *.bak
+settings.local.json
