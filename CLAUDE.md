@@ -73,13 +73,143 @@ See `c-reference/` directory for copied C source files if needed.
 
 ## Architecture Overview
 
-This program searches for monotone simple 6-Venn diagrams drawable with six triangles, as described in Carroll 2000. The search is divided into three main phases:
+This program searches for monotone simple 6-Venn diagrams drawable with six triangles, as described in [Carroll 2000]. The search is divided into three main phases:
 
 1. Finding maximal sequences of 6 integers making a 5-face degree signature
 2. Finding 64 facial cycles defining a Venn diagram with this signature
 3. Finding an edge-to-corner mapping where every pair of lines crosses at most once
 
 Output is in GraphML format defining a planar graph with 18 pseudoline segments in six sets of three.
+
+**For detailed information**, see:
+- **[docs/DESIGN.md](docs/DESIGN.md)** - Comprehensive design documentation including the non-deterministic engine, memory management, predicates, and implementation details
+- **[docs/MATH.md](docs/MATH.md)** - Mathematical foundations, Venn diagram theory, isomorphism types, and pseudoline arrangements
+- **[docs/RESULTS.md](docs/RESULTS.md)** - Expected results: 233 solutions with 1.7M variations, performance benchmarks
+- **[docs/TESTS.md](docs/TESTS.md)** - Test suite documentation with visual diagrams for 3-, 4-, 5-, and 6-Venn cases
+
+## Memory Architecture
+
+**CRITICAL DESIGN DECISION**: The Rust implementation uses a two-tier memory model designed to enable future parallelization while maintaining the C version's performance characteristics.
+
+### Two-Tier Model
+
+The C implementation uses global static variables for all state. Rust replaces this with explicit heap allocation and clear separation between immutable and mutable state.
+
+**Tier 1: MEMO Data (Immutable, Computed Once)**
+
+All data computed during the `Initialize` predicate that never changes during search:
+- Facial cycle constraint lookup tables (bitwise operations)
+- Possible vertex configurations (480 entries for N=6)
+- Possible edge relationships
+- Cycle containment sets (for triples i,j,k)
+- All other precomputed lookup tables
+
+This data is **search-invariant** - it cannot depend on the current search state because that would require tracking on the trail for backtracking.
+
+**Rust strategy:**
+- Compute once during initialization
+- Store in `MemoizedData` struct
+- Each `SearchContext` either owns a copy (if small) or borrows a `&'static` reference (if moderate)
+- Size estimate: ~100KB-1MB (exact size determined during implementation)
+- Decision on copy vs. reference made based on measured size
+
+**Tier 2: DYNAMIC Data (Mutable, Per-Search)**
+
+All data that changes during search, tracked on the trail:
+- `Trail` - records all state changes for O(1) backtracking
+- `Faces` - current facial cycle assignments, edges, vertices
+- `EdgeColorCount` - crossing counts for current solution
+- Other state marked DYNAMIC in C code (see [docs/DESIGN.md](docs/DESIGN.md))
+
+**Rust strategy:**
+- Each `SearchContext` owns its mutable state
+- Changes recorded on trail before modification
+- On backtrack, trail rewinds to restore previous state
+- Pre-allocated capacities to avoid reallocation during search
+
+### Heap Allocation Strategy
+
+Unlike the C version's global static variables, the Rust version uses heap allocation:
+
+**Benefits:**
+- Enables multiple independent `SearchContext` instances
+- Allows future parallelization at InnerFacePredicate boundary (see below)
+- Better testing (can run searches in isolation)
+- More idiomatic Rust (explicit ownership, no global mut, no unsafe)
+
+**Performance:**
+- One-time allocation cost during initialization (negligible)
+- No per-operation overhead vs. global statics
+- Pre-allocated capacities avoid reallocation during search
+- MEMO data has excellent cache locality (read-only, frequently accessed)
+
+### Memory Layout
+
+**Current implementation: Single-threaded**
+
+```rust
+pub struct MemoizedData {
+    cycle_constraints: CycleConstraints,
+    possible_vertices: PossibleVertices,
+    // Other MEMO fields
+}
+
+pub struct SearchContext {
+    memo: MemoizedData,  // Owned copy (or &'static reference, TBD)
+    trail: Trail,
+    faces: Faces,
+    edge_color_count: EdgeColorCount,
+    // Other DYNAMIC state
+}
+
+impl SearchContext {
+    pub fn new() -> Self {
+        // Compute MEMO data once
+        let memo = MemoizedData::initialize();
+
+        SearchContext {
+            memo,
+            trail: Trail::with_capacity(10000),  // Pre-allocate for search depth
+            faces: Faces::new(),
+            edge_color_count: EdgeColorCount::new(),
+        }
+    }
+}
+```
+
+### Parallelization Strategy (Future Enhancement)
+
+The memory architecture enables coarse-grain parallelization at the **InnerFacePredicate boundary**.
+
+**Parallelization point:**
+After InnerFacePredicate finds each 5-face degree signature (~10-20 solutions), spawn independent search for each.
+
+**Why this boundary:**
+- InnerFacePredicate is quick (< 1ms total for all degree signatures)
+- Venn search per degree signature takes ~200-500ms
+- Natural independence - each degree signature is a separate problem
+- Matches the 1999/2000 implementation's coarse-grain parallel approach
+
+**Implementation approach (when ready):**
+
+1. Single-threaded initialization computes all MEMO data
+2. InnerFacePredicate runs single-threaded, finds ~10-20 degree signatures
+3. For each degree signature solution, create new `SearchContext`:
+   - Copy or share MEMO data (depends on measured size)
+   - Fresh DYNAMIC state (trail, faces, counters)
+4. Use rayon or spawn threads for parallel Venn + Corners + GraphML searches
+5. Each thread works independently with its own DYNAMIC state
+6. Collect results via channels to writer thread
+
+**Current status:** Architecture is parallelization-ready, but implement single-threaded first to validate correctness.
+
+**Expected speedup:** 5-10x on modern multi-core CPUs (limited by ~10-20 parallel tasks, not by the 233 final solutions).
+
+**Key architectural decision:** We avoid painting ourselves into a single-threaded corner by:
+- Using heap allocation (not global statics)
+- Owning state per context (enables Send + Sync)
+- Separating read-only MEMO from mutable DYNAMIC state
+- No shared mutable state across threads
 
 ## Core Design Principles
 
@@ -91,21 +221,27 @@ The trail system is the core efficiency mechanism - **do not remove or simplify 
 - **C Implementation**: Array of trail entries with pointer-based rewind
 - **Rust Implementation**: Should use `Vec<TrailEntry>` with index-based rewind, wrapped in type-safe API
 
-**Suggested Rust approach**:
+**Rust approach (aligned with Memory Architecture above)**:
 ```rust
 struct Trail {
     entries: Vec<TrailEntry>,
     checkpoint: usize,
 }
 
+// Trailed values don't hold trail reference
 struct Trailed<T> {
     value: T,
-    // Reference to trail - exact mechanism TBD (Rc<RefCell<Trail>> or unsafe pointer)
 }
 
 impl<T: Copy> Trailed<T> {
-    fn set(&mut self, new_value: T) {
-        // Automatically record old value in trail before updating
+    fn set(&mut self, ctx: &mut SearchContext, new_value: T) {
+        // Record old value on trail before updating
+        ctx.trail.record_change(/* identifier */, self.value);
+        self.value = new_value;
+    }
+
+    fn get(&self) -> T {
+        self.value
     }
 }
 ```
@@ -114,38 +250,74 @@ impl<T: Copy> Trailed<T> {
 
 #### Trail System Design Decisions
 
-**Open question: How to share Trail reference across Trailed values?**
+**How to provide Trail access to Trailed values?**
 
-Three main approaches to consider:
+The C implementation uses a global static trail. Rust uses explicit context passing.
 
-1. **`Rc<RefCell<Trail>>` (Safe, ergonomic)**
-   - ✅ Safe Rust, no unsafe code
-   - ✅ Easy to use, automatic reference counting
-   - ✅ Good for initial implementation
+**Recommended approach: SearchContext with owned trail**
+
+```rust
+pub struct SearchContext {
+    memo: MemoizedData,       // Read-only MEMO data (Tier 1)
+    trail: Trail,             // Owned mutable trail (Tier 2)
+    faces: Faces,             // Owned mutable state (Tier 2)
+    edge_color_count: EdgeColorCount,
+    // Other DYNAMIC state
+}
+
+// Trailed values don't hold trail reference
+pub struct Trailed<T> {
+    value: T,
+}
+
+impl<T: Copy> Trailed<T> {
+    pub fn set(&mut self, ctx: &mut SearchContext, new_value: T) {
+        // Record old value on trail
+        ctx.trail.record_change(/* address/id */, self.value);
+        self.value = new_value;
+    }
+
+    pub fn get(&self) -> T {
+        self.value
+    }
+}
+```
+
+**Key design points:**
+- ✅ Trail owned by `SearchContext`, passed explicitly as `&mut`
+- ✅ No runtime overhead (no RefCell, no Arc, no atomic ops)
+- ✅ Each search context is independent (enables parallelization)
+- ✅ Safe Rust with clear ownership
+- ✅ Explicit context passing matches Rust idioms
+- ❌ More verbose than C's global access (acceptable trade-off for safety and parallelization)
+
+**Alternative approaches NOT recommended:**
+
+1. **`Rc<RefCell<Trail>>` - Runtime overhead + prevents Send**
    - ❌ Runtime overhead from RefCell borrow checking
-   - ❌ Small allocation overhead
-   - **Recommendation**: Start here, optimize later if needed
+   - ❌ Prevents `Send` trait (can't move between threads)
+   - ❌ Shared mutable state anti-pattern in Rust
 
-2. **`*mut Trail` with unsafe (Performance)**
-   - ✅ Zero runtime overhead
-   - ✅ Matches C implementation's approach
-   - ❌ Requires unsafe code
-   - ❌ Must carefully prove lifetime invariants
-   - ❌ More complex to maintain
-   - **Recommendation**: Only after profiling shows RefCell is a bottleneck
+2. **`Arc<Mutex<Trail>>` - Lock contention defeats parallelization**
+   - ❌ Lock contention across threads
+   - ❌ Defeats the purpose of parallelization
+   - ❌ More complex than needed
 
-3. **Arena-based with indices (Middle ground)**
-   - ✅ Safe Rust with minimal overhead
-   - ✅ Good cache locality
-   - ❌ More complex API (index instead of reference)
-   - ❌ Requires arena allocator
-   - **Recommendation**: Consider if RefCell overhead is measurable but unsafe isn't justified
+3. **`*mut Trail` with unsafe - No benefit over safe approach**
+   - ❌ Requires unsafe code throughout
+   - ❌ Defeats Rust's safety guarantees
+   - ❌ No performance benefit over context-passing
 
-**Suggested implementation path:**
-1. Start with `Rc<RefCell<Trail>>` for correctness
-2. Add comprehensive tests and benchmarks
-3. Profile with real workloads
-4. Optimize to unsafe/arena only if measurements justify it
+4. **Thread-local storage - Limits parallelization**
+   - ❌ Limits parallelization opportunities
+   - ❌ Hidden global state (reduces testability)
+   - ❌ Less clear than explicit context
+
+**Implementation path:**
+1. Use `SearchContext` with explicit context passing
+2. Pre-allocate trail capacity to minimize allocations
+3. Each independent search owns its trail (enables parallelization)
+4. Profile to verify performance matches C implementation
 
 ### 2. Non-Deterministic Search Engine
 
@@ -204,39 +376,68 @@ struct Edge {
 
 ## Module Structure (Planned)
 
+**Organized by memory tier and architectural concerns:**
+
 ```
 src/
 ├── main.rs              - Entry point, CLI argument parsing
 ├── lib.rs               - Library root
-├── trail/               - Trail-based backtracking system
-│   ├── mod.rs
+│
+├── memo/                - Tier 1: MEMO data (immutable, computed once)
+│   ├── mod.rs           - MemoizedData struct
+│   ├── cycles.rs        - Cycle constraint lookup tables
+│   ├── vertices.rs      - Possible vertex configurations
+│   └── initialize.rs    - Compute all MEMO data during initialization
+│
+├── context/             - SearchContext (combines both tiers)
+│   └── mod.rs           - SearchContext struct, owns trail + state + references memo
+│
+├── trail/               - Tier 2: Trail system (mutable, per-search)
+│   ├── mod.rs           - Trail struct
 │   └── trailed.rs       - Trailed<T> wrapper type
+│
+├── state/               - Tier 2: DYNAMIC state (mutable, per-search)
+│   ├── faces.rs         - Faces structure
+│   ├── edges.rs         - Edge structures
+│   └── counters.rs      - EdgeColorCount and other tracked state
+│
 ├── engine/              - Non-deterministic search engine
 │   ├── mod.rs
 │   ├── predicate.rs     - Predicate trait and types
 │   └── stack.rs         - Search stack management
-├── geometry/            - Core geometric types
+│
+├── geometry/            - Core geometric types (used across tiers)
 │   ├── mod.rs
 │   ├── color.rs
 │   ├── cycle.rs
 │   ├── edge.rs
 │   ├── vertex.rs
 │   └── face.rs
+│
 ├── alternating/         - Alternating ternary operators
 │   ├── mod.rs
 │   ├── pco.rs          - Partial cyclic orders
 │   └── chirotope.rs    - Chirotope support
+│
 ├── predicates/          - Search predicates
 │   ├── mod.rs
-│   ├── initialize.rs
-│   ├── innerface.rs
-│   ├── venn.rs
-│   ├── corners.rs
-│   └── save.rs
+│   ├── initialize.rs    - Builds MEMO data
+│   ├── innerface.rs     - Finds degree signatures (parallelization boundary)
+│   ├── venn.rs          - Main Venn diagram search
+│   ├── corners.rs       - Corner assignment
+│   └── save.rs          - Solution serialization
+│
 ├── triangles.rs         - Triangle/line intersection logic
 ├── graphml.rs           - GraphML output generation
 └── statistics.rs        - Search statistics tracking
 ```
+
+**Key organizational principles:**
+- `memo/` contains all Tier 1 (MEMO) immutable data
+- `trail/` and `state/` contain Tier 2 (DYNAMIC) mutable per-search data
+- `context/` ties it all together in `SearchContext`
+- `predicates/initialize.rs` populates MEMO data
+- `predicates/innerface.rs` is the natural parallelization boundary
 
 ## Migration Order (Suggested)
 
@@ -258,7 +459,15 @@ src/
 
 Before writing any Rust code:
 
-1. **Study the C implementation**
+1. **Read the design documentation**
+   ```bash
+   # Start with comprehensive design overview
+   less docs/DESIGN.md         # Architecture, engine, predicates, file layout
+   less docs/MATH.md           # Mathematical foundations
+   less docs/TESTS.md          # Test strategy and expected behavior
+   ```
+
+2. **Study the C implementation**
    ```bash
    # Read the key files to understand the algorithm
    cd ../venntriangles
@@ -268,7 +477,9 @@ Before writing any Rust code:
    less venn.c                 # Main search
    ```
 
-2. **Run C implementation to understand behavior**
+   See [docs/DESIGN.md](docs/DESIGN.md) for complete file organization and naming conventions.
+
+3. **Run C implementation to understand behavior**
    ```bash
    cd ../venntriangles
    make
@@ -276,33 +487,73 @@ Before writing any Rust code:
    # Examine the output to understand expected behavior
    ```
 
-3. **Extract test cases from C tests**
+   Expected results are documented in [docs/RESULTS.md](docs/RESULTS.md).
+
+4. **Extract test cases from C tests**
    ```bash
    # Look at test files in C implementation
    ls ../venntriangles/tests/
    # Identify which tests to port first
    ```
 
-### Phase 1: Trail System (Week 1-2)
+   See [docs/TESTS.md](docs/TESTS.md) for detailed test documentation with visual diagrams.
 
-**Goal**: Implement and thoroughly test the trail system in isolation.
+### Phase 1: Memory Architecture & Foundation (Week 1-2)
+
+**Goal**: Establish the two-tier memory model, trail system, and SearchContext. This is the architectural foundation that enables future parallelization.
 
 ```bash
-# Create module structure
-mkdir -p src/trail
-touch src/trail/mod.rs
-touch src/trail/trailed.rs
+# Create module structure (memory-focused)
+mkdir -p src/{memo,context,trail,state}
 touch src/lib.rs
+touch src/memo/mod.rs
+touch src/context/mod.rs
+touch src/trail/{mod.rs,trailed.rs}
+touch src/state/mod.rs
 ```
 
+**Step 1: Design MemoizedData structure**
+- Identify all MEMO fields from C code (fields marked with MEMO annotation in `c-reference/`)
+- Create `MemoizedData` struct skeleton in `src/memo/mod.rs`
+- Estimate memory size (will determine copy vs. `&'static` reference strategy)
+- Document which C global variables map to which MEMO fields
+
+**Step 2: Implement Trail system**
+- `Trail` struct with `Vec<TrailEntry>` in `src/trail/mod.rs`
+- `checkpoint()` and `rewind()` operations
+- Test independently with simple values
+- **Reference**: `c-reference/trail.h`, `c-reference/trail.c`
+
+**Step 3: Implement SearchContext**
+- Create `SearchContext` in `src/context/mod.rs`
+- Combine MEMO (Tier 1) + DYNAMIC state (Tier 2) in single struct
+- Implement `SearchContext::new()` with pre-allocated capacities
+- Test creating multiple independent contexts
+- Verify contexts don't interfere with each other
+
+**Step 4: Implement Trailed<T>**
+- Wrapper type in `src/trail/trailed.rs`
+- Requires `&mut SearchContext` to modify (automatic trail recording)
+- Test checkpoint/rewind with Trailed values in SearchContext
+
 **Implementation checklist:**
+- [ ] `MemoizedData` skeleton with size estimate
 - [ ] `Trail` struct with `Vec<TrailEntry>`
 - [ ] `checkpoint()` and `rewind()` methods
+- [ ] `SearchContext` combining both tiers
 - [ ] `Trailed<T>` wrapper with automatic trail recording
 - [ ] Unit tests for trail operations
+- [ ] Independence tests (multiple SearchContext instances)
 - [ ] Benchmark trail performance vs. C implementation
 
-**Reference files**: `c-reference/trail.h`, `c-reference/trail.c`
+**Success criteria:**
+- Can create multiple `SearchContext` instances
+- Each has independent trail and state
+- Changes to one don't affect others
+- Trail rewind correctly restores state
+- Memory architecture ready for future parallelization
+
+**Reference files**: `c-reference/trail.h`, `c-reference/trail.c`, `c-reference/core.h` (for MEMO/DYNAMIC annotations)
 
 ### Phase 2: Basic Types (Week 2-3)
 
@@ -362,25 +613,31 @@ If you encounter issues:
 
 ## Key Differences from C
 
-### Memory Management
-- **C**: Manual malloc/free with careful ownership tracking
-- **Rust**: Automatic via ownership system, no manual freeing needed
+*See the [Memory Architecture](#memory-architecture) section above for detailed discussion of memory management strategy.*
 
-### Trail System
-- **C**: Pointer-based with raw pointer arithmetic
-- **Rust**: Index-based with safe Vec operations, wrapped in type-safe API
+### Memory and Ownership
+- **C**: Global static variables, single copy of all state, trail also global static
+- **Rust**: Heap-allocated `SearchContext` with owned state, enables multiple independent instances for parallelization
+
+### Ownership Model
+- **C**: Implicit global ownership, careful conventions to avoid conflicts
+- **Rust**: Explicit ownership via `SearchContext`, compiler-enforced safety, enables Send + Sync
 
 ### Null Handling
-- **C**: NULL pointers with careful checking
-- **Rust**: Option<T> with compiler-enforced checking
+- **C**: NULL pointers with careful manual checking
+- **Rust**: `Option<T>` with compiler-enforced checking
 
 ### Array Bounds
-- **C**: Manual bounds checking, easy to make mistakes
-- **Rust**: Automatic bounds checking, panics on overflow
+- **C**: Manual bounds checking, potential for bugs
+- **Rust**: Automatic bounds checking, panics on overflow (checked in debug, unchecked in release for performance)
 
 ### Constants
-- **C**: Compile-time NCOLORS via -DNCOLORS=6
+- **C**: Compile-time NCOLORS via `-DNCOLORS=6` preprocessor flag
 - **Rust**: Const generics where possible, or runtime configuration
+
+### Parallelization
+- **C**: Global statics prevent easy parallelization (would require process-level parallelism)
+- **Rust**: Independent `SearchContext` instances enable thread-level parallelization at InnerFacePredicate boundary
 
 ## Dependencies and Tooling
 
@@ -552,6 +809,92 @@ cargo test -- --test-threads=4
 cargo test test_trail_checkpoint_rewind
 ```
 
+#### Testing Memory Architecture
+
+**Critical tests for parallelization readiness:**
+
+```rust
+#[test]
+fn test_independent_search_contexts() {
+    // Create two independent contexts
+    let mut ctx1 = SearchContext::new();
+    let mut ctx2 = SearchContext::new();
+
+    // Modify ctx1's state
+    ctx1.faces.set_some_value(/* ... */);
+    ctx1.trail.checkpoint();
+
+    // Verify ctx2 is completely unaffected
+    assert!(ctx2.faces.is_unmodified());
+
+    // Modify ctx2
+    ctx2.faces.set_different_value(/* ... */);
+
+    // Verify ctx1 still has its original changes
+    assert_eq!(ctx1.faces.get_value(), /* expected */);
+}
+
+#[test]
+fn test_memo_data_immutable() {
+    let ctx = SearchContext::new();
+
+    // Get pointer/reference to MEMO data
+    let memo_ptr = &ctx.memo as *const _;
+
+    // Perform search operations that modify DYNAMIC state
+    // ... (checkpoint, modify faces, rewind, etc.)
+
+    // MEMO data should be completely unchanged
+    assert_eq!(&ctx.memo as *const _, memo_ptr);
+
+    // Verify MEMO data contents unchanged
+    // (check specific fields haven't been modified)
+}
+
+#[test]
+fn test_context_clone_for_parallel() {
+    let ctx1 = SearchContext::new();
+
+    // Simulate creating context for parallel search
+    let ctx2 = SearchContext::new();  // Or ctx1.clone_for_parallel() if implemented
+
+    // Both should have access to same MEMO data (by copy or reference)
+    assert_eq!(ctx1.memo.some_lookup_value(), ctx2.memo.some_lookup_value());
+
+    // But independent DYNAMIC state
+    ctx1.trail.checkpoint();
+    ctx2.trail.checkpoint();
+
+    // Modify ctx1
+    ctx1.faces.set_value(/* ... */);
+
+    // ctx2 should be unaffected
+    assert_ne!(ctx1.faces.get_value(), ctx2.faces.get_value());
+}
+
+#[test]
+fn test_memory_overhead_per_context() {
+    use std::mem::size_of;
+
+    // Measure SearchContext size
+    let ctx_size = size_of::<SearchContext>();
+
+    // Should be reasonable (few KB for DYNAMIC state)
+    // MEMO data size should be documented
+    println!("SearchContext size: {} bytes", ctx_size);
+
+    // If using copies of MEMO data, total should be acceptable
+    // for ~10-20 parallel threads
+}
+```
+
+**Testing guidelines:**
+- Always test multiple independent `SearchContext` instances
+- Verify MEMO data is truly immutable
+- Test that trail rewind doesn't affect other contexts
+- Measure memory overhead per context
+- Verify Send + Sync traits if parallelization implemented
+
 ## Performance Considerations
 
 The C implementation is highly optimized:
@@ -560,10 +903,39 @@ The C implementation is highly optimized:
 - Minimal allocations during search
 
 **Rust goals**:
-- Match or exceed C performance
+- Match or exceed C performance (single-threaded)
+- Enable 5-10x speedup via parallelization (future)
 - Profile and optimize hot paths
 - Use inline annotations where beneficial
-- Consider unsafe blocks for critical paths (only after profiling)
+- Consider unsafe blocks for critical paths (only after profiling shows benefit)
+
+### Memory Model Performance
+
+**Heap allocation overhead:**
+
+| Strategy | Cost | Benefit |
+|----------|------|---------|
+| One-time SearchContext allocation | ~few microseconds at startup | Enables multiple independent contexts |
+| Pre-allocated Vec capacities | Zero ongoing cost | Avoids reallocation during search |
+| MEMO data per context (if copied) | ~100KB-1MB per context | Simple, good cache locality |
+| MEMO data `&'static` (if referenced) | Zero per context | Shared across all contexts |
+
+**Expected performance:**
+- Heap allocation: Negligible (~0.001% of search time)
+- Pre-allocated capacities: Zero reallocation overhead
+- MEMO data copying (if <1MB): ~few microseconds, excellent cache locality
+- Overall: Should match C single-threaded performance within measurement error
+
+**Parallelization benefit far outweighs any overhead:**
+- Serial overhead: < 0.01% (heap allocation, context setup)
+- Parallel speedup: 5-10x (with ~10-20 independent searches)
+- Net benefit: ~500-1000x improvement over any serial overhead
+
+**Decision on MEMO data strategy:**
+- Measure `size_of::<MemoizedData>()` during Phase 1
+- If < 1MB: Copy per context (simpler, good cache locality)
+- If > 1MB: Use `&'static` via `Box::leak()` (zero copy overhead)
+- Either way: Performance should be excellent
 
 ### Establishing Performance Baseline
 
@@ -664,9 +1036,11 @@ Don't optimize prematurely:
 ## Documentation Standards
 
 - All public APIs must have doc comments
-- Complex algorithms should reference the Carroll 2000 paper
-- Cite specific C implementation functions when porting
+- Complex algorithms should reference [Carroll 2000] or relevant sections in [docs/MATH.md](docs/MATH.md)
+- Cite specific C implementation functions when porting (see [docs/DESIGN.md](docs/DESIGN.md) for C code organization)
 - Explain non-obvious type safety invariants
+- For geometric concepts and mathematical background, link to [docs/MATH.md](docs/MATH.md)
+- For test expectations and validation approach, reference [docs/TESTS.md](docs/TESTS.md)
 
 ## Advanced Rust Patterns to Explore
 
@@ -680,6 +1054,19 @@ Since you're practicing advanced Rust:
 
 ## References
 
-- Carroll 2000 paper (describing the algorithm)
-- C implementation at ../venntriangles
-- Images in /images directory (visual explanations of concepts)
+### Primary References
+
+[Carroll 2000]: Carroll, Jeremy J. "Drawing Venn triangles." HP LABORATORIES TECHNICAL REPORT HPL-2000-73 (2000). [PDF](https://shiftleft.com/mirrors/www.hpl.hp.com/techreports/2000/HPL-2000-73.pdf)
+
+### Additional Resources
+
+- **C implementation**: `/Users/jcarroll/venn/venntriangles` (tags: v1.0, v1.1-pco)
+- **C reference copy**: `c-reference/` directory (25 .c files, 22 .h files)
+- **Design documentation**: [docs/DESIGN.md](docs/DESIGN.md) - Detailed architecture, engine, predicates, naming conventions
+- **Mathematical theory**: [docs/MATH.md](docs/MATH.md) - Venn diagrams, FISCs, isomorphism, pseudolines, and additional references:
+  - Bultena, Bette, Branko Grünbaum, and Frank Ruskey. "Convex drawings of intersecting families of simple closed curves." CCCG. 1999.
+  - Grünbaum, Branko. "The importance of being straight." Proc. 12th Biannual Intern. Seminar of the Canadian Math. Congress. 1970.
+  - Felsner, Stefan, and Jacob E. Goodman. "Pseudoline arrangements." Handbook of Discrete and Computational Geometry. 2017.
+- **Expected results**: [docs/RESULTS.md](docs/RESULTS.md) - 233 solutions, 1.7M variations, performance data
+- **Test documentation**: [docs/TESTS.md](docs/TESTS.md) - Visual test cases for 3-, 4-, 5-, 6-Venn diagrams
+- **Visual examples**: `/images` directory in C implementation (diagrams for understanding concepts)
