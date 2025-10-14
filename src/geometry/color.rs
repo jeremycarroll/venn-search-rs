@@ -71,7 +71,7 @@ impl Color {
     /// ```
     /// use venn_search::geometry::Color;
     /// assert_eq!(Color::new(0).to_char(), 'a');
-    /// assert_eq!(Color::new(5).to_char(), 'f');
+    /// assert_eq!(Color::new(2).to_char(), 'c');
     /// ```
     pub fn to_char(self) -> char {
         (b'a' + self.0) as char

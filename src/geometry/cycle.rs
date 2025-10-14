@@ -14,12 +14,12 @@
 //! use venn_search::geometry::{Cycle, Color};
 //!
 //! // Create a cycle from colors
-//! let colors = vec![Color::new(0), Color::new(2), Color::new(4)];
+//! let colors = vec![Color::new(0), Color::new(1), Color::new(2)];
 //! let cycle = Cycle::new(&colors);
 //!
 //! assert_eq!(cycle.len(), 3);
-//! assert!(cycle.contains_sequence(Color::new(0), Color::new(2)));
-//! assert_eq!(format!("{}", cycle), "(ace)");
+//! assert!(cycle.contains_sequence(Color::new(0), Color::new(1)));
+//! assert_eq!(format!("{}", cycle), "(abc)");
 //! ```
 //!
 //! # Note
@@ -71,11 +71,7 @@ impl Cycle {
         let length = colors.len() as u8;
 
         // Find the minimum color and its position
-        let (min_pos, _min_color) = colors
-            .iter()
-            .enumerate()
-            .min_by_key(|(_, &c)| c)
-            .unwrap();
+        let (min_pos, _min_color) = colors.iter().enumerate().min_by_key(|(_, &c)| c).unwrap();
 
         // Copy colors starting from min position (canonical rotation)
         for i in 0..colors.len() {
@@ -143,9 +139,7 @@ impl Cycle {
     ///
     /// Returns None if the color is not in the cycle.
     pub fn index_of(&self, color: Color) -> Option<usize> {
-        self.colors[..self.len()]
-            .iter()
-            .position(|&c| c == color)
+        self.colors[..self.len()].iter().position(|&c| c == color)
     }
 
     /// Reverse the direction of this cycle.
@@ -186,7 +180,10 @@ mod tests {
         let cycle = Cycle::new(&colors);
 
         assert_eq!(cycle.len(), 3);
-        assert_eq!(cycle.colors(), &[Color::new(0), Color::new(1), Color::new(2)]);
+        assert_eq!(
+            cycle.colors(),
+            &[Color::new(0), Color::new(1), Color::new(2)]
+        );
     }
 
     #[test]
@@ -203,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]  // Requires NCOLORS >= 5 (uses color 4)
+    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))] // Requires NCOLORS >= 5 (uses color 4)
     fn test_contains_sequence() {
         let colors = vec![Color::new(0), Color::new(2), Color::new(4)];
         let cycle = Cycle::new(&colors);
@@ -217,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "ncolors_3")))]  // Requires NCOLORS >= 4
+    #[cfg(not(any(feature = "ncolors_3")))] // Requires NCOLORS >= 4
     fn test_contains_triple() {
         let colors = vec![Color::new(0), Color::new(1), Color::new(2), Color::new(3)];
         let cycle = Cycle::new(&colors);
@@ -230,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]  // Requires NCOLORS >= 5
+    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))] // Requires NCOLORS >= 5
     fn test_index_of() {
         let colors = vec![Color::new(0), Color::new(2), Color::new(4)];
         let cycle = Cycle::new(&colors);
@@ -256,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]  // Requires NCOLORS >= 5
+    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))] // Requires NCOLORS >= 5
     fn test_colorset() {
         let colors = vec![Color::new(0), Color::new(2), Color::new(4)];
         let cycle = Cycle::new(&colors);
@@ -277,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5")))]  // Requires NCOLORS = 6
+    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5")))] // Requires NCOLORS = 6
     fn test_display_with_gaps() {
         let colors = vec![Color::new(1), Color::new(3), Color::new(5)];
         let cycle = Cycle::new(&colors);

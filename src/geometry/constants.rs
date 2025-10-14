@@ -30,7 +30,12 @@
 /// - `ncolors_5` → NCOLORS=5
 /// - `ncolors_6` → NCOLORS=6 (explicit)
 /// - (default) → NCOLORS=6 (when no feature specified)
-#[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5", feature = "ncolors_6")))]
+#[cfg(not(any(
+    feature = "ncolors_3",
+    feature = "ncolors_4",
+    feature = "ncolors_5",
+    feature = "ncolors_6"
+)))]
 pub const NCOLORS: usize = 6;
 
 #[cfg(feature = "ncolors_3")]
@@ -123,9 +128,7 @@ const fn choose(n: usize, k: usize) -> usize {
 pub const NCYCLES: usize = match NCOLORS {
     3 => choose(3, 0) * factorial(2),
     4 => choose(4, 0) * factorial(3) + choose(4, 1) * factorial(2),
-    5 => {
-        choose(5, 0) * factorial(4) + choose(5, 1) * factorial(3) + choose(5, 2) * factorial(2)
-    }
+    5 => choose(5, 0) * factorial(4) + choose(5, 1) * factorial(3) + choose(5, 2) * factorial(2),
     6 => {
         choose(6, 0) * factorial(5)
             + choose(6, 1) * factorial(4)
@@ -139,7 +142,7 @@ pub const NCYCLES: usize = match NCOLORS {
 ///
 /// Each cycle has a unique ID in 0..NCYCLES, and we use a bitset to represent
 /// sets of cycles efficiently.
-pub const CYCLESET_LENGTH: usize = (NCYCLES + 63) / 64;
+pub const CYCLESET_LENGTH: usize = NCYCLES.div_ceil(64);
 
 /// Maximum number of vertices (points) in the diagram.
 ///
@@ -152,7 +155,10 @@ pub const NPOINTS: usize = (1 << (NCOLORS - 2)) * NCOLORS * (NCOLORS - 1);
 ///
 /// The trail system and various bitset operations assume 64-bit pointers and words.
 /// This assertion will cause a compile-time error on 32-bit systems.
-const _: () = assert!(std::mem::size_of::<usize>() == 8, "64-bit architecture required");
+const _: () = assert!(
+    std::mem::size_of::<usize>() == 8,
+    "64-bit architecture required"
+);
 
 /// Compile-time assertion that u64 is 8 bytes.
 ///
@@ -186,7 +192,10 @@ mod tests {
 
     #[test]
     fn test_ncolors_in_valid_range() {
-        assert!(NCOLORS >= 3 && NCOLORS <= 6, "NCOLORS must be 3, 4, 5, or 6");
+        assert!(
+            NCOLORS >= 3 && NCOLORS <= 6,
+            "NCOLORS must be 3, 4, 5, or 6"
+        );
     }
 
     #[test]
@@ -206,7 +215,7 @@ mod tests {
         match NCOLORS {
             3 => assert_eq!(NCYCLES, 2),   // C(3,0)*2! = 1*2 = 2
             4 => assert_eq!(NCYCLES, 14),  // C(4,0)*3! + C(4,1)*2! = 1*6 + 4*2 = 14
-            5 => assert_eq!(NCYCLES, 74),  // C(5,0)*4! + C(5,1)*3! + C(5,2)*2! = 1*24 + 5*6 + 10*2 = 74
+            5 => assert_eq!(NCYCLES, 74), // C(5,0)*4! + C(5,1)*3! + C(5,2)*2! = 1*24 + 5*6 + 10*2 = 74
             6 => assert_eq!(NCYCLES, 394), // C(6,0)*5! + C(6,1)*4! + C(6,2)*3! + C(6,3)*2! = 1*120 + 6*24 + 15*6 + 20*2 = 394
             _ => unreachable!(),
         }
@@ -226,9 +235,9 @@ mod tests {
         assert_eq!(NPOINTS, expected);
 
         match NCOLORS {
-            3 => assert_eq!(NPOINTS, 2 * 3 * 2), // = 12
-            4 => assert_eq!(NPOINTS, 4 * 4 * 3), // = 48
-            5 => assert_eq!(NPOINTS, 8 * 5 * 4), // = 160
+            3 => assert_eq!(NPOINTS, 2 * 3 * 2),  // = 12
+            4 => assert_eq!(NPOINTS, 4 * 4 * 3),  // = 48
+            5 => assert_eq!(NPOINTS, 8 * 5 * 4),  // = 160
             6 => assert_eq!(NPOINTS, 16 * 6 * 5), // = 480
             _ => unreachable!(),
         }

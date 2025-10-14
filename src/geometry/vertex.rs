@@ -72,7 +72,12 @@ impl Vertex {
     ///
     /// Vertices are created during initialization after edges are set up.
     /// The incoming edge array follows the convention documented in the struct.
-    pub fn new(id: VertexId, primary: Color, secondary: Color, incoming_edges: [EdgeId; 4]) -> Self {
+    pub fn new(
+        id: VertexId,
+        primary: Color,
+        secondary: Color,
+        incoming_edges: [EdgeId; 4],
+    ) -> Self {
         let mut colors = ColorSet::empty();
         colors.insert(primary);
         colors.insert(secondary);
@@ -118,7 +123,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))] // Requires NCOLORS >= 5
+    #[cfg(ncolors_min_5)]
     fn test_crossing_colors() {
         let primary = Color::new(2);
         let secondary = Color::new(4);
@@ -141,7 +146,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "ncolors_3"))] // Requires NCOLORS >= 4
+    #[cfg(ncolors_min_4)]
     fn test_colors_bitset() {
         let primary = Color::new(1);
         let secondary = Color::new(3);

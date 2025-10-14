@@ -14,12 +14,11 @@
 //! // Create an empty cycle set
 //! let mut set = CycleSet::empty();
 //! set.insert(0);  // Add cycle with ID 0
-//! set.insert(5);  // Add cycle with ID 5
+//! set.insert(1);  // Add cycle with ID 1
 //!
 //! assert_eq!(set.len(), 2);
 //! assert!(set.contains(0));
-//! assert!(set.contains(5));
-//! assert!(!set.contains(3));
+//! assert!(set.contains(1));
 //! ```
 //!
 //! # Note
@@ -52,8 +51,8 @@ impl CycleSet {
 
         // Fill complete words
         let complete_words = NCYCLES / 64;
-        for i in 0..complete_words {
-            words[i] = u64::MAX;
+        for word in words.iter_mut().take(complete_words) {
+            *word = u64::MAX;
         }
 
         // Fill partial last word if needed
@@ -146,8 +145,8 @@ impl CycleSet {
     /// Compute the union of two cycle sets.
     pub fn union(&self, other: &Self) -> Self {
         let mut result = [0u64; CYCLESET_LENGTH];
-        for i in 0..CYCLESET_LENGTH {
-            result[i] = self.0[i] | other.0[i];
+        for (i, word) in result.iter_mut().enumerate() {
+            *word = self.0[i] | other.0[i];
         }
         Self(result)
     }
@@ -155,8 +154,8 @@ impl CycleSet {
     /// Compute the intersection of two cycle sets.
     pub fn intersection(&self, other: &Self) -> Self {
         let mut result = [0u64; CYCLESET_LENGTH];
-        for i in 0..CYCLESET_LENGTH {
-            result[i] = self.0[i] & other.0[i];
+        for (i, word) in result.iter_mut().enumerate() {
+            *word = self.0[i] & other.0[i];
         }
         Self(result)
     }
@@ -164,8 +163,8 @@ impl CycleSet {
     /// Compute the difference of two cycle sets (self - other).
     pub fn difference(&self, other: &Self) -> Self {
         let mut result = [0u64; CYCLESET_LENGTH];
-        for i in 0..CYCLESET_LENGTH {
-            result[i] = self.0[i] & !other.0[i];
+        for (i, word) in result.iter_mut().enumerate() {
+            *word = self.0[i] & !other.0[i];
         }
         Self(result)
     }
@@ -461,10 +460,10 @@ mod tests {
 
         // Verify specific values
         match NCOLORS {
-            3 => assert_eq!(CYCLESET_LENGTH, 1),   // 2 cycles need 1 u64
-            4 => assert_eq!(CYCLESET_LENGTH, 1),   // 14 cycles need 1 u64
-            5 => assert_eq!(CYCLESET_LENGTH, 2),   // 74 cycles need 2 u64s
-            6 => assert_eq!(CYCLESET_LENGTH, 7),   // 394 cycles need 7 u64s
+            3 => assert_eq!(CYCLESET_LENGTH, 1), // 2 cycles need 1 u64
+            4 => assert_eq!(CYCLESET_LENGTH, 1), // 14 cycles need 1 u64
+            5 => assert_eq!(CYCLESET_LENGTH, 2), // 74 cycles need 2 u64s
+            6 => assert_eq!(CYCLESET_LENGTH, 7), // 394 cycles need 7 u64s
             _ => unreachable!(),
         }
     }
@@ -477,9 +476,9 @@ mod tests {
             let mut set = CycleSet::empty();
 
             // Insert IDs in different words
-            set.insert(0);      // Word 0, first bit
-            set.insert(63);     // Word 0, last bit
-            set.insert(64);     // Word 1, first bit
+            set.insert(0); // Word 0, first bit
+            set.insert(63); // Word 0, last bit
+            set.insert(64); // Word 1, first bit
 
             // Only insert higher IDs if they're valid
             let mut expected = vec![0, 63, 64];

@@ -168,7 +168,11 @@ impl Trail {
     /// # Safety
     ///
     /// Same safety requirements as `record_and_set`.
-    pub(crate) unsafe fn maybe_record_and_set(&mut self, ptr: NonNull<u64>, new_value: u64) -> bool {
+    pub(crate) unsafe fn maybe_record_and_set(
+        &mut self,
+        ptr: NonNull<u64>,
+        new_value: u64,
+    ) -> bool {
         if *ptr.as_ptr() != new_value {
             self.record_and_set(ptr, new_value);
             true
@@ -322,7 +326,8 @@ mod tests {
         assert_eq!(trail.len(), 0);
 
         // Setting different value records in trail
-        let changed = unsafe { trail.maybe_record_and_set(NonNull::new_unchecked(&mut value), 100) };
+        let changed =
+            unsafe { trail.maybe_record_and_set(NonNull::new_unchecked(&mut value), 100) };
         assert!(changed);
         assert_eq!(trail.len(), 1);
         assert_eq!(value, 100);

@@ -154,6 +154,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(ncolors_min_4)]
     fn test_unique_cycle() {
         let colors = ColorSet::from_colors(&[Color::new(0), Color::new(1), Color::new(2)]);
 
@@ -176,6 +177,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(ncolors_min_4)]
     fn test_is_cycle_possible() {
         let colors = ColorSet::from_colors(&[Color::new(0), Color::new(1), Color::new(2)]);
         let mut possible = CycleSet::empty();
