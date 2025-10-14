@@ -12,6 +12,8 @@
 //! To be implemented during Phase 2.
 
 pub mod color;
+pub mod constants;
 
 // Re-export for convenience
 pub use color::Color;
+pub use constants::*;

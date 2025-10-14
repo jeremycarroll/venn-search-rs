@@ -16,6 +16,14 @@ path = "src/main.rs"
 [dev-dependencies]
 # Test framework dependencies will go here
 
+[features]
+# Configure NCOLORS at compile time (default: 6)
+# Only one of these should be active at a time
+ncolors_3 = []
+ncolors_4 = []
+ncolors_5 = []
+ncolors_6 = []
+
 [profile.release]
 opt-level = 3
 lto = true
