@@ -55,4 +55,4 @@ pub mod trail;
 
 // Re-export commonly used types
 pub use context::SearchContext;
-pub use trail::{Trail, Trailed};
+pub use trail::Trail;

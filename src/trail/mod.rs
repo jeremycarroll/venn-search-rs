@@ -5,19 +5,29 @@
 //! This module provides O(1) backtracking by recording state changes in a trail.
 //! When backtracking occurs, the trail is rewound to restore previous state.
 //!
-//! The implementation is based on the C trail system in c-reference/engine.c (lines 21-227).
-
-pub mod trailed;
-
-pub use trailed::{Trailed, TrailedRegistry};
+//! The implementation closely matches the C trail system in c-reference/engine.c (lines 21-227).
+//!
+//! # Design
+//!
+//! - Trail entries are 128 bits: raw pointer (64-bit) + old value (64-bit)
+//! - Only supports `u64` values (no u8/u16/u32 overhead)
+//! - Automatic restoration on rewind (walks trail backwards, writes old values)
+//! - Pointers must point to data owned by SearchContext (lifetime safety)
 
 /// A single entry in the trail, recording one state change.
+///
+/// This matches the C implementation:
+/// ```c
+/// struct trail {
+///     void* ptr;        // 8 bytes
+///     uint_trail value; // 8 bytes (uint64)
+/// };
+/// ```
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // Fields will be used when we implement automatic restoration
 struct TrailEntry {
-    /// Unique identifier for the value being tracked
-    id: usize,
-    /// The old value before the change (stored as u64)
+    /// Raw pointer to the u64 value that was changed
+    ptr: *mut u64,
+    /// The old value before the change
     old_value: u64,
 }
 
@@ -34,7 +44,14 @@ struct TrailEntry {
 /// # Implementation Notes
 ///
 /// The C implementation uses a global static array with pointer arithmetic.
-/// This Rust implementation uses a Vec with index-based operations for safety.
+/// This Rust implementation uses a Vec with automatic restoration on rewind.
+///
+/// # Safety
+///
+/// Trail operations are `unsafe` because they store raw pointers. The safety invariant
+/// is that all pointers must point to data owned by the SearchContext that owns this trail.
+/// This is enforced by making trail operations private and only exposing them through
+/// safe wrapper methods on SearchContext.
 #[derive(Debug)]
 pub struct Trail {
     /// All trail entries recorded so far
@@ -69,20 +86,32 @@ impl Trail {
 
     /// Rewind the trail to the most recent checkpoint.
     ///
+    /// This automatically restores all values that were changed since the checkpoint,
+    /// matching the C implementation's `trailRewindTo` behavior.
+    ///
     /// Returns true if there was a checkpoint to rewind to, false otherwise.
     pub fn rewind(&mut self) -> bool {
         if let Some(checkpoint_idx) = self.checkpoints.pop() {
             // Don't rewind past frozen checkpoint
-            if let Some(frozen) = self.frozen_checkpoint {
-                if checkpoint_idx < frozen {
-                    self.checkpoints.push(checkpoint_idx);
-                    return false;
+            let target_idx = if let Some(frozen) = self.frozen_checkpoint {
+                checkpoint_idx.max(frozen)
+            } else {
+                checkpoint_idx
+            };
+
+            // Restore all values back to checkpoint
+            while self.entries.len() > target_idx {
+                let entry = self.entries.pop().unwrap();
+                unsafe {
+                    // SAFETY: Pointer was valid when recorded, and data is owned by
+                    // SearchContext which owns this trail, so pointer is still valid.
+                    *entry.ptr = entry.old_value;
                 }
             }
 
-            // Truncate to checkpoint (entries beyond checkpoint are discarded)
-            self.entries.truncate(checkpoint_idx);
-            true
+            // Return true if we successfully rewound (even if target == checkpoint)
+            // Return false only if we were blocked by frozen checkpoint
+            checkpoint_idx >= target_idx
         } else {
             false
         }
@@ -96,32 +125,50 @@ impl Trail {
         self.frozen_checkpoint = Some(self.entries.len());
     }
 
-    /// Record a state change in the trail (internal use only).
+    /// Record a state change and update the value (internal use only).
+    ///
+    /// # Safety
+    ///
+    /// Caller must ensure:
+    /// - `ptr` points to a valid `u64` owned by the SearchContext that owns this trail
+    /// - `ptr` remains valid for the lifetime of the trail
+    /// - No other mutable references to `*ptr` exist during this call
     ///
     /// # Arguments
     ///
-    /// * `id` - Unique identifier for the value being changed
-    /// * `old_value` - The value before the change (as u64)
+    /// * `ptr` - Raw pointer to the u64 value to modify
+    /// * `new_value` - The new value to set
     ///
     /// # Panics
     ///
-    /// Panics if the trail exceeds MAX_SIZE (indicates a bug in the search algorithm).
-    pub(crate) fn record_change(&mut self, id: usize, old_value: u64) {
+    /// Panics if the trail exceeds MAX_SIZE (design constraint - search is too deep).
+    pub(crate) unsafe fn record_and_set(&mut self, ptr: *mut u64, new_value: u64) {
         if self.entries.len() >= Self::MAX_SIZE {
             panic!("Trail overflow: exceeded {} entries", Self::MAX_SIZE);
         }
 
-        self.entries.push(TrailEntry { id, old_value });
+        // Read old value and record it
+        let old_value = *ptr;
+        self.entries.push(TrailEntry { ptr, old_value });
+
+        // Write new value
+        *ptr = new_value;
     }
 
-    /// Get an iterator over trail entries since the last checkpoint.
+    /// Conditionally record and set a value (like C's trailMaybeSetInt).
     ///
-    /// This is useful for debugging and testing.
-    #[allow(dead_code)]
-    #[allow(private_interfaces)]
-    pub(crate) fn entries_since_checkpoint(&self) -> impl Iterator<Item = &TrailEntry> {
-        let start = self.checkpoints.last().copied().unwrap_or(0);
-        self.entries[start..].iter()
+    /// Returns true if the value was changed, false if it was already correct.
+    ///
+    /// # Safety
+    ///
+    /// Same safety requirements as `record_and_set`.
+    pub(crate) unsafe fn maybe_record_and_set(&mut self, ptr: *mut u64, new_value: u64) -> bool {
+        if *ptr != new_value {
+            self.record_and_set(ptr, new_value);
+            true
+        } else {
+            false
+        }
     }
 
     /// Get the current number of entries in the trail.
@@ -159,51 +206,62 @@ mod tests {
     }
 
     #[test]
-    fn test_checkpoint_and_rewind() {
+    fn test_record_and_restore() {
         let mut trail = Trail::new();
+        let mut value1 = 10u64;
+        let mut value2 = 20u64;
 
-        // Record some changes
-        trail.record_change(1, 10);
-        trail.record_change(2, 20);
+        // Record initial state
+        trail.checkpoint();
+
+        // Make changes
+        unsafe {
+            trail.record_and_set(&mut value1, 100);
+            trail.record_and_set(&mut value2, 200);
+        }
+
+        assert_eq!(value1, 100);
+        assert_eq!(value2, 200);
         assert_eq!(trail.len(), 2);
 
-        // Create checkpoint
-        let checkpoint = trail.checkpoint();
-        assert_eq!(checkpoint, 2);
-        assert_eq!(trail.checkpoint_depth(), 1);
-
-        // Record more changes
-        trail.record_change(3, 30);
-        trail.record_change(4, 40);
-        assert_eq!(trail.len(), 4);
-
-        // Rewind to checkpoint
+        // Rewind restores old values
         assert!(trail.rewind());
-        assert_eq!(trail.len(), 2);
-        assert_eq!(trail.checkpoint_depth(), 0);
+        assert_eq!(value1, 10); // Restored!
+        assert_eq!(value2, 20); // Restored!
+        assert_eq!(trail.len(), 0);
     }
 
     #[test]
     fn test_nested_checkpoints() {
         let mut trail = Trail::new();
+        let mut value = 10u64;
 
-        trail.record_change(1, 10);
+        unsafe {
+            trail.record_and_set(&mut value, 20);
+        }
         let _cp1 = trail.checkpoint();
 
-        trail.record_change(2, 20);
+        unsafe {
+            trail.record_and_set(&mut value, 30);
+        }
         let _cp2 = trail.checkpoint();
 
-        trail.record_change(3, 30);
+        unsafe {
+            trail.record_and_set(&mut value, 40);
+        }
+        assert_eq!(value, 40);
         assert_eq!(trail.len(), 3);
         assert_eq!(trail.checkpoint_depth(), 2);
 
         // Rewind inner checkpoint
         assert!(trail.rewind());
+        assert_eq!(value, 30); // Restored to cp2
         assert_eq!(trail.len(), 2);
         assert_eq!(trail.checkpoint_depth(), 1);
 
         // Rewind outer checkpoint
         assert!(trail.rewind());
+        assert_eq!(value, 20); // Restored to cp1
         assert_eq!(trail.len(), 1);
         assert_eq!(trail.checkpoint_depth(), 0);
     }
@@ -217,48 +275,90 @@ mod tests {
     #[test]
     fn test_freeze() {
         let mut trail = Trail::new();
+        let mut value = 10u64;
 
-        trail.record_change(1, 10);
+        unsafe {
+            trail.record_and_set(&mut value, 20);
+        }
         trail.checkpoint();
 
-        trail.record_change(2, 20);
+        unsafe {
+            trail.record_and_set(&mut value, 30);
+        }
         trail.freeze(); // Freeze at position 2
 
         trail.checkpoint();
-        trail.record_change(3, 30);
+        unsafe {
+            trail.record_and_set(&mut value, 40);
+        }
 
         // Can rewind recent changes
         assert!(trail.rewind());
+        assert_eq!(value, 30);
         assert_eq!(trail.len(), 2);
 
         // Cannot rewind past freeze point
         assert!(!trail.rewind());
+        assert_eq!(value, 30); // Still 30, not 20
         assert_eq!(trail.len(), 2);
     }
 
     #[test]
-    fn test_entries_since_checkpoint() {
+    fn test_maybe_record_and_set() {
         let mut trail = Trail::new();
+        let mut value = 42u64;
 
-        trail.record_change(1, 10);
         trail.checkpoint();
-        trail.record_change(2, 20);
-        trail.record_change(3, 30);
 
-        let entries: Vec<_> = trail.entries_since_checkpoint().collect();
-        assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].id, 2);
-        assert_eq!(entries[1].id, 3);
+        // Setting same value doesn't record in trail
+        let changed = unsafe { trail.maybe_record_and_set(&mut value, 42) };
+        assert!(!changed);
+        assert_eq!(trail.len(), 0);
+
+        // Setting different value records in trail
+        let changed = unsafe { trail.maybe_record_and_set(&mut value, 100) };
+        assert!(changed);
+        assert_eq!(trail.len(), 1);
+        assert_eq!(value, 100);
+
+        // Rewind restores
+        trail.rewind();
+        assert_eq!(value, 42);
+    }
+
+    #[test]
+    fn test_array_elements() {
+        let mut trail = Trail::new();
+        let mut array = vec![0u64, 10, 20, 30, 40];
+
+        trail.checkpoint();
+
+        // Trail changes to array elements
+        unsafe {
+            trail.record_and_set(&mut array[1], 100);
+            trail.record_and_set(&mut array[3], 300);
+        }
+
+        assert_eq!(array[1], 100);
+        assert_eq!(array[3], 300);
+
+        // Rewind restores array elements
+        trail.rewind();
+        assert_eq!(array[1], 10);
+        assert_eq!(array[3], 30);
     }
 
     #[test]
     #[should_panic(expected = "Trail overflow")]
     fn test_trail_overflow() {
         let mut trail = Trail::new();
+        let mut value = 0u64;
 
         // Try to exceed MAX_SIZE
         for i in 0..Trail::MAX_SIZE + 1 {
-            trail.record_change(i, 0);
+            unsafe {
+                trail.record_and_set(&mut value, i as u64);
+            }
         }
     }
 }

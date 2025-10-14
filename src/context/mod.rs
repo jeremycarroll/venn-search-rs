@@ -9,7 +9,7 @@
 //! This design enables parallelization by allowing multiple independent SearchContext
 //! instances to operate on the same MEMO data.
 
-use crate::trail::{Trail, TrailedRegistry};
+use crate::trail::Trail;
 
 /// Immutable precomputed data (Tier 1: MEMO).
 ///
@@ -66,13 +66,19 @@ pub struct DynamicState {
     // - Faces state (current facial cycle assignments)
     // - EdgeColorCount (crossing counts)
     // - Other mutable search state
-    _placeholder: (),
+
+    // Example placeholders for demonstration:
+    pub example_value: u64,
+    pub example_array: Vec<u64>,
 }
 
 impl DynamicState {
     /// Create initial dynamic state.
     pub fn new() -> Self {
-        Self { _placeholder: () }
+        Self {
+            example_value: 0,
+            example_array: vec![0; 10],
+        }
     }
 }
 
@@ -94,16 +100,25 @@ impl Default for DynamicState {
 ///     memo: MemoizedData,        // Tier 1: Immutable, shared
 ///     trail: Trail,              // Tier 2: Mutable, owned
 ///     state: DynamicState,       // Tier 2: Mutable, owned
-///     registry: TrailedRegistry, // For creating Trailed<T>
 /// }
 /// ```
+///
+/// # Trail Safety
+///
+/// The trail stores raw pointers to data in `state`. This is safe because:
+/// - Both `trail` and `state` are owned by `SearchContext`
+/// - Rust's ownership ensures they have the same lifetime
+/// - `state` cannot be moved while `trail` has pointers into it
+/// - Trail methods are only accessible through safe wrappers on `SearchContext`
 ///
 /// # Example
 ///
 /// ```ignore
 /// // Single-threaded search
 /// let mut ctx = SearchContext::new();
-/// run_search(&mut ctx);
+/// ctx.trail.checkpoint();
+/// ctx.set_example_value(42);  // Safe wrapper
+/// ctx.trail.rewind();         // Automatically restores value
 ///
 /// // Parallel search (future)
 /// let memo = MemoizedData::initialize();
@@ -120,8 +135,6 @@ pub struct SearchContext {
     pub trail: Trail,
     /// Mutable search state (Tier 2)
     pub state: DynamicState,
-    /// Registry for creating Trailed<T> values
-    pub registry: TrailedRegistry,
 }
 
 impl SearchContext {
@@ -131,7 +144,6 @@ impl SearchContext {
             memo: MemoizedData::initialize(),
             trail: Trail::new(),
             state: DynamicState::new(),
-            registry: TrailedRegistry::new(),
         }
     }
 
@@ -143,7 +155,6 @@ impl SearchContext {
             memo,
             trail: Trail::new(),
             state: DynamicState::new(),
-            registry: TrailedRegistry::new(),
         }
     }
 
@@ -153,6 +164,56 @@ impl SearchContext {
     pub fn memo_size_bytes() -> usize {
         std::mem::size_of::<MemoizedData>()
     }
+
+    // Safe trail wrapper methods
+    // These ensure pointers only point into self.state
+
+    /// Set the example value with trail recording.
+    ///
+    /// # Example
+    /// ```ignore
+    /// ctx.trail.checkpoint();
+    /// ctx.set_example_value(42);
+    /// ctx.trail.rewind();  // Value automatically restored
+    /// ```
+    pub fn set_example_value(&mut self, value: u64) {
+        let ptr = &mut self.state.example_value as *mut u64;
+        unsafe {
+            // SAFETY: ptr points into self.state, which is owned by self
+            // and has the same lifetime as self.trail
+            self.trail.record_and_set(ptr, value);
+        }
+    }
+
+    /// Set an array element with trail recording.
+    ///
+    /// # Panics
+    ///
+    /// Panics if index is out of bounds.
+    pub fn set_array_element(&mut self, index: usize, value: u64) {
+        let ptr = &mut self.state.example_array[index] as *mut u64;
+        unsafe {
+            // SAFETY: ptr points into self.state.example_array, which is owned by self
+            self.trail.record_and_set(ptr, value);
+        }
+    }
+
+    /// Conditionally set a value (only if different).
+    ///
+    /// Returns true if the value was changed, false otherwise.
+    pub fn maybe_set_example_value(&mut self, value: u64) -> bool {
+        let ptr = &mut self.state.example_value as *mut u64;
+        unsafe {
+            // SAFETY: ptr points into self.state
+            self.trail.maybe_record_and_set(ptr, value)
+        }
+    }
+
+    // TODO: Add more specific trail methods as needed:
+    // - set_face_cycle(&mut self, face_id: usize, cycle: u64)
+    // - set_edge_count(&mut self, color_pair: usize, count: u64)
+    // - set_bitmap(&mut self, bitmap: u64)
+    // etc.
 }
 
 impl Default for SearchContext {
@@ -169,25 +230,51 @@ mod tests {
     fn test_search_context_new() {
         let ctx = SearchContext::new();
         assert_eq!(ctx.trail.len(), 0);
-        assert_eq!(ctx.registry.next_id(), 0);
+        assert_eq!(ctx.state.example_value, 0);
+    }
+
+    #[test]
+    fn test_set_and_restore() {
+        let mut ctx = SearchContext::new();
+
+        ctx.trail.checkpoint();
+        ctx.set_example_value(42);
+
+        assert_eq!(ctx.state.example_value, 42);
+        assert_eq!(ctx.trail.len(), 1);
+
+        ctx.trail.rewind();
+        assert_eq!(ctx.state.example_value, 0); // Restored!
+    }
+
+    #[test]
+    fn test_array_elements() {
+        let mut ctx = SearchContext::new();
+
+        ctx.trail.checkpoint();
+        ctx.set_array_element(3, 100);
+        ctx.set_array_element(7, 200);
+
+        assert_eq!(ctx.state.example_array[3], 100);
+        assert_eq!(ctx.state.example_array[7], 200);
+
+        ctx.trail.rewind();
+        assert_eq!(ctx.state.example_array[3], 0); // Restored!
+        assert_eq!(ctx.state.example_array[7], 0); // Restored!
     }
 
     #[test]
     fn test_independent_contexts() {
         // Create two independent contexts
         let mut ctx1 = SearchContext::new();
-        let mut ctx2 = SearchContext::new();
+        let ctx2 = SearchContext::new();
 
-        // Register values in each context
-        let mut v1 = ctx1.registry.register(42u64);
-        let v2 = ctx2.registry.register(100u64);
+        ctx1.trail.checkpoint();
+        ctx1.set_example_value(100);
 
-        // Modify ctx1's value
-        v1.set(&mut ctx1.trail, 999);
-
-        // ctx2 should be unaffected
-        assert_eq!(v1.get(), 999);
-        assert_eq!(v2.get(), 100);
+        // ctx2 should be completely unaffected
+        assert_eq!(ctx1.state.example_value, 100);
+        assert_eq!(ctx2.state.example_value, 0);
         assert_eq!(ctx1.trail.len(), 1);
         assert_eq!(ctx2.trail.len(), 0);
     }
@@ -201,6 +288,45 @@ mod tests {
         // Both contexts have independent trails
         assert_eq!(ctx1.trail.len(), 0);
         assert_eq!(ctx2.trail.len(), 0);
+    }
+
+    #[test]
+    fn test_maybe_set() {
+        let mut ctx = SearchContext::new();
+        ctx.trail.checkpoint();
+
+        // Setting same value doesn't record
+        assert!(!ctx.maybe_set_example_value(0));
+        assert_eq!(ctx.trail.len(), 0);
+
+        // Setting different value records
+        assert!(ctx.maybe_set_example_value(42));
+        assert_eq!(ctx.trail.len(), 1);
+        assert_eq!(ctx.state.example_value, 42);
+    }
+
+    #[test]
+    fn test_nested_operations() {
+        let mut ctx = SearchContext::new();
+
+        ctx.trail.checkpoint();
+        ctx.set_example_value(10);
+
+        ctx.trail.checkpoint();
+        ctx.set_example_value(20);
+        ctx.set_array_element(0, 100);
+
+        assert_eq!(ctx.state.example_value, 20);
+        assert_eq!(ctx.state.example_array[0], 100);
+
+        // Rewind inner checkpoint
+        ctx.trail.rewind();
+        assert_eq!(ctx.state.example_value, 10);
+        assert_eq!(ctx.state.example_array[0], 0);
+
+        // Rewind outer checkpoint
+        ctx.trail.rewind();
+        assert_eq!(ctx.state.example_value, 0);
     }
 
     #[test]
