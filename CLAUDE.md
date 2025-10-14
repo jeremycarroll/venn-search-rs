@@ -63,13 +63,13 @@ This is a Rust rewrite of the C implementation at ../venntriangles (tag: v1.1-pc
 
 ## Reference C Implementation
 
-The original C implementation is at: `/Users/jcarroll/venn/venntriangles`
+The original C implementation is at: https://github.com/roll/venntriangles
 
-Key commits to reference:
-- Tag `v1.0`: Original working Venn 6-triangle search
-- Tag `v1.1-pco`: Adds generalized alternating ternary operators (PCO and Chirotopes)
+Key releases to reference:
+- Tag [`v1.0`](https://github.com/roll/venntriangles/releases/tag/v1.0): Original working Venn 6-triangle search
+- Tag [`v1.1-pco`](https://github.com/roll/venntriangles/releases/tag/v1.1): Adds generalized alternating ternary operators (PCO and Chirotopes)
 
-See `c-reference/` directory for copied C source files if needed.
+See `c-reference/` directory for copied C source files (from v1.1-pco tag).
 
 ## Architecture Overview
 
@@ -1060,8 +1060,8 @@ Since you're practicing advanced Rust:
 
 ### Additional Resources
 
-- **C implementation**: `/Users/jcarroll/venn/venntriangles` (tags: v1.0, v1.1-pco)
-- **C reference copy**: `c-reference/` directory (25 .c files, 22 .h files)
+- **C implementation**: https://github.com/roll/venntriangles (releases: [v1.0](https://github.com/roll/venntriangles/releases/tag/v1.0), [v1.1-pco](https://github.com/roll/venntriangles/releases/tag/v1.1))
+- **C reference copy**: `c-reference/` directory (25 .c files, 22 .h files from v1.1-pco)
 - **Design documentation**: [docs/DESIGN.md](docs/DESIGN.md) - Detailed architecture, engine, predicates, naming conventions
 - **Mathematical theory**: [docs/MATH.md](docs/MATH.md) - Venn diagrams, FISCs, isomorphism, pseudolines, and additional references:
   - Bultena, Bette, Branko Grünbaum, and Frank Ruskey. "Convex drawings of intersecting families of simple closed curves." CCCG. 1999.
