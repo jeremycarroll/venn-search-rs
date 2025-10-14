@@ -10,6 +10,7 @@
 //! instances to operate on the same MEMO data.
 
 use crate::trail::Trail;
+use std::ptr::NonNull;
 
 /// Immutable precomputed data (Tier 1: MEMO).
 ///
@@ -177,10 +178,8 @@ impl SearchContext {
     /// ctx.trail.rewind();  // Value automatically restored
     /// ```
     pub fn set_example_value(&mut self, value: u64) {
-        let ptr = &mut self.state.example_value as *mut u64;
         unsafe {
-            // SAFETY: ptr points into self.state, which is owned by self
-            // and has the same lifetime as self.trail
+            let ptr = NonNull::new_unchecked(&mut self.state.example_value);
             self.trail.record_and_set(ptr, value);
         }
     }
@@ -191,9 +190,8 @@ impl SearchContext {
     ///
     /// Panics if index is out of bounds.
     pub fn set_array_element(&mut self, index: usize, value: u64) {
-        let ptr = &mut self.state.example_array[index] as *mut u64;
         unsafe {
-            // SAFETY: ptr points into self.state.example_array, which is owned by self
+            let ptr = NonNull::new_unchecked(&mut self.state.example_array[index]);
             self.trail.record_and_set(ptr, value);
         }
     }
@@ -202,9 +200,8 @@ impl SearchContext {
     ///
     /// Returns true if the value was changed, false otherwise.
     pub fn maybe_set_example_value(&mut self, value: u64) -> bool {
-        let ptr = &mut self.state.example_value as *mut u64;
         unsafe {
-            // SAFETY: ptr points into self.state
+            let ptr = NonNull::new_unchecked(&mut self.state.example_value);
             self.trail.maybe_record_and_set(ptr, value)
         }
     }

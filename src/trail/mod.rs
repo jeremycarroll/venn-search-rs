@@ -9,10 +9,12 @@
 //!
 //! # Design
 //!
-//! - Trail entries are 128 bits: raw pointer (64-bit) + old value (64-bit)
+//! - Trail entries are 128 bits: non-null pointer (64-bit) + old value (64-bit)
 //! - Only supports `u64` values (no u8/u16/u32 overhead)
 //! - Automatic restoration on rewind (walks trail backwards, writes old values)
 //! - Pointers must point to data owned by SearchContext (lifetime safety)
+
+use std::ptr::NonNull;
 
 /// A single entry in the trail, recording one state change.
 ///
@@ -23,10 +25,13 @@
 ///     uint_trail value; // 8 bytes (uint64)
 /// };
 /// ```
+///
+/// We use `NonNull<u64>` instead of `*mut u64` to guarantee the pointer is never null,
+/// eliminating an entire class of potential bugs.
 #[derive(Debug, Clone, Copy)]
 struct TrailEntry {
-    /// Raw pointer to the u64 value that was changed
-    ptr: *mut u64,
+    /// Non-null pointer to the u64 value that was changed
+    ptr: NonNull<u64>,
     /// The old value before the change
     old_value: u64,
 }
@@ -105,7 +110,8 @@ impl Trail {
                 unsafe {
                     // SAFETY: Pointer was valid when recorded, and data is owned by
                     // SearchContext which owns this trail, so pointer is still valid.
-                    *entry.ptr = entry.old_value;
+                    // NonNull guarantees it's not null.
+                    *entry.ptr.as_ptr() = entry.old_value;
                 }
             }
 
@@ -136,23 +142,23 @@ impl Trail {
     ///
     /// # Arguments
     ///
-    /// * `ptr` - Raw pointer to the u64 value to modify
+    /// * `ptr` - Non-null pointer to the u64 value to modify
     /// * `new_value` - The new value to set
     ///
     /// # Panics
     ///
     /// Panics if the trail exceeds MAX_SIZE (design constraint - search is too deep).
-    pub(crate) unsafe fn record_and_set(&mut self, ptr: *mut u64, new_value: u64) {
+    pub(crate) unsafe fn record_and_set(&mut self, ptr: NonNull<u64>, new_value: u64) {
         if self.entries.len() >= Self::MAX_SIZE {
             panic!("Trail overflow: exceeded {} entries", Self::MAX_SIZE);
         }
 
         // Read old value and record it
-        let old_value = *ptr;
+        let old_value = *ptr.as_ptr();
         self.entries.push(TrailEntry { ptr, old_value });
 
         // Write new value
-        *ptr = new_value;
+        *ptr.as_ptr() = new_value;
     }
 
     /// Conditionally record and set a value (like C's trailMaybeSetInt).
@@ -162,8 +168,8 @@ impl Trail {
     /// # Safety
     ///
     /// Same safety requirements as `record_and_set`.
-    pub(crate) unsafe fn maybe_record_and_set(&mut self, ptr: *mut u64, new_value: u64) -> bool {
-        if *ptr != new_value {
+    pub(crate) unsafe fn maybe_record_and_set(&mut self, ptr: NonNull<u64>, new_value: u64) -> bool {
+        if *ptr.as_ptr() != new_value {
             self.record_and_set(ptr, new_value);
             true
         } else {
@@ -216,8 +222,8 @@ mod tests {
 
         // Make changes
         unsafe {
-            trail.record_and_set(&mut value1, 100);
-            trail.record_and_set(&mut value2, 200);
+            trail.record_and_set(NonNull::new_unchecked(&mut value1), 100);
+            trail.record_and_set(NonNull::new_unchecked(&mut value2), 200);
         }
 
         assert_eq!(value1, 100);
@@ -237,17 +243,17 @@ mod tests {
         let mut value = 10u64;
 
         unsafe {
-            trail.record_and_set(&mut value, 20);
+            trail.record_and_set(NonNull::new_unchecked(&mut value), 20);
         }
         let _cp1 = trail.checkpoint();
 
         unsafe {
-            trail.record_and_set(&mut value, 30);
+            trail.record_and_set(NonNull::new_unchecked(&mut value), 30);
         }
         let _cp2 = trail.checkpoint();
 
         unsafe {
-            trail.record_and_set(&mut value, 40);
+            trail.record_and_set(NonNull::new_unchecked(&mut value), 40);
         }
         assert_eq!(value, 40);
         assert_eq!(trail.len(), 3);
@@ -278,18 +284,18 @@ mod tests {
         let mut value = 10u64;
 
         unsafe {
-            trail.record_and_set(&mut value, 20);
+            trail.record_and_set(NonNull::new_unchecked(&mut value), 20);
         }
         trail.checkpoint();
 
         unsafe {
-            trail.record_and_set(&mut value, 30);
+            trail.record_and_set(NonNull::new_unchecked(&mut value), 30);
         }
         trail.freeze(); // Freeze at position 2
 
         trail.checkpoint();
         unsafe {
-            trail.record_and_set(&mut value, 40);
+            trail.record_and_set(NonNull::new_unchecked(&mut value), 40);
         }
 
         // Can rewind recent changes
@@ -311,12 +317,12 @@ mod tests {
         trail.checkpoint();
 
         // Setting same value doesn't record in trail
-        let changed = unsafe { trail.maybe_record_and_set(&mut value, 42) };
+        let changed = unsafe { trail.maybe_record_and_set(NonNull::new_unchecked(&mut value), 42) };
         assert!(!changed);
         assert_eq!(trail.len(), 0);
 
         // Setting different value records in trail
-        let changed = unsafe { trail.maybe_record_and_set(&mut value, 100) };
+        let changed = unsafe { trail.maybe_record_and_set(NonNull::new_unchecked(&mut value), 100) };
         assert!(changed);
         assert_eq!(trail.len(), 1);
         assert_eq!(value, 100);
@@ -335,8 +341,8 @@ mod tests {
 
         // Trail changes to array elements
         unsafe {
-            trail.record_and_set(&mut array[1], 100);
-            trail.record_and_set(&mut array[3], 300);
+            trail.record_and_set(NonNull::new_unchecked(&mut array[1]), 100);
+            trail.record_and_set(NonNull::new_unchecked(&mut array[3]), 300);
         }
 
         assert_eq!(array[1], 100);
@@ -357,7 +363,7 @@ mod tests {
         // Try to exceed MAX_SIZE
         for i in 0..Trail::MAX_SIZE + 1 {
             unsafe {
-                trail.record_and_set(&mut value, i as u64);
+                trail.record_and_set(NonNull::new_unchecked(&mut value), i as u64);
             }
         }
     }
