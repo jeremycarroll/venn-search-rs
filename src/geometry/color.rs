@@ -125,27 +125,30 @@ mod tests {
         let c = Color::new(0);
         assert_eq!(c.value(), 0);
 
-        let c = Color::new(5);
-        assert_eq!(c.value(), 5);
+        // Test max valid color
+        let max_color = (NCOLORS - 1) as u8;
+        let c = Color::new(max_color);
+        assert_eq!(c.value(), max_color);
     }
 
     #[test]
     #[should_panic(expected = "Color out of range")]
     fn test_color_out_of_range() {
-        Color::new(6);
+        Color::new(NCOLORS as u8);
     }
 
     #[test]
     fn test_color_try_new() {
         assert!(Color::try_new(0).is_some());
-        assert!(Color::try_new(5).is_some());
-        assert!(Color::try_new(6).is_none());
+        assert!(Color::try_new((NCOLORS - 1) as u8).is_some());
+        assert!(Color::try_new(NCOLORS as u8).is_none());
     }
 
     #[test]
     fn test_color_as_usize() {
-        let c = Color::new(3);
-        assert_eq!(c.as_usize(), 3);
+        // Use a color that's valid for all NCOLORS values (>= 3)
+        let c = Color::new(2);
+        assert_eq!(c.as_usize(), 2);
     }
 
     #[test]

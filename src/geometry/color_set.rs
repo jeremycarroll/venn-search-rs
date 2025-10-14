@@ -191,14 +191,13 @@ mod tests {
 
     #[test]
     fn test_from_colors() {
-        let colors = vec![Color::new(0), Color::new(2), Color::new(4)];
+        // Use colors valid for all NCOLORS >= 3
+        let colors = vec![Color::new(0), Color::new(1), Color::new(2)];
         let set = ColorSet::from_colors(&colors);
 
         assert!(set.contains(Color::new(0)));
-        assert!(!set.contains(Color::new(1)));
+        assert!(set.contains(Color::new(1)));
         assert!(set.contains(Color::new(2)));
-        assert!(!set.contains(Color::new(3)));
-        assert!(set.contains(Color::new(4)));
         assert_eq!(set.len(), 3);
     }
 
@@ -206,14 +205,14 @@ mod tests {
     fn test_iter() {
         let mut set = ColorSet::empty();
         set.insert(Color::new(0));
+        set.insert(Color::new(1));
         set.insert(Color::new(2));
-        set.insert(Color::new(4));
 
         let colors: Vec<_> = set.iter().collect();
         assert_eq!(colors.len(), 3);
         assert_eq!(colors[0], Color::new(0));
-        assert_eq!(colors[1], Color::new(2));
-        assert_eq!(colors[2], Color::new(4));
+        assert_eq!(colors[1], Color::new(1));
+        assert_eq!(colors[2], Color::new(2));
     }
 
     #[test]
@@ -253,12 +252,13 @@ mod tests {
 
     #[test]
     fn test_from_slice() {
-        let colors = [Color::new(1), Color::new(3), Color::new(5)];
+        // Use colors valid for all NCOLORS >= 3
+        let colors = [Color::new(0), Color::new(1), Color::new(2)];
         let set: ColorSet = (&colors[..]).into();
 
+        assert!(set.contains(Color::new(0)));
         assert!(set.contains(Color::new(1)));
-        assert!(set.contains(Color::new(3)));
-        assert!(set.contains(Color::new(5)));
+        assert!(set.contains(Color::new(2)));
         assert_eq!(set.len(), 3);
     }
 }

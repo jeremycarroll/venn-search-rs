@@ -14,8 +14,12 @@
 pub mod color;
 pub mod color_set;
 pub mod constants;
+pub mod cycle;
+pub mod cycle_set;
 
 // Re-export for convenience
 pub use color::Color;
 pub use color_set::ColorSet;
 pub use constants::*;
+pub use cycle::{Cycle, CycleId};
+pub use cycle_set::CycleSet;

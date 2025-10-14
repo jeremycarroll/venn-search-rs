@@ -9,7 +9,7 @@
 //!
 //! - 3: Simple 3-Venn diagrams (2 cycles)
 //! - 4: 4-Venn diagrams (14 cycles)
-//! - 5: 5-Venn diagrams (80 cycles)
+//! - 5: 5-Venn diagrams (74 cycles)
 //! - 6: 6-Venn diagrams (394 cycles) - **default**
 //!
 //! # Example
@@ -86,7 +86,11 @@ const fn choose(n: usize, k: usize) -> usize {
 /// # Counting facial cycles
 ///
 /// A cycle can have between 3 and NCOLORS colors (a face must be bounded by at
-/// least 3 curves). For each possible cycle length k:
+/// least 3 curves). Each face has **at most one edge of each color** - this is a
+/// fundamental lemma of simple Venn diagrams (see docs/MATH.md Initial Observations).
+/// Therefore, cycles are simply subsets of colors arranged in cyclic order.
+///
+/// For each possible cycle length k:
 ///
 /// 1. **Choose which colors**: C(NCOLORS, k) ways to select k colors
 /// 2. **Order them cyclically**: (k-1)! ways to arrange k items in a cycle
@@ -114,7 +118,7 @@ const fn choose(n: usize, k: usize) -> usize {
 ///
 /// - NCOLORS=3: 2 cycles (only length-3 cycles possible)
 /// - NCOLORS=4: 14 cycles
-/// - NCOLORS=5: 80 cycles
+/// - NCOLORS=5: 74 cycles
 /// - NCOLORS=6: 394 cycles
 pub const NCYCLES: usize = match NCOLORS {
     3 => choose(3, 0) * factorial(2),
@@ -200,10 +204,10 @@ mod tests {
     #[test]
     fn test_ncycles() {
         match NCOLORS {
-            3 => assert_eq!(NCYCLES, 2),   // C(3,3)*2! = 1*2 = 2
-            4 => assert_eq!(NCYCLES, 14),  // C(4,3)*2! + C(4,4)*3! = 4*2 + 1*6 = 14
-            5 => assert_eq!(NCYCLES, 80),  // C(5,3)*2! + C(5,4)*3! + C(5,5)*4! = 10*2 + 5*6 + 1*24 = 80
-            6 => assert_eq!(NCYCLES, 394), // C(6,3)*2! + C(6,4)*3! + C(6,5)*4! + C(6,6)*5! = 20*2 + 15*6 + 6*24 + 1*120 = 394
+            3 => assert_eq!(NCYCLES, 2),   // C(3,0)*2! = 1*2 = 2
+            4 => assert_eq!(NCYCLES, 14),  // C(4,0)*3! + C(4,1)*2! = 1*6 + 4*2 = 14
+            5 => assert_eq!(NCYCLES, 74),  // C(5,0)*4! + C(5,1)*3! + C(5,2)*2! = 1*24 + 5*6 + 10*2 = 74
+            6 => assert_eq!(NCYCLES, 394), // C(6,0)*5! + C(6,1)*4! + C(6,2)*3! + C(6,3)*2! = 1*120 + 6*24 + 15*6 + 20*2 = 394
             _ => unreachable!(),
         }
     }
