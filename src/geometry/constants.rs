@@ -3,15 +3,14 @@
 //! Compile-time constants for Venn diagram geometry.
 //!
 //! This module defines NCOLORS (number of curves) and all derived constants.
-//! NCOLORS can be configured at compile time via cargo features, matching the
-//! C implementation's aesthetic approach with `#ifndef NCOLORS`.
+//! NCOLORS can be configured at compile time via cargo features.
 //!
 //! # Supported NCOLORS values
 //!
 //! - 3: Simple 3-Venn diagrams (2 cycles)
 //! - 4: 4-Venn diagrams (14 cycles)
 //! - 5: 5-Venn diagrams (80 cycles)
-//! - 6: 6-Venn diagrams (720 cycles) - **default**
+//! - 6: 6-Venn diagrams (394 cycles) - **default**
 //!
 //! # Example
 //!
@@ -56,9 +55,6 @@ pub const NFACES: usize = 1 << NCOLORS;
 pub const MAX_CYCLE_LENGTH: usize = NCOLORS;
 
 /// Compute factorial at compile time.
-///
-/// Rust's const fn allows proper compile-time recursion, unlike C's preprocessor.
-/// This is much cleaner than hardcoding FACTORIAL0..FACTORIAL6.
 const fn factorial(n: usize) -> usize {
     match n {
         0 | 1 => 1,
@@ -110,11 +106,9 @@ const fn choose(n: usize, k: usize) -> usize {
 /// NCYCLES = Σ(k=3 to NCOLORS) C(NCOLORS, k) × (k-1)!
 ///
 /// This can be rewritten as:
-/// - For k colors present: C(NCOLORS, NCOLORS-k) × (NCOLORS-k-1)!
+/// - For k colors omitted: C(NCOLORS, k) × (NCOLORS-k-1)!
 /// - Summing over k=0 to NCOLORS-3 gives the same result
-///
-/// The C implementation uses the second form (counting omitted colors), which
-/// explains the pattern C(n,0)×(n-1)! + C(n,1)×(n-2)! + ...
+/// - This explains the pattern C(n,0)×(n-1)! + C(n,1)×(n-2)! + ...
 ///
 /// # Values
 ///
@@ -149,6 +143,17 @@ pub const CYCLESET_LENGTH: usize = (NCYCLES + 63) / 64;
 ///
 /// For NCOLORS=6: 2^4 * 6 * 5 = 16 * 30 = 480 vertices
 pub const NPOINTS: usize = (1 << (NCOLORS - 2)) * NCOLORS * (NCOLORS - 1);
+
+/// Compile-time assertion that we're on a 64-bit architecture.
+///
+/// The trail system and various bitset operations assume 64-bit pointers and words.
+/// This assertion will cause a compile-time error on 32-bit systems.
+const _: () = assert!(std::mem::size_of::<usize>() == 8, "64-bit architecture required");
+
+/// Compile-time assertion that u64 is 8 bytes.
+///
+/// The trail system relies on u64 being exactly 64 bits.
+const _: () = assert!(std::mem::size_of::<u64>() == 8, "u64 must be 8 bytes");
 
 #[cfg(test)]
 mod tests {
