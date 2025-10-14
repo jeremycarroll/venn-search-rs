@@ -1,0 +1,22 @@
+[package]
+name = "venn-search"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jeremy J. Carroll"]
+description = "Search for monotone simple 6-Venn diagrams drawable with six triangles"
+license = "SEE LICENSE FILE"
+
+[[bin]]
+name = "venn"
+path = "src/main.rs"
+
+[dependencies]
+# Will add dependencies as needed during migration
+
+[dev-dependencies]
+# Test framework dependencies will go here
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
