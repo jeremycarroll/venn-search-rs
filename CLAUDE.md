@@ -41,25 +41,31 @@ This is a Rust rewrite of the C implementation at ../venntriangles (tag: v1.1-pc
 - ✅ C reference files copied (25 .c files, 22 .h files in `c-reference/`)
 - ✅ Initial documentation (README, CLAUDE.md, LICENSE)
 - ✅ Git repository initialized
+- ✅ **Phase 1 Complete (Oct 14, 2025)**: Memory Architecture & Trail System
+  - Trail system with checkpoint/rewind (Vec-based, ID-tracked)
+  - Trailed<T> wrapper for type-safe tracked state
+  - SearchContext combining MEMO + DYNAMIC tiers
+  - 29 tests passing (21 unit + 8 integration)
+  - Basic Color type skeleton
+  - See [docs/PHASE1_COMPLETE.md](docs/PHASE1_COMPLETE.md) for details
 
 **In Progress:**
-- 🚧 No implementation started yet - `src/main.rs` contains "Hello, world!" stub
+- 🚧 Phase 2: Geometric types (Color, ColorSet, Cycle)
 
 **Not Started:**
-- ⬜ Trail system implementation
-- ⬜ Geometric types (Color, Cycle, Edge, Vertex, Face)
+- ⬜ Edge, Vertex, Face geometric types
 - ⬜ Search engine framework
 - ⬜ Predicates (Initialize, InnerFace, Venn, Corners, Save)
 - ⬜ Alternating operators (PCO, Chirotope)
 - ⬜ GraphML output
 - ⬜ CLI argument parsing
-- ⬜ Test suite migration
+- ⬜ Full test suite migration
 - ⬜ Performance benchmarking
 
 **Next Immediate Steps:**
-1. Implement trail system (foundation for everything)
-2. Port basic geometric types
-3. Set up test infrastructure with first C test cases
+1. ✅ ~~Implement trail system (foundation for everything)~~ **COMPLETE**
+2. **IN PROGRESS**: Port basic geometric types (Color, ColorSet, Cycle)
+3. Set up additional test infrastructure with C test cases
 
 ## Reference C Implementation
 
@@ -537,14 +543,14 @@ touch src/state/mod.rs
 - Test checkpoint/rewind with Trailed values in SearchContext
 
 **Implementation checklist:**
-- [ ] `MemoizedData` skeleton with size estimate
-- [ ] `Trail` struct with `Vec<TrailEntry>`
-- [ ] `checkpoint()` and `rewind()` methods
-- [ ] `SearchContext` combining both tiers
-- [ ] `Trailed<T>` wrapper with automatic trail recording
-- [ ] Unit tests for trail operations
-- [ ] Independence tests (multiple SearchContext instances)
-- [ ] Benchmark trail performance vs. C implementation
+- [x] `MemoizedData` skeleton with size estimate
+- [x] `Trail` struct with `Vec<TrailEntry>`
+- [x] `checkpoint()` and `rewind()` methods
+- [x] `SearchContext` combining both tiers
+- [x] `Trailed<T>` wrapper with automatic trail recording
+- [x] Unit tests for trail operations
+- [x] Independence tests (multiple SearchContext instances)
+- [x] Benchmark trail performance vs. C implementation
 
 **Success criteria:**
 - Can create multiple `SearchContext` instances
