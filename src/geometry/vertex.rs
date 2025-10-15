@@ -32,7 +32,7 @@ pub type VertexId = usize;
 /// - **Secondary**: The curve that crosses from outside the primary to inside
 ///
 /// This orientation determines the order of incoming edges.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Vertex {
     /// Unique identifier for this vertex.
     pub id: VertexId,
