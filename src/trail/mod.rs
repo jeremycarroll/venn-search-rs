@@ -94,32 +94,50 @@ impl Trail {
     /// This automatically restores all values that were changed since the checkpoint,
     /// matching the C implementation's `trailRewindTo` behavior.
     ///
-    /// Returns true if there was a checkpoint to rewind to, false otherwise.
+    /// Returns true if rewound successfully, false if blocked by frozen checkpoint or no checkpoint exists.
     pub fn rewind(&mut self) -> bool {
         if let Some(checkpoint_idx) = self.checkpoints.pop() {
-            // Don't rewind past frozen checkpoint
-            let target_idx = if let Some(frozen) = self.frozen_checkpoint {
+            // Check if we're blocked by frozen checkpoint
+            let target = if let Some(frozen) = self.frozen_checkpoint {
                 checkpoint_idx.max(frozen)
             } else {
                 checkpoint_idx
             };
 
-            // Restore all values back to checkpoint
-            while self.entries.len() > target_idx {
-                let entry = self.entries.pop().unwrap();
-                unsafe {
-                    // SAFETY: Pointer was valid when recorded, and data is owned by
-                    // SearchContext which owns this trail, so pointer is still valid.
-                    // NonNull guarantees it's not null.
-                    *entry.ptr.as_ptr() = entry.old_value;
-                }
-            }
+            self.rewind_to(checkpoint_idx);
 
-            // Return true if we successfully rewound (even if target == checkpoint)
-            // Return false only if we were blocked by frozen checkpoint
-            checkpoint_idx >= target_idx
+            // Return false if we were blocked (checkpoint < frozen)
+            checkpoint_idx >= target
         } else {
             false
+        }
+    }
+
+    /// Rewind the trail to a specific index.
+    ///
+    /// This is used by the search engine to rewind to a specific stack entry's checkpoint.
+    /// Does not modify the checkpoints stack - the caller manages that separately.
+    ///
+    /// # Arguments
+    ///
+    /// * `target_idx` - The trail index to rewind to
+    pub fn rewind_to(&mut self, target_idx: usize) {
+        // Don't rewind past frozen checkpoint
+        let target = if let Some(frozen) = self.frozen_checkpoint {
+            target_idx.max(frozen)
+        } else {
+            target_idx
+        };
+
+        // Restore all values back to target
+        while self.entries.len() > target {
+            let entry = self.entries.pop().unwrap();
+            unsafe {
+                // SAFETY: Pointer was valid when recorded, and data is owned by
+                // SearchContext which owns this trail, so pointer is still valid.
+                // NonNull guarantees it's not null.
+                *entry.ptr.as_ptr() = entry.old_value;
+            }
         }
     }
 
