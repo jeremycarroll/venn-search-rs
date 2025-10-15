@@ -61,7 +61,7 @@ impl MemoizedData {
         eprintln!("[MemoizedData] Initializing all MEMO structures...");
 
         let cycles = CyclesArray::generate();
-        let faces = FacesMemo::initialize();
+        let faces = FacesMemo::initialize(&cycles);
         let vertices = VerticesMemo::initialize();
 
         eprintln!(

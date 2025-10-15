@@ -31,7 +31,7 @@
 //!
 //! For NCOLORS=6, we generate 394 cycles total.
 
-use crate::geometry::constants::{NCYCLES, NCOLORS};
+use crate::geometry::constants::{NCOLORS, NCYCLES};
 use crate::geometry::{Color, Cycle};
 
 /// Global array of all possible facial cycles.
@@ -51,8 +51,6 @@ pub struct CyclesArray {
 
 impl CyclesArray {
     /// Generate all possible facial cycles.
-    ///
-    /// This implements the algorithm from `c-reference/cycle.c::initializeAllCycles()`.
     ///
     /// # Algorithm
     ///
@@ -112,8 +110,6 @@ impl CyclesArray {
 
 /// Generate all valid cycles with a specific maximum color and length.
 ///
-/// This implements the algorithm from `c-reference/cycle.c::initializeCyclesWithMaxAndLength()`.
-///
 /// # Algorithm
 ///
 /// 1. Start with sequence [max, max, max, ...] of given length
@@ -159,8 +155,6 @@ fn generate_cycles_with_max_and_length(max_color: usize, length: usize, cycles: 
 }
 
 /// Check if a color sequence is a valid cycle.
-///
-/// This implements `c-reference/cycle.c::isCycleValid()`.
 ///
 /// A valid cycle must:
 /// - Contain the maximum color
