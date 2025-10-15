@@ -24,8 +24,8 @@
 //!
 //! # Example
 //!
-//! ```no_run
-//! use venn_search::engine::{SearchEngine, Predicate, PredicateResult};
+//! ```
+//! use venn_search::engine::{EngineBuilder, Predicate, PredicateResult, TerminalPredicate};
 //! use venn_search::context::SearchContext;
 //!
 //! struct SimplePredicate;
@@ -51,12 +51,14 @@
 //!     }
 //! }
 //!
+//! impl TerminalPredicate for SuspendPredicate {}
+//!
 //! let mut ctx = SearchContext::new();
-//! // All WAM programs must end with FAIL or SUSPEND
-//! let engine = SearchEngine::new(vec![
-//!     Box::new(SimplePredicate),
-//!     Box::new(SuspendPredicate),  // Terminal predicate
-//! ]);
+//! // Use builder to ensure program ends with terminal predicate
+//! let engine = EngineBuilder::new()
+//!     .add(Box::new(SimplePredicate))
+//!     .terminal(Box::new(SuspendPredicate))  // Compile-time enforced!
+//!     .build();
 //!
 //! // Engine is consumed, returns Some(engine) if suspended
 //! if let Some(_engine) = engine.search(&mut ctx) {
@@ -66,7 +68,7 @@
 
 pub mod predicate;
 
-pub use predicate::{Predicate, PredicateResult};
+pub use predicate::{Predicate, PredicateResult, TerminalPredicate};
 
 use crate::context::SearchContext;
 
@@ -116,27 +118,15 @@ pub struct SearchEngine {
 impl SearchEngine {
     /// Create a new search engine with the given predicates.
     ///
+    /// **Note**: This method is only available within the crate for testing.
+    /// External code should use `EngineBuilder` to ensure that predicate sequences
+    /// always end with a terminal predicate.
+    ///
     /// Predicates will be tried in the order given. The search terminates when:
     /// - A predicate returns Suspend (paused for inspection)
     /// - All predicates complete and we backtrack past the first predicate (failure)
     /// - A terminal predicate signals completion
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use venn_search::engine::{SearchEngine, Predicate, PredicateResult};
-    /// # use venn_search::context::SearchContext;
-    /// # struct P1; impl Predicate for P1 {
-    /// #     fn try_pred(&mut self, _: &mut SearchContext, _: usize) -> PredicateResult { PredicateResult::Success }
-    /// #     fn retry_pred(&mut self, _: &mut SearchContext, _: usize, _: usize) -> PredicateResult { PredicateResult::Failure }
-    /// # }
-    /// # struct Suspend; impl Predicate for Suspend {
-    /// #     fn try_pred(&mut self, _: &mut SearchContext, _: usize) -> PredicateResult { PredicateResult::Suspend }
-    /// #     fn retry_pred(&mut self, _: &mut SearchContext, _: usize, _: usize) -> PredicateResult { PredicateResult::Failure }
-    /// # }
-    /// let engine = SearchEngine::new(vec![Box::new(P1), Box::new(Suspend)]);
-    /// ```
-    pub fn new(predicates: Vec<Box<dyn Predicate>>) -> Self {
+    pub(crate) fn new(predicates: Vec<Box<dyn Predicate>>) -> Self {
         Self {
             predicates,
             stack: Vec::with_capacity(MAX_STACK_SIZE),
@@ -166,7 +156,7 @@ impl SearchEngine {
     /// # Example
     ///
     /// ```
-    /// # use venn_search::engine::{SearchEngine, Predicate, PredicateResult};
+    /// # use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
     /// # use venn_search::context::SearchContext;
     /// # use venn_search::predicates::test::SuspendPredicate;
     /// # struct MyPredicate;
@@ -179,10 +169,10 @@ impl SearchEngine {
     /// #     }
     /// # }
     /// let mut ctx = SearchContext::new();
-    /// let engine = SearchEngine::new(vec![
-    ///     Box::new(MyPredicate),
-    ///     Box::new(SuspendPredicate),
-    /// ]);
+    /// let engine = EngineBuilder::new()
+    ///     .add(Box::new(MyPredicate))
+    ///     .terminal(Box::new(SuspendPredicate))
+    ///     .build();
     ///
     /// // Engine is consumed, returns Some if suspended
     /// if let Some(engine) = engine.search(&mut ctx) {
@@ -349,6 +339,83 @@ impl SearchEngine {
     }
 }
 
+/// Builder for SearchEngine that ensures the predicate sequence ends with a terminal predicate.
+///
+/// This builder uses the typestate pattern to enforce at compile time that every
+/// predicate sequence ends with a FAIL or SUSPEND predicate.
+///
+/// # Example
+///
+/// ```
+/// use venn_search::engine::EngineBuilder;
+/// use venn_search::predicates::test::{IntegerRangePredicate, SuspendPredicate};
+///
+/// let engine = EngineBuilder::new()
+///     .add(Box::new(IntegerRangePredicate::new(1, 10)))
+///     .terminal(Box::new(SuspendPredicate))
+///     .build();
+/// ```
+pub struct EngineBuilder {
+    predicates: Vec<Box<dyn Predicate>>,
+}
+
+/// Builder in the complete state, ready to build a SearchEngine.
+///
+/// Obtained by calling `EngineBuilder::terminal()` with a terminal predicate.
+pub struct EngineBuilderComplete {
+    predicates: Vec<Box<dyn Predicate>>,
+}
+
+impl EngineBuilder {
+    /// Create a new engine builder with no predicates.
+    pub fn new() -> Self {
+        Self {
+            predicates: Vec::new(),
+        }
+    }
+
+    /// Add a predicate to the sequence.
+    ///
+    /// Can be called multiple times to add multiple predicates.
+    pub fn add(mut self, pred: Box<dyn Predicate>) -> Self {
+        self.predicates.push(pred);
+        self
+    }
+
+    /// Add a terminal predicate to complete the sequence.
+    ///
+    /// This is the only way to finish building a SearchEngine,
+    /// ensuring that every predicate sequence ends with FAIL or SUSPEND.
+    ///
+    /// Returns an `EngineBuilderComplete` which can be used to build the engine.
+    pub fn terminal(mut self, pred: Box<dyn TerminalPredicate>) -> EngineBuilderComplete {
+        self.predicates.push(pred);
+        EngineBuilderComplete {
+            predicates: self.predicates,
+        }
+    }
+}
+
+impl Default for EngineBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EngineBuilderComplete {
+    /// Build the SearchEngine.
+    ///
+    /// Consumes the builder and returns a SearchEngine ready to execute.
+    pub fn build(self) -> SearchEngine {
+        SearchEngine {
+            predicates: self.predicates,
+            stack: Vec::with_capacity(MAX_STACK_SIZE),
+            try_count: 0,
+            retry_count: 0,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -391,6 +458,10 @@ mod tests {
             PredicateResult::Failure
         }
     }
+
+    impl TerminalPredicate for Suspend {}
+
+    impl TerminalPredicate for AlwaysFail {}
 
     #[test]
     fn test_simple_success_with_suspend() {

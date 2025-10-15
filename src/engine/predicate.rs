@@ -61,6 +61,15 @@ pub enum PredicateResult {
     Suspend,
 }
 
+/// A terminal predicate that ends a WAM program.
+///
+/// Terminal predicates are FAIL or SUSPEND - they never return Success.
+/// This marker trait ensures that SearchEngine sequences always end properly.
+///
+/// The type system uses this trait to enforce that every predicate sequence
+/// ends with a terminal predicate, preventing invalid programs at compile time.
+pub trait TerminalPredicate: Predicate {}
+
 /// Trait for search predicates in the non-deterministic engine.
 ///
 /// Each predicate represents a choice point in the search. The engine

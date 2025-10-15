@@ -11,7 +11,7 @@
 //! - Suspends execution when requested
 
 use venn_search::context::SearchContext;
-use venn_search::engine::SearchEngine;
+use venn_search::engine::EngineBuilder;
 use venn_search::predicates::test::{
     AlwaysFailPredicate, ChoicePredicate, IntegerRangePredicate, MultiRoundPredicate,
     SuspendPredicate,
@@ -20,10 +20,10 @@ use venn_search::predicates::test::{
 #[test]
 fn test_simple_integer_search_with_suspend() {
     let mut ctx = SearchContext::new();
-    let engine = SearchEngine::new(vec![
-        Box::new(IntegerRangePredicate::new(1, 11)),
-        Box::new(SuspendPredicate),
-    ]);
+    let engine = EngineBuilder::new()
+        .add(Box::new(IntegerRangePredicate::new(1, 11)))
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     // Should suspend after first predicate succeeds
     let engine = engine.search(&mut ctx);
@@ -37,11 +37,11 @@ fn test_simple_integer_search_with_suspend() {
 #[test]
 fn test_two_integer_ranges() {
     let mut ctx = SearchContext::new();
-    let engine = SearchEngine::new(vec![
-        Box::new(IntegerRangePredicate::new(1, 3)),
-        Box::new(IntegerRangePredicate::new(10, 12)),
-        Box::new(SuspendPredicate),
-    ]);
+    let engine = EngineBuilder::new()
+        .add(Box::new(IntegerRangePredicate::new(1, 3)))
+        .add(Box::new(IntegerRangePredicate::new(10, 12)))
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     // Should find solution with first choice of each
     let engine = engine.search(&mut ctx);
@@ -55,10 +55,10 @@ fn test_two_integer_ranges() {
 #[test]
 fn test_choice_predicate_search() {
     let mut ctx = SearchContext::new();
-    let engine = SearchEngine::new(vec![
-        Box::new(ChoicePredicate::new(vec!["A", "B", "C"])),
-        Box::new(SuspendPredicate),
-    ]);
+    let engine = EngineBuilder::new()
+        .add(Box::new(ChoicePredicate::new(vec!["A", "B", "C"])))
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     // Should suspend after choosing first option
     let engine = engine.search(&mut ctx);
@@ -72,11 +72,11 @@ fn test_choice_predicate_search() {
 #[test]
 fn test_backtracking_with_failure() {
     let mut ctx = SearchContext::new();
-    let engine = SearchEngine::new(vec![
-        Box::new(IntegerRangePredicate::new(1, 3)),
-        Box::new(AlwaysFailPredicate), // Force backtracking
-        Box::new(SuspendPredicate),
-    ]);
+    let engine = EngineBuilder::new()
+        .add(Box::new(IntegerRangePredicate::new(1, 3)))
+        .add(Box::new(AlwaysFailPredicate)) // Force backtracking
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     // Should fail - second predicate always fails
     let result = engine.search(&mut ctx);
@@ -89,12 +89,12 @@ fn test_backtracking_exhausts_options() {
 
     // This will try all combinations of first * second integers
     // But AlwaysFail will force complete backtracking
-    let engine = SearchEngine::new(vec![
-        Box::new(IntegerRangePredicate::new(1, 4)), // 3 choices: 1, 2, 3
-        Box::new(IntegerRangePredicate::new(10, 13)), // 3 choices: 10, 11, 12
-        Box::new(AlwaysFailPredicate), // Always fail
-        Box::new(SuspendPredicate),
-    ]);
+    let engine = EngineBuilder::new()
+        .add(Box::new(IntegerRangePredicate::new(1, 4))) // 3 choices: 1, 2, 3
+        .add(Box::new(IntegerRangePredicate::new(10, 13))) // 3 choices: 10, 11, 12
+        .add(Box::new(AlwaysFailPredicate)) // Always fail
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     let result = engine.search(&mut ctx);
     assert!(result.is_none()); // Exhausted - engine consumed
@@ -103,10 +103,10 @@ fn test_backtracking_exhausts_options() {
 #[test]
 fn test_empty_search_space() {
     let mut ctx = SearchContext::new();
-    let engine = SearchEngine::new(vec![
-        Box::new(IntegerRangePredicate::new(1, 1)), // Empty range
-        Box::new(SuspendPredicate),
-    ]);
+    let engine = EngineBuilder::new()
+        .add(Box::new(IntegerRangePredicate::new(1, 1))) // Empty range
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     let result = engine.search(&mut ctx);
     assert!(result.is_none()); // Exhausted - engine consumed
@@ -117,10 +117,10 @@ fn test_multi_round_predicate() {
     let mut ctx = SearchContext::new();
 
     // This predicate will execute 3 times (rounds 0, 1, 2)
-    let engine = SearchEngine::new(vec![
-        Box::new(MultiRoundPredicate::new(3)),
-        Box::new(SuspendPredicate),
-    ]);
+    let engine = EngineBuilder::new()
+        .add(Box::new(MultiRoundPredicate::new(3)))
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     let engine = engine.search(&mut ctx);
     assert!(engine.is_some()); // Suspended
@@ -138,11 +138,11 @@ fn test_choices_with_backtracking() {
 
     // First predicate has 2 choices, second always fails
     // Should try both choices of first predicate before giving up
-    let engine = SearchEngine::new(vec![
-        Box::new(ChoicePredicate::new(vec!["X", "Y"])),
-        Box::new(AlwaysFailPredicate),
-        Box::new(SuspendPredicate),
-    ]);
+    let engine = EngineBuilder::new()
+        .add(Box::new(ChoicePredicate::new(vec!["X", "Y"])))
+        .add(Box::new(AlwaysFailPredicate))
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     let result = engine.search(&mut ctx);
     assert!(result.is_none()); // Exhausted - engine consumed
@@ -156,11 +156,11 @@ fn test_complex_backtracking_scenario() {
     // - First predicate: 3 options (1, 2, 3)
     // - Second predicate: 2 options (A, B)
     // Should find solution immediately with (1, A) and suspend
-    let engine = SearchEngine::new(vec![
-        Box::new(IntegerRangePredicate::new(1, 4)), // 3 choices
-        Box::new(ChoicePredicate::new(vec!["A", "B"])), // 2 choices
-        Box::new(SuspendPredicate),
-    ]);
+    let engine = EngineBuilder::new()
+        .add(Box::new(IntegerRangePredicate::new(1, 4))) // 3 choices
+        .add(Box::new(ChoicePredicate::new(vec!["A", "B"]))) // 2 choices
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     let engine = engine.search(&mut ctx);
     assert!(engine.is_some()); // Suspended
@@ -173,8 +173,10 @@ fn test_complex_backtracking_scenario() {
 #[test]
 fn test_empty_predicates() {
     let mut ctx = SearchContext::new();
-    let engine = SearchEngine::new(vec![]);
+    let engine = EngineBuilder::new()
+        .terminal(Box::new(SuspendPredicate))
+        .build();
 
     let result = engine.search(&mut ctx);
-    assert!(result.is_none()); // Exhausted - engine consumed
+    assert!(result.is_some()); // Actually suspends immediately with just terminal
 }

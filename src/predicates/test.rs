@@ -16,7 +16,7 @@
 //! - Searches succeed via side effects, then Suspend or Fail to terminate
 
 use crate::context::SearchContext;
-use crate::engine::{Predicate, PredicateResult};
+use crate::engine::{Predicate, PredicateResult, TerminalPredicate};
 
 /// Predicate that tries integers in a range using the Choices model.
 ///
@@ -27,15 +27,15 @@ use crate::engine::{Predicate, PredicateResult};
 /// # Example
 ///
 /// ```
-/// use venn_search::engine::{SearchEngine, Predicate, PredicateResult};
+/// use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
 /// use venn_search::predicates::test::{IntegerRangePredicate, SuspendPredicate};
 /// use venn_search::context::SearchContext;
 ///
 /// let mut ctx = SearchContext::new();
-/// let mut engine = SearchEngine::new(vec![
-///     Box::new(IntegerRangePredicate::new(1, 4)),  // Try 1, 2, 3
-///     Box::new(SuspendPredicate),                   // Suspend to inspect result
-/// ]);
+/// let engine = EngineBuilder::new()
+///     .add(Box::new(IntegerRangePredicate::new(1, 4)))  // Try 1, 2, 3
+///     .terminal(Box::new(SuspendPredicate))              // Terminal predicate
+///     .build();
 ///
 /// // Will try integers and suspend
 /// let engine = engine.search(&mut ctx);
@@ -90,15 +90,15 @@ impl Predicate for IntegerRangePredicate {
 /// # Example
 ///
 /// ```
-/// use venn_search::engine::{SearchEngine, Predicate, PredicateResult};
+/// use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
 /// use venn_search::predicates::test::{ChoicePredicate, SuspendPredicate};
 /// use venn_search::context::SearchContext;
 ///
 /// let mut ctx = SearchContext::new();
-/// let mut engine = SearchEngine::new(vec![
-///     Box::new(ChoicePredicate::new(vec!["A", "B", "C"])),
-///     Box::new(SuspendPredicate),
-/// ]);
+/// let engine = EngineBuilder::new()
+///     .add(Box::new(ChoicePredicate::new(vec!["A", "B", "C"])))
+///     .terminal(Box::new(SuspendPredicate))
+///     .build();
 ///
 /// let engine = engine.search(&mut ctx);
 /// assert!(engine.is_some()); // Suspended - engine returned
@@ -160,6 +160,9 @@ impl Predicate for SuspendPredicate {
     }
 }
 
+/// Implement TerminalPredicate for SuspendPredicate.
+impl TerminalPredicate for SuspendPredicate {}
+
 /// Predicate that always fails (for testing).
 ///
 /// Useful for forcing backtracking. Matches the C engine's FAILPredicate.
@@ -179,6 +182,9 @@ impl Predicate for AlwaysFailPredicate {
         "AlwaysFail"
     }
 }
+
+/// Implement TerminalPredicate for AlwaysFailPredicate.
+impl TerminalPredicate for AlwaysFailPredicate {}
 
 /// Predicate that succeeds N times using SuccessSamePredicate (for testing rounds).
 ///
