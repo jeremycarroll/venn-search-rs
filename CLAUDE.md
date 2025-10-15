@@ -60,7 +60,10 @@ This is a Rust rewrite of the C implementation at ../venntriangles (tag: v1.1-pc
   - Stack-based execution tracking rounds and choices
   - Test predicates: IntegerRange, Choice, Suspend, AlwaysFail, MultiRound
   - Trail enhanced with rewind_to() for stack-based rewinding
-  - 117 tests passing (93 unit + 11 integration + 13 doc tests)
+  - **Consuming API**: search(self) -> Option<Self> enforces WAM semantics via ownership
+  - **Type-safe builder**: EngineBuilder with typestate enforces terminal predicates at compile time
+  - TerminalPredicate marker trait prevents invalid programs
+  - 113 tests passing (94 unit + 10 integration + 14 doc tests + internal tests)
   - C-compatible engine ready for real predicates
 
 **In Progress:**
@@ -76,8 +79,10 @@ This is a Rust rewrite of the C implementation at ../venntriangles (tag: v1.1-pc
 
 **Next Immediate Steps:**
 1. ✅ ~~Implement trail system (foundation for everything)~~ **COMPLETE**
-2. **IN PROGRESS**: Port basic geometric types (Color, ColorSet, Cycle)
-3. Set up additional test infrastructure with C test cases
+2. ✅ ~~Port basic geometric types (Color, ColorSet, Cycle)~~ **COMPLETE**
+3. ✅ ~~Implement search engine framework~~ **COMPLETE**
+4. Implement real predicates (Initialize, InnerFace, Venn, Corners)
+5. Set up additional test infrastructure with C test cases
 
 ## Reference C Implementation
 
