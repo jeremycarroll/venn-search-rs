@@ -69,7 +69,12 @@ impl Predicate for IntegerRangePredicate {
         }
     }
 
-    fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, choice: usize) -> PredicateResult {
+    fn retry_pred(
+        &mut self,
+        _ctx: &mut SearchContext,
+        _round: usize,
+        choice: usize,
+    ) -> PredicateResult {
         // Map choice to integer value
         let value = self.start + choice as i32;
         if value < self.end {
@@ -124,7 +129,12 @@ impl<T: Clone> Predicate for ChoicePredicate<T> {
         }
     }
 
-    fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, choice: usize) -> PredicateResult {
+    fn retry_pred(
+        &mut self,
+        _ctx: &mut SearchContext,
+        _round: usize,
+        choice: usize,
+    ) -> PredicateResult {
         if choice < self.options.len() {
             // In a real predicate, we'd use self.options[choice] to set state in ctx
             PredicateResult::Success
@@ -149,7 +159,12 @@ impl Predicate for SuspendPredicate {
         PredicateResult::Suspend
     }
 
-    fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
+    fn retry_pred(
+        &mut self,
+        _ctx: &mut SearchContext,
+        _round: usize,
+        _choice: usize,
+    ) -> PredicateResult {
         // Suspend predicate never retries
         PredicateResult::Failure
     }
@@ -197,7 +212,12 @@ impl Predicate for MultiRoundPredicate {
         }
     }
 
-    fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
+    fn retry_pred(
+        &mut self,
+        _ctx: &mut SearchContext,
+        _round: usize,
+        _choice: usize,
+    ) -> PredicateResult {
         // This predicate doesn't use choices
         PredicateResult::Failure
     }
@@ -278,8 +298,14 @@ mod tests {
         let mut pred = MultiRoundPredicate::new(3);
 
         // Round 0 and 1 should return SuccessSamePredicate
-        assert_eq!(pred.try_pred(&mut ctx, 0), PredicateResult::SuccessSamePredicate);
-        assert_eq!(pred.try_pred(&mut ctx, 1), PredicateResult::SuccessSamePredicate);
+        assert_eq!(
+            pred.try_pred(&mut ctx, 0),
+            PredicateResult::SuccessSamePredicate
+        );
+        assert_eq!(
+            pred.try_pred(&mut ctx, 1),
+            PredicateResult::SuccessSamePredicate
+        );
 
         // Round 2 (last) should return Success
         assert_eq!(pred.try_pred(&mut ctx, 2), PredicateResult::Success);

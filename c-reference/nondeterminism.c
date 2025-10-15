@@ -17,7 +17,7 @@
  * 4. Venn - Up to 64 calls to choose facial cycle for every face
  * 5. Save - Single call to save the solution and when backtracking records
  * count of variants
- * 6. Corners - 6 calls to choose the 18 corners of a variationplease
+ * 6. Corners - 6 calls to choose the 18 corners of a variation
  * 7. GraphML - Single call to save the variation
  * 8. FAIL - Forces backtracking
  */

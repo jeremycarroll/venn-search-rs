@@ -313,7 +313,7 @@ mod tests {
     #[test]
     fn test_array_elements() {
         let mut trail = Trail::new();
-        let mut array = vec![0u64, 10, 20, 30, 40];
+        let mut array = [0u64, 10, 20, 30, 40];
 
         let checkpoint = trail.checkpoint();
 

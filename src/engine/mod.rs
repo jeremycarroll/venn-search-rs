@@ -126,6 +126,7 @@ impl SearchEngine {
     /// - A predicate returns Suspend (paused for inspection)
     /// - All predicates complete and we backtrack past the first predicate (failure)
     /// - A terminal predicate signals completion
+    #[allow(dead_code)] // Used in tests; available for internal testing
     pub(crate) fn new(predicates: Vec<Box<dyn Predicate>>) -> Self {
         Self {
             predicates,
@@ -188,7 +189,7 @@ impl SearchEngine {
         self.retry_count = 0;
 
         if self.predicates.is_empty() {
-            return None;  // Empty is exhausted
+            return None; // Empty is exhausted
         }
 
         // Push initial stack entry for first predicate
@@ -377,6 +378,7 @@ impl EngineBuilder {
     /// Add a predicate to the sequence.
     ///
     /// Can be called multiple times to add multiple predicates.
+    #[allow(clippy::should_implement_trait)] // Not the std::ops::Add trait
     pub fn add(mut self, pred: Box<dyn Predicate>) -> Self {
         self.predicates.push(pred);
         self
@@ -428,7 +430,12 @@ mod tests {
             PredicateResult::Success
         }
 
-        fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
+        fn retry_pred(
+            &mut self,
+            _ctx: &mut SearchContext,
+            _round: usize,
+            _choice: usize,
+        ) -> PredicateResult {
             PredicateResult::Failure // No retry
         }
     }
@@ -441,7 +448,12 @@ mod tests {
             PredicateResult::Failure
         }
 
-        fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
+        fn retry_pred(
+            &mut self,
+            _ctx: &mut SearchContext,
+            _round: usize,
+            _choice: usize,
+        ) -> PredicateResult {
             PredicateResult::Failure
         }
     }
@@ -454,7 +466,12 @@ mod tests {
             PredicateResult::Suspend
         }
 
-        fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
+        fn retry_pred(
+            &mut self,
+            _ctx: &mut SearchContext,
+            _round: usize,
+            _choice: usize,
+        ) -> PredicateResult {
             PredicateResult::Failure
         }
     }
@@ -468,7 +485,7 @@ mod tests {
         let mut ctx = SearchContext::new();
         let engine = SearchEngine::new(vec![
             Box::new(AlwaysSucceed),
-            Box::new(Suspend),  // Terminal predicate
+            Box::new(Suspend), // Terminal predicate
         ]);
 
         let engine = engine.search(&mut ctx);
@@ -480,9 +497,7 @@ mod tests {
     #[test]
     fn test_immediate_failure() {
         let mut ctx = SearchContext::new();
-        let engine = SearchEngine::new(vec![
-            Box::new(AlwaysFail),
-        ]);
+        let engine = SearchEngine::new(vec![Box::new(AlwaysFail)]);
 
         let result = engine.search(&mut ctx);
         assert!(result.is_none()); // Exhausted - engine consumed
@@ -502,7 +517,7 @@ mod tests {
     fn test_invalid_program_without_terminal() {
         let mut ctx = SearchContext::new();
         let engine = SearchEngine::new(vec![
-            Box::new(AlwaysSucceed),  // Missing terminal predicate!
+            Box::new(AlwaysSucceed), // Missing terminal predicate!
         ]);
 
         let _ = engine.search(&mut ctx); // Should panic
