@@ -10,6 +10,7 @@
 //! instances to operate on the same MEMO data.
 
 use crate::geometry::constants::NCOLORS;
+use crate::memo::{FacesMemo, VerticesMemo};
 use crate::trail::Trail;
 use std::ptr::NonNull;
 
@@ -20,35 +21,54 @@ use std::ptr::NonNull;
 ///
 /// # Size Estimation
 ///
-/// Expected contents:
-/// - Facial cycle constraint lookup tables: ~few KB
-/// - Possible vertex configurations: 480 entries * ~32 bytes = ~15 KB
-/// - Edge and face relationship tables: ~few KB
-/// - Total estimate: 100KB - 1MB
+/// Expected contents (Phase 6):
+/// - FacesMemo: ~400 KB (64 faces × relationship tables)
+/// - VerticesMemo: ~30 KB (480 vertices for NCOLORS=6)
+/// - Future: Cycle constraint lookup tables, edge relationships
+/// - Total current estimate: ~500 KB - 1MB
 ///
-/// This will be measured during implementation to decide copy vs &'static strategy.
+/// Size will be measured to decide copy vs &'static strategy.
+/// Current strategy: Copy per SearchContext (good cache locality for <1MB).
 #[derive(Debug, Clone)]
 pub struct MemoizedData {
-    // TODO: Add MEMO fields during Phase 2-3:
+    /// All face-related MEMO data (binomial coefficients, adjacency, etc.)
+    pub faces: FacesMemo,
+
+    /// All vertex-related MEMO data (crossing point configurations)
+    pub vertices: VerticesMemo,
+
+    // TODO: Add more MEMO fields in later phases:
     // - Cycle constraint lookup tables
-    // - Possible vertex configurations
-    // - Edge/face relationship tables
-    _placeholder: (),
+    // - Edge relationship tables
+    // - PCO/Chirotope structures
 }
 
 impl MemoizedData {
-    /// Create empty memoized data (temporary until Phase 2).
+    /// Create empty memoized data (temporary until full initialization).
     pub fn new() -> Self {
-        Self { _placeholder: () }
+        Self {
+            faces: FacesMemo::initialize(),
+            vertices: VerticesMemo::initialize(),
+        }
     }
 
     /// Initialize all MEMO data structures.
     ///
     /// Computes all immutable precomputed data needed for the search.
-    /// Will be implemented during Phase 4 as we add real predicates.
+    /// This is called once at SearchContext creation.
     pub fn initialize() -> Self {
-        // TODO: Compute all MEMO data
-        Self::new()
+        eprintln!("[MemoizedData] Initializing all MEMO structures...");
+
+        let faces = FacesMemo::initialize();
+        let vertices = VerticesMemo::initialize();
+
+        eprintln!(
+            "[MemoizedData] Initialization complete ({} faces, ~{} possible vertices)",
+            faces.faces.len(),
+            vertices.vertices.len()
+        );
+
+        Self { faces, vertices }
     }
 }
 
@@ -168,11 +188,36 @@ impl SearchContext {
         }
     }
 
-    /// Get the size of the MEMO data in bytes (for performance analysis).
+    /// Get the size of the MEMO data structure itself (stack allocation).
     ///
-    /// This helps decide whether to copy or use &'static references.
+    /// This does NOT include heap-allocated data. For full size estimation,
+    /// see `estimate_memo_heap_size()`.
     pub fn memo_size_bytes() -> usize {
         std::mem::size_of::<MemoizedData>()
+    }
+
+    /// Estimate the total heap size of MEMO data.
+    ///
+    /// This includes:
+    /// - Face Vec allocation
+    /// - Vertex Box allocation
+    /// - Any other heap-allocated MEMO structures
+    pub fn estimate_memo_heap_size(&self) -> usize {
+        use std::mem::size_of;
+
+        let mut total = 0;
+
+        // Faces Vec: capacity * size_of<Face>
+        total += self.memo.faces.faces.capacity() * size_of::<crate::geometry::Face>();
+
+        // Face degree array (on stack, counted in memo_size_bytes)
+        // Not included in heap size
+
+        // Vertices Box: full 3D array
+        use crate::geometry::constants::{NCOLORS, NFACES};
+        total += size_of::<Option<crate::geometry::Vertex>>() * NCOLORS * NCOLORS * NFACES;
+
+        total
     }
 
     // Safe trail wrapper methods
@@ -374,9 +419,16 @@ mod tests {
 
     #[test]
     fn test_memo_size_logging() {
-        let size = SearchContext::memo_size_bytes();
-        // For now, should be just the placeholder (unit type = 0 bytes)
-        println!("MemoizedData size: {} bytes", size);
-        // Once we add real fields, we can check if it's reasonable
+        let ctx = SearchContext::new();
+        let stack_size = SearchContext::memo_size_bytes();
+        let heap_size = ctx.estimate_memo_heap_size();
+        let total = stack_size + heap_size;
+
+        println!("MemoizedData stack size: {} bytes", stack_size);
+        println!("MemoizedData heap size: {} bytes", heap_size);
+        println!("MemoizedData total size: {} bytes ({:.2} KB)", total, total as f64 / 1024.0);
+
+        // Verify size is reasonable (should be under 1MB for NCOLORS=6)
+        assert!(total < 1024 * 1024, "MEMO data should be under 1MB");
     }
 }
