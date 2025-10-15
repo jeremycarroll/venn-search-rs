@@ -19,7 +19,7 @@ use std::ptr::NonNull;
 /// A single entry in the trail, recording one state change.
 ///
 /// Structure: 128-bit entry with pointer (64-bit) + value (64-bit)
-/// ```
+/// ```ignore
 /// struct TrailEntry {
 ///     ptr: NonNull<u64>  // 8 bytes, non-null pointer
 ///     old_value: u64     // 8 bytes, previous value

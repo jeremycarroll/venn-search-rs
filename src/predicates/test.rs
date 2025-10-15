@@ -162,28 +162,9 @@ impl Predicate for SuspendPredicate {
 /// Implement TerminalPredicate for SuspendPredicate.
 impl TerminalPredicate for SuspendPredicate {}
 
-/// Predicate that always fails (for testing).
-///
-/// Useful for forcing backtracking.
-#[derive(Debug)]
-pub struct AlwaysFailPredicate;
-
-impl Predicate for AlwaysFailPredicate {
-    fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        PredicateResult::Failure
-    }
-
-    fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
-        PredicateResult::Failure
-    }
-
-    fn name(&self) -> &str {
-        "AlwaysFail"
-    }
-}
-
-/// Implement TerminalPredicate for AlwaysFailPredicate.
-impl TerminalPredicate for AlwaysFailPredicate {}
+// AlwaysFailPredicate has been moved to predicates::FailPredicate (built-in predicate)
+// Re-export for backward compatibility with tests
+pub use crate::predicates::FailPredicate as AlwaysFailPredicate;
 
 /// Predicate that succeeds N times using SuccessSamePredicate (for testing rounds).
 ///
@@ -282,9 +263,9 @@ mod tests {
     }
 
     #[test]
-    fn test_always_fail_predicate() {
+    fn test_fail_predicate() {
         let mut ctx = SearchContext::new();
-        let mut pred = AlwaysFailPredicate;
+        let mut pred = AlwaysFailPredicate; // Re-exported from FailPredicate
 
         // Should always fail
         assert_eq!(pred.try_pred(&mut ctx, 0), PredicateResult::Failure);
