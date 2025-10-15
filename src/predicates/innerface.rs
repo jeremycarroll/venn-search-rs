@@ -94,11 +94,16 @@ impl Predicate for InnerFacePredicate {
         let degree = (NCOLORS - choice) as u64;
         // eprintln!("[InnerFace retry_pred] round={}, choice={}, degree={}", round, choice, degree);
 
-        // Validate degree is in range [3, NCOLORS]
-        if degree < 3 {
-            // eprintln!("[InnerFace] REJECT: degree < 3");
-            return PredicateResult::Failure;
-        }
+        // Invariant: The engine guarantees choice is in range [0, NCOLORS-3], which
+        // ensures degree is in [3, NCOLORS]. This assertion catches programming errors
+        // if retry_pred is called incorrectly outside the engine.
+        debug_assert!(
+            degree >= 3 && degree <= NCOLORS as u64,
+            "Invalid choice {} produces out-of-range degree {}. Engine should only provide choices 0..{}",
+            choice,
+            degree,
+            NCOLORS - 2
+        );
 
         // Set the degree for this round
         ctx.set_face_degree(round, degree);
@@ -150,16 +155,6 @@ mod tests {
             assert_eq!(result, PredicateResult::SuccessSamePredicate);
             assert_eq!(ctx.get_face_degree(1), (NCOLORS - 1) as u64);
         }
-    }
-
-    #[test]
-    fn test_innerface_invalid_degree_fails() {
-        let mut ctx = SearchContext::new();
-        let mut pred = InnerFacePredicate;
-
-        // Choice NCOLORS-2 → degree 2 (invalid, < 3)
-        let result = pred.retry_pred(&mut ctx, 0, NCOLORS - 2);
-        assert_eq!(result, PredicateResult::Failure);
     }
 
     #[test]
