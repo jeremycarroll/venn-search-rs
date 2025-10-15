@@ -188,6 +188,7 @@ impl SearchEngine {
         self.try_count = 0;
         self.retry_count = 0;
 
+        // Handle empty predicate list
         if self.predicates.is_empty() {
             return None; // Empty is exhausted
         }
@@ -233,8 +234,17 @@ impl SearchEngine {
                         self.push_same_predicate(ctx);
                     }
                     PredicateResult::Failure => {
-                        // Backtrack
-                        self.stack.pop();
+                        // Backtrack: pop until we find a choice point.
+                        // We must skip over deterministic Success entries that have no alternatives.
+                        loop {
+                            if self.stack.is_empty() {
+                                return None; // Search exhausted
+                            }
+                            if self.stack.last().unwrap().in_choice_mode {
+                                break; // Found a choice point
+                            }
+                            self.stack.pop();
+                        }
                     }
                     PredicateResult::Choices(n) => {
                         // Enter choice mode
@@ -255,8 +265,17 @@ impl SearchEngine {
 
                 // Check if we've exhausted all choices
                 if entry.current_choice >= entry.num_choices {
-                    // Backtrack
-                    self.stack.pop();
+                    // Backtrack: pop until we find another choice point.
+                    // We must skip over deterministic Success entries that have no alternatives.
+                    loop {
+                        self.stack.pop();
+                        if self.stack.is_empty() {
+                            return None; // Search exhausted
+                        }
+                        if self.stack.last().unwrap().in_choice_mode {
+                            break; // Found another choice point
+                        }
+                    }
                     continue;
                 }
 

@@ -9,6 +9,7 @@
 //! This design enables parallelization by allowing multiple independent SearchContext
 //! instances to operate on the same MEMO data.
 
+use crate::geometry::constants::NCOLORS;
 use crate::trail::Trail;
 use std::ptr::NonNull;
 
@@ -63,12 +64,20 @@ impl Default for MemoizedData {
 /// Each SearchContext owns its own mutable state.
 #[derive(Debug)]
 pub struct DynamicState {
-    // TODO: Add DYNAMIC fields during Phase 3-4:
+    // TODO: Add more DYNAMIC fields during Phase 6-7:
     // - Faces state (current facial cycle assignments)
     // - EdgeColorCount (crossing counts)
     // - Other mutable search state
 
-    // Example placeholders for demonstration:
+    /// Current face degree assignments (for InnerFacePredicate).
+    ///
+    /// During the InnerFacePredicate phase, this array stores the degree
+    /// of each of the NCOLORS symmetric faces bordering the central face.
+    ///
+    /// Note: Stored as u64 to work with the trail system, even though values are small.
+    pub current_face_degrees: [u64; NCOLORS],
+
+    // Example placeholders for demonstration (will be removed):
     pub example_value: u64,
     pub example_array: Vec<u64>,
 }
@@ -77,6 +86,7 @@ impl DynamicState {
     /// Create initial dynamic state.
     pub fn new() -> Self {
         Self {
+            current_face_degrees: [0; NCOLORS],
             example_value: 0,
             example_array: vec![0; 10],
         }
@@ -204,6 +214,43 @@ impl SearchContext {
             let ptr = NonNull::new_unchecked(&mut self.state.example_value);
             self.trail.maybe_record_and_set(ptr, value)
         }
+    }
+
+    // Face degree management (for InnerFacePredicate)
+
+    /// Set a face degree with trail recording.
+    ///
+    /// # Arguments
+    ///
+    /// * `round` - The face index (0..NCOLORS)
+    /// * `degree` - The degree value to set
+    ///
+    /// # Panics
+    ///
+    /// Panics if round >= NCOLORS.
+    pub fn set_face_degree(&mut self, round: usize, degree: u64) {
+        assert!(round < NCOLORS, "Face round out of bounds: {}", round);
+        unsafe {
+            let ptr = NonNull::new_unchecked(&mut self.state.current_face_degrees[round]);
+            self.trail.record_and_set(ptr, degree);
+        }
+    }
+
+    /// Get the current face degrees array.
+    ///
+    /// Returns a reference to the NCOLORS-element array of face degrees.
+    pub fn get_face_degrees(&self) -> &[u64; NCOLORS] {
+        &self.state.current_face_degrees
+    }
+
+    /// Get a single face degree value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if round >= NCOLORS.
+    pub fn get_face_degree(&self, round: usize) -> u64 {
+        assert!(round < NCOLORS, "Face round out of bounds: {}", round);
+        self.state.current_face_degrees[round]
     }
 
     // TODO: Add more specific trail methods as needed:
