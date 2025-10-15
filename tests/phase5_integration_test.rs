@@ -24,7 +24,10 @@ fn test_initialize_and_innerface_together() {
 
     // Run search - should find one degree signature and suspend
     let result = engine.search(&mut ctx);
-    assert!(result.is_some(), "Should find at least one degree signature");
+    assert!(
+        result.is_some(),
+        "Should find at least one degree signature"
+    );
 
     // Verify it's a valid solution
     let degrees = ctx.get_face_degrees();
@@ -131,7 +134,7 @@ fn test_known_canonical_examples() {
 
     let test_cases: Vec<(Vec<u64>, bool)> = if NCOLORS == 6 {
         vec![
-            (vec![6, 6, 3, 5, 4, 3], true), // Canonical
+            (vec![6, 6, 3, 5, 4, 3], true),  // Canonical
             (vec![6, 6, 3, 4, 5, 3], false), // Non-canonical (reflection)
             (vec![5, 4, 5, 4, 5, 4], true),  // Equivocal
         ]

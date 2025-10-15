@@ -68,7 +68,6 @@ pub struct DynamicState {
     // - Faces state (current facial cycle assignments)
     // - EdgeColorCount (crossing counts)
     // - Other mutable search state
-
     /// Current face degree assignments (for InnerFacePredicate).
     ///
     /// During the InnerFacePredicate phase, this array stores the degree

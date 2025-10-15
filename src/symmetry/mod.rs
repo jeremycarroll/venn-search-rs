@@ -5,8 +5,6 @@
 //! This module provides functionality to check whether a sequence of face degrees
 //! is canonical under the symmetry group of rotations and reflections.
 
-use crate::geometry::constants::NCOLORS;
-
 pub mod s6;
 
 /// Helper macro to generate dihedral group elements at compile time.
@@ -61,6 +59,7 @@ pub const DIHEDRAL_GROUP_6: [[u8; 6]; 12] = make_dihedral_group!(6);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::constants::NCOLORS;
 
     #[test]
     fn test_dihedral_group_3_structure() {
@@ -103,7 +102,10 @@ mod tests {
         #[cfg(feature = "ncolors_5")]
         let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_5;
 
-        #[cfg(any(feature = "ncolors_6", not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))))]
+        #[cfg(any(
+            feature = "ncolors_6",
+            not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))
+        ))]
         let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_6;
 
         // Should have 2 * NCOLORS elements

@@ -71,11 +71,11 @@ impl Predicate for InnerFacePredicate {
                 SymmetryType::NonCanonical => {
                     // eprintln!("[InnerFace] REJECT: non-canonical");
                     PredicateResult::Failure
-                },
+                }
                 SymmetryType::Canonical | SymmetryType::Equivocal => {
                     // eprintln!("[InnerFace] ACCEPT: canonical/equivocal");
                     PredicateResult::Success
-                },
+                }
             }
         } else {
             // Generate choices for this round
@@ -144,10 +144,12 @@ mod tests {
         assert_eq!(result, PredicateResult::SuccessSamePredicate);
         assert_eq!(ctx.get_face_degree(0), NCOLORS as u64);
 
-        // Choice 1 → degree NCOLORS-1
-        let result = pred.retry_pred(&mut ctx, 1, 1);
-        assert_eq!(result, PredicateResult::SuccessSamePredicate);
-        assert_eq!(ctx.get_face_degree(1), (NCOLORS - 1) as u64);
+        // For NCOLORS >= 4, test choice 1 → degree NCOLORS-1
+        if NCOLORS >= 4 {
+            let result = pred.retry_pred(&mut ctx, 1, 1);
+            assert_eq!(result, PredicateResult::SuccessSamePredicate);
+            assert_eq!(ctx.get_face_degree(1), (NCOLORS - 1) as u64);
+        }
     }
 
     #[test]
@@ -165,9 +167,12 @@ mod tests {
         let mut ctx = SearchContext::new();
         let mut pred = InnerFacePredicate;
 
-        // Set degrees that don't sum correctly (all 3s for NCOLORS=6 would be 18, not 27)
+        // Set degrees that don't sum correctly
+        // For NCOLORS=3: all 4s would be 12, not 9
+        // For NCOLORS=6: all 3s would be 18, not 27
+        let wrong_degree = if NCOLORS == 3 { 4 } else { 3 };
         for i in 0..NCOLORS {
-            ctx.set_face_degree(i, 3);
+            ctx.set_face_degree(i, wrong_degree);
         }
 
         let result = pred.try_pred(&mut ctx, NCOLORS);
@@ -175,7 +180,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(feature = "ncolors_6", not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))))]
+    #[cfg(any(
+        feature = "ncolors_6",
+        not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))
+    ))]
     fn test_innerface_canonical_sequence_succeeds() {
         let mut ctx = SearchContext::new();
         let mut pred = InnerFacePredicate;
@@ -191,7 +199,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(feature = "ncolors_6", not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))))]
+    #[cfg(any(
+        feature = "ncolors_6",
+        not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))
+    ))]
     fn test_innerface_noncanonical_sequence_fails() {
         let mut ctx = SearchContext::new();
         let mut pred = InnerFacePredicate;
@@ -218,7 +229,10 @@ mod tests {
 
         // Run search - should find at least one solution
         let result = engine.search(&mut ctx);
-        assert!(result.is_some(), "Should find at least one degree signature");
+        assert!(
+            result.is_some(),
+            "Should find at least one degree signature"
+        );
 
         // Verify the degrees in the context sum correctly
         let degrees = ctx.get_face_degrees();

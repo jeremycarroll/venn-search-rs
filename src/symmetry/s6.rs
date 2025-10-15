@@ -45,7 +45,10 @@ pub fn check_symmetry(degrees: &[u8; NCOLORS]) -> SymmetryType {
     #[cfg(feature = "ncolors_5")]
     let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_5;
 
-    #[cfg(any(feature = "ncolors_6", not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))))]
+    #[cfg(any(
+        feature = "ncolors_6",
+        not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))
+    ))]
     let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_6;
 
     // Generate all permutations of the degree sequence
@@ -53,8 +56,8 @@ pub fn check_symmetry(degrees: &[u8; NCOLORS]) -> SymmetryType {
 
     for permutation in group.iter() {
         let mut permuted = [0u8; NCOLORS];
-        for i in 0..NCOLORS {
-            permuted[i] = degrees[permutation[i] as usize];
+        for (i, &perm_idx) in permutation.iter().enumerate() {
+            permuted[i] = degrees[perm_idx as usize];
         }
         permutations.push(permuted);
     }
@@ -84,7 +87,10 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(any(feature = "ncolors_6", not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))))]
+    #[cfg(any(
+        feature = "ncolors_6",
+        not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))
+    ))]
     fn test_canonical_sequence_n6() {
         // [6,6,3,5,4,3] is canonical for NCOLORS=6
         let degrees = [6, 6, 3, 5, 4, 3];
@@ -92,7 +98,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(feature = "ncolors_6", not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))))]
+    #[cfg(any(
+        feature = "ncolors_6",
+        not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))
+    ))]
     fn test_noncanonical_sequence_n6() {
         // [6,6,3,4,5,3] is the reflection of [6,6,3,5,4,3]
         // and is lexicographically smaller
@@ -101,7 +110,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(feature = "ncolors_6", not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))))]
+    #[cfg(any(
+        feature = "ncolors_6",
+        not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))
+    ))]
     fn test_equivocal_sequence_n6() {
         // [5,4,5,4,5,4] has rotational symmetry for NCOLORS=6
         let degrees = [5, 4, 5, 4, 5, 4];
@@ -140,8 +152,8 @@ mod tests {
         // Test a descending sequence - should be Canonical or Equivocal
         let degrees: [u8; NCOLORS] = {
             let mut arr = [0u8; NCOLORS];
-            for i in 0..NCOLORS {
-                arr[i] = (NCOLORS - i) as u8;
+            for (i, item) in arr.iter_mut().enumerate() {
+                *item = (NCOLORS - i) as u8;
             }
             arr
         };

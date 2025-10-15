@@ -268,7 +268,7 @@ mod tests {
         assert_eq!(TOTAL_CENTRAL_NEIGHBOR_DEGREE, expected);
 
         match NCOLORS {
-            3 => assert_eq!(TOTAL_CENTRAL_NEIGHBOR_DEGREE, 9),  // 2*C(3,2) + C(3,1) = 2*3 + 3 = 9
+            3 => assert_eq!(TOTAL_CENTRAL_NEIGHBOR_DEGREE, 9), // 2*C(3,2) + C(3,1) = 2*3 + 3 = 9
             4 => assert_eq!(TOTAL_CENTRAL_NEIGHBOR_DEGREE, 14), // 2*C(4,3) + C(4,2) = 2*4 + 6 = 14
             5 => assert_eq!(TOTAL_CENTRAL_NEIGHBOR_DEGREE, 20), // 2*C(5,4) + C(5,3) = 2*5 + 10 = 20
             6 => assert_eq!(TOTAL_CENTRAL_NEIGHBOR_DEGREE, 27), // 2*C(6,5) + C(6,4) = 2*6 + 15 = 27
