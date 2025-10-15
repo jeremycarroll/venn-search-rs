@@ -43,7 +43,6 @@ pub struct MemoizedData {
 
     /// All vertex-related MEMO data (crossing point configurations)
     pub vertices: VerticesMemo,
-
     // TODO: Add more MEMO fields in later phases:
     // - Cycle constraint lookup tables
     // - Edge relationship tables
@@ -433,7 +432,11 @@ mod tests {
 
         println!("MemoizedData stack size: {} bytes", stack_size);
         println!("MemoizedData heap size: {} bytes", heap_size);
-        println!("MemoizedData total size: {} bytes ({:.2} KB)", total, total as f64 / 1024.0);
+        println!(
+            "MemoizedData total size: {} bytes ({:.2} KB)",
+            total,
+            total as f64 / 1024.0
+        );
 
         // Verify size is reasonable (should be under 1MB for NCOLORS=6)
         assert!(total < 1024 * 1024, "MEMO data should be under 1MB");
