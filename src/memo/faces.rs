@@ -308,6 +308,13 @@ fn check_exactly_two_transitions(
 /// - The cycle must have exactly 2 edge transitions (in/out of face)
 /// - The next and previous faces are determined by which edges transition
 ///
+/// # Special Cases
+///
+/// - **Outer face (0)**: Can only have cycles of length NCOLORS (full 6-cycles)
+/// - **Inner face (NFACES-1)**: Can only have cycles of length NCOLORS (full 6-cycles)
+///   - The inner face will later be assigned the canonical cycle (0,1,2,3,4,5)
+///     for symmetry breaking (done during search, not here)
+///
 /// # Returns
 ///
 /// Returns (next_face_by_cycle, previous_face_by_cycle) lookup tables.
@@ -318,8 +325,7 @@ fn apply_monotonicity_constraints(
     let mut next_by_cycle = vec![vec![None; NCYCLES]; NFACES];
     let mut previous_by_cycle = vec![vec![None; NCYCLES]; NFACES];
 
-    // Skip outer face (0) and inner face (NFACES-1)
-    // These are special cases handled separately
+    // Handle regular faces (not outer or inner)
     for face_id in 1..(NFACES - 1) {
         let face = &mut faces[face_id];
         let face_colors = face.colors;
@@ -347,7 +353,27 @@ fn apply_monotonicity_constraints(
         }
     }
 
+    // Handle outer face (0): Can only have full NCOLORS-cycles
+    filter_cycles_by_length(&mut faces[0], cycles, NCOLORS);
+
+    // Handle inner face (NFACES-1): Can only have full NCOLORS-cycles
+    // The inner face will be assigned cycle (0,1,2,3,4,5) during search for symmetry breaking
+    filter_cycles_by_length(&mut faces[NFACES - 1], cycles, NCOLORS);
+
     (next_by_cycle, previous_by_cycle)
+}
+
+/// Filter a face to only allow cycles of a specific length.
+///
+/// This is used for the outer and inner faces, which can only have
+/// cycles that use all NCOLORS colors.
+fn filter_cycles_by_length(face: &mut Face, cycles: &crate::memo::CyclesArray, length: usize) {
+    for cycle_id in 0..NCYCLES {
+        let cycle = cycles.get(cycle_id as u64);
+        if cycle.len() != length {
+            face.possible_cycles.remove(cycle_id as u64);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -432,5 +458,51 @@ mod tests {
         // Binomial coefficients should be computed
         assert_eq!(memo.face_degree_by_color_count[0], 1);
         assert_eq!(memo.face_degree_by_color_count[NCOLORS], 1);
+    }
+
+    #[test]
+    fn test_outer_and_inner_face_cycle_constraints() {
+        let cycles = crate::memo::CyclesArray::generate();
+        let memo = FacesMemo::initialize(&cycles);
+
+        // Outer face (0) can only have NCOLORS-length cycles
+        let outer = memo.get_face(0);
+        for cycle_id in 0..NCYCLES as u64 {
+            let cycle = cycles.get(cycle_id);
+            if outer.possible_cycles.contains(cycle_id) {
+                assert_eq!(
+                    cycle.len(),
+                    NCOLORS,
+                    "Outer face cycle {} has wrong length {}",
+                    cycle_id,
+                    cycle.len()
+                );
+            }
+        }
+
+        // Inner face (NFACES-1) can only have NCOLORS-length cycles
+        let inner = memo.get_face(NFACES - 1);
+        for cycle_id in 0..NCYCLES as u64 {
+            let cycle = cycles.get(cycle_id);
+            if inner.possible_cycles.contains(cycle_id) {
+                assert_eq!(
+                    cycle.len(),
+                    NCOLORS,
+                    "Inner face cycle {} has wrong length {}",
+                    cycle_id,
+                    cycle.len()
+                );
+            }
+        }
+
+        // Both should have at least one possible cycle
+        assert!(
+            !outer.possible_cycles.is_empty(),
+            "Outer face has no possible cycles"
+        );
+        assert!(
+            !inner.possible_cycles.is_empty(),
+            "Inner face has no possible cycles"
+        );
     }
 }
