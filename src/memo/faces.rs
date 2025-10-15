@@ -7,6 +7,16 @@
 //! - Face adjacency tables
 //! - Cycle-to-face relationship lookups (next/previous by cycle ID)
 //! - Monotonicity constraints
+//!
+//! # Monotonicity and Convex Curves
+//!
+//! This implementation searches for **monotone Venn diagrams**, which can be drawn
+//! with convex curves. Triangles are convex, so any diagram drawable with triangles
+//! must be monotone.
+//!
+//! A monotone diagram has the property that each facial cycle crosses each curve
+//! at most once. This constraint eliminates many invalid configurations and is
+//! enforced during MEMO initialization by filtering out non-monotone cycles.
 
 use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
 use crate::geometry::{Color, ColorSet, CycleSet, Face, FaceId};
@@ -300,13 +310,19 @@ fn check_exactly_two_transitions(
 /// 2. If valid, compute next/previous faces for this cycle
 /// 3. If invalid, remove from possible_cycles
 ///
-/// # Monotonicity
+/// # Monotonicity and Convex Curves
 ///
-/// A monotone Venn diagram has the property that each facial cycle
-/// crosses each curve at most once. This means:
+/// This constraint is fundamental to drawing Venn diagrams with **convex curves**.
+/// Since **triangles are convex**, any diagram drawable with triangles must be monotone.
+///
+/// A monotone Venn diagram has the property that each facial cycle crosses each curve
+/// at most once. This means:
 /// - A cycle for face {a,b,c} must have colors from {a,b,c}
 /// - The cycle must have exactly 2 edge transitions (in/out of face)
 /// - The next and previous faces are determined by which edges transition
+///
+/// Non-monotone diagrams (where cycles can cross curves multiple times) cannot be
+/// drawn with convex curves and are excluded from this search
 ///
 /// # Special Cases
 ///
