@@ -311,7 +311,10 @@ fn check_exactly_two_transitions(
 /// # Special Cases
 ///
 /// - **Outer face (0)**: Can only have cycles of length NCOLORS (full 6-cycles)
+///   - Monotonicity requires the outer boundary to cross each curve exactly once
 /// - **Inner face (NFACES-1)**: Can only have cycles of length NCOLORS (full 6-cycles)
+///   - Monotonicity requires the inner boundary to cross each curve exactly once
+///   - (Non-monotone diagrams can have 4- or 5-cycles, but not with convex curves)
 ///   - The inner face will later be assigned the canonical cycle (0,1,2,3,4,5)
 ///     for symmetry breaking (done during search, not here)
 ///
