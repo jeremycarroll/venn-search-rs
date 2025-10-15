@@ -17,14 +17,14 @@ fn test_search_context_simple_backtracking() {
     assert_eq!(ctx.state.example_value, 0);
 
     // Checkpoint and modify using safe wrapper
-    ctx.trail.checkpoint();
+    let checkpoint = ctx.trail.checkpoint();
     ctx.set_example_value(100);
 
     assert_eq!(ctx.state.example_value, 100);
     assert_eq!(ctx.trail.len(), 1);
 
     // Rewind restores old value automatically!
-    ctx.trail.rewind();
+    ctx.trail.rewind_to(checkpoint);
     assert_eq!(ctx.state.example_value, 0);
     assert_eq!(ctx.trail.len(), 0);
 }
@@ -54,13 +54,13 @@ fn test_search_context_backtracking() {
     ctx.set_example_value(111);
     assert_eq!(ctx.trail.len(), 4);
 
-    // Rewind inner checkpoint
-    assert!(ctx.trail.rewind());
+    // Rewind to cp2
+    ctx.trail.rewind_to(cp2);
     assert_eq!(ctx.state.example_value, 999); // Restored!
     assert_eq!(ctx.trail.len(), 3);
 
-    // Rewind outer checkpoint
-    assert!(ctx.trail.rewind());
+    // Rewind to cp1
+    ctx.trail.rewind_to(cp1);
     assert_eq!(ctx.state.example_value, 0); // Restored to initial!
     assert_eq!(ctx.state.example_array[0], 0);
     assert_eq!(ctx.trail.len(), 0);
@@ -75,7 +75,7 @@ fn test_independent_search_contexts() {
     let mut ctx2 = SearchContext::new();
 
     // Checkpoint in ctx1
-    ctx1.trail.checkpoint();
+    let cp1 = ctx1.trail.checkpoint();
 
     // Modify ctx1
     ctx1.set_example_value(100);
@@ -85,10 +85,9 @@ fn test_independent_search_contexts() {
     // ctx2 should be completely unaffected
     assert_eq!(ctx2.state.example_value, 0);
     assert_eq!(ctx2.trail.len(), 0);
-    assert_eq!(ctx2.trail.checkpoint_depth(), 0);
 
     // Checkpoint in ctx2
-    ctx2.trail.checkpoint();
+    let _cp2 = ctx2.trail.checkpoint();
     ctx2.set_example_value(200);
 
     // Both contexts have their own independent state
@@ -98,7 +97,7 @@ fn test_independent_search_contexts() {
     assert_eq!(ctx2.trail.len(), 1);
 
     // Rewind ctx1 doesn't affect ctx2
-    ctx1.trail.rewind();
+    ctx1.trail.rewind_to(cp1);
     assert_eq!(ctx1.state.example_value, 0);
     assert_eq!(ctx1.trail.len(), 0);
     assert_eq!(ctx2.state.example_value, 200); // Still has its value
@@ -110,31 +109,31 @@ fn test_trail_freeze() {
     let mut ctx = SearchContext::new();
 
     // Make some changes
-    ctx.trail.checkpoint();
+    let cp1 = ctx.trail.checkpoint();
     ctx.set_example_value(20);
 
     // Freeze the trail
     ctx.trail.freeze();
 
     // Make more changes after freeze
-    ctx.trail.checkpoint();
+    let cp2 = ctx.trail.checkpoint();
     ctx.set_example_value(30);
 
-    // Can rewind recent changes
-    assert!(ctx.trail.rewind());
+    // Can rewind to cp2 (recent changes)
+    ctx.trail.rewind_to(cp2);
     assert_eq!(ctx.state.example_value, 20);
     assert_eq!(ctx.trail.len(), 1);
 
-    // But cannot rewind past freeze point
-    assert!(!ctx.trail.rewind());
-    assert_eq!(ctx.state.example_value, 20); // Still 20
+    // Cannot rewind past freeze point
+    ctx.trail.rewind_to(cp1);
+    assert_eq!(ctx.state.example_value, 20); // Still 20 (blocked by freeze)
     assert_eq!(ctx.trail.len(), 1);
 }
 
 #[test]
 fn test_trail_maybe_set() {
     let mut ctx = SearchContext::new();
-    ctx.trail.checkpoint();
+    let checkpoint = ctx.trail.checkpoint();
 
     // Setting same value doesn't record in trail
     assert!(!ctx.maybe_set_example_value(0));
@@ -150,7 +149,7 @@ fn test_trail_maybe_set() {
     assert_eq!(ctx.trail.len(), 1);
 
     // Rewind restores
-    ctx.trail.rewind();
+    ctx.trail.rewind_to(checkpoint);
     assert_eq!(ctx.state.example_value, 0);
 }
 
@@ -158,7 +157,7 @@ fn test_trail_maybe_set() {
 fn test_array_operations() {
     let mut ctx = SearchContext::new();
 
-    ctx.trail.checkpoint();
+    let checkpoint = ctx.trail.checkpoint();
     ctx.set_array_element(0, 10);
     ctx.set_array_element(5, 50);
     ctx.set_array_element(9, 90);
@@ -169,7 +168,7 @@ fn test_array_operations() {
     assert_eq!(ctx.trail.len(), 3);
 
     // Rewind restores all array elements
-    ctx.trail.rewind();
+    ctx.trail.rewind_to(checkpoint);
     assert_eq!(ctx.state.example_array[0], 0);
     assert_eq!(ctx.state.example_array[5], 0);
     assert_eq!(ctx.state.example_array[9], 0);
@@ -179,19 +178,20 @@ fn test_array_operations() {
 fn test_deep_nesting() {
     let mut ctx = SearchContext::new();
 
-    // Create 10 nested checkpoints
+    // Create 10 nested checkpoints and store them
+    let mut checkpoints = Vec::new();
     for i in 0..10 {
-        ctx.trail.checkpoint();
+        let cp = ctx.trail.checkpoint();
+        checkpoints.push(cp);
         ctx.set_example_value(i as u64);
     }
 
     assert_eq!(ctx.state.example_value, 9);
     assert_eq!(ctx.trail.len(), 10);
-    assert_eq!(ctx.trail.checkpoint_depth(), 10);
 
     // Rewind all the way back
     for i in (0..10).rev() {
-        assert!(ctx.trail.rewind());
+        ctx.trail.rewind_to(checkpoints[i]);
         if i > 0 {
             assert_eq!(ctx.state.example_value, (i - 1) as u64);
         } else {
@@ -200,7 +200,6 @@ fn test_deep_nesting() {
     }
 
     assert_eq!(ctx.trail.len(), 0);
-    assert_eq!(ctx.trail.checkpoint_depth(), 0);
 }
 
 #[test]
@@ -221,7 +220,7 @@ fn test_raw_pointer_safety() {
     // This test demonstrates that our design prevents dangling pointers
     let mut ctx = SearchContext::new();
 
-    ctx.trail.checkpoint();
+    let checkpoint = ctx.trail.checkpoint();
     ctx.set_example_value(42);
 
     // Even though we're using raw pointers internally,
@@ -230,7 +229,7 @@ fn test_raw_pointer_safety() {
     // - trail can only be rewound while ctx exists
     // - pointers in trail are guaranteed valid
 
-    ctx.trail.rewind();
+    ctx.trail.rewind_to(checkpoint);
     assert_eq!(ctx.state.example_value, 0);
 
     // If ctx is dropped here, both trail and state drop together

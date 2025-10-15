@@ -18,12 +18,12 @@ use std::ptr::NonNull;
 
 /// A single entry in the trail, recording one state change.
 ///
-/// This matches the C implementation:
-/// ```c
-/// struct trail {
-///     void* ptr;        // 8 bytes
-///     uint_trail value; // 8 bytes (uint64)
-/// };
+/// Structure: 128-bit entry with pointer (64-bit) + value (64-bit)
+/// ```ignore
+/// struct TrailEntry {
+///     ptr: NonNull<u64>  // 8 bytes, non-null pointer
+///     old_value: u64     // 8 bytes, previous value
+/// }
 /// ```
 ///
 /// We use `NonNull<u64>` instead of `*mut u64` to guarantee the pointer is never null,
@@ -48,8 +48,7 @@ struct TrailEntry {
 ///
 /// # Implementation Notes
 ///
-/// The C implementation uses a global static array with pointer arithmetic.
-/// This Rust implementation uses a Vec with automatic restoration on rewind.
+/// Uses a Vec for dynamic storage with automatic restoration on rewind.
 ///
 /// # Safety
 ///
@@ -61,8 +60,6 @@ struct TrailEntry {
 pub struct Trail {
     /// All trail entries recorded so far
     entries: Vec<TrailEntry>,
-    /// Stack of checkpoint indices for nested backtracking
-    checkpoints: Vec<usize>,
     /// Optional frozen checkpoint that prevents further backtracking
     frozen_checkpoint: Option<usize>,
 }
@@ -75,58 +72,49 @@ impl Trail {
     pub fn new() -> Self {
         Self {
             entries: Vec::with_capacity(Self::MAX_SIZE),
-            checkpoints: Vec::with_capacity(64), // Reasonable depth estimate
             frozen_checkpoint: None,
         }
     }
 
     /// Record a checkpoint for later backtracking.
     ///
-    /// Returns the checkpoint index.
+    /// Returns the checkpoint index. The caller is responsible for storing
+    /// this index and passing it to `rewind_to()` when backtracking.
     pub fn checkpoint(&mut self) -> usize {
-        let checkpoint = self.entries.len();
-        self.checkpoints.push(checkpoint);
-        checkpoint
+        self.entries.len()
     }
 
-    /// Rewind the trail to the most recent checkpoint.
+    /// Rewind the trail to a specific checkpoint index.
     ///
-    /// This automatically restores all values that were changed since the checkpoint,
-    /// matching the C implementation's `trailRewindTo` behavior.
+    /// Restores all values that were changed after the checkpoint.
+    /// The caller must provide a valid checkpoint index (from a previous `checkpoint()` call).
     ///
-    /// Returns true if there was a checkpoint to rewind to, false otherwise.
-    pub fn rewind(&mut self) -> bool {
-        if let Some(checkpoint_idx) = self.checkpoints.pop() {
-            // Don't rewind past frozen checkpoint
-            let target_idx = if let Some(frozen) = self.frozen_checkpoint {
-                checkpoint_idx.max(frozen)
-            } else {
-                checkpoint_idx
-            };
-
-            // Restore all values back to checkpoint
-            while self.entries.len() > target_idx {
-                let entry = self.entries.pop().unwrap();
-                unsafe {
-                    // SAFETY: Pointer was valid when recorded, and data is owned by
-                    // SearchContext which owns this trail, so pointer is still valid.
-                    // NonNull guarantees it's not null.
-                    *entry.ptr.as_ptr() = entry.old_value;
-                }
-            }
-
-            // Return true if we successfully rewound (even if target == checkpoint)
-            // Return false only if we were blocked by frozen checkpoint
-            checkpoint_idx >= target_idx
+    /// # Arguments
+    ///
+    /// * `target_idx` - The checkpoint index to rewind to
+    pub fn rewind_to(&mut self, target_idx: usize) {
+        // Don't rewind past frozen checkpoint
+        let target = if let Some(frozen) = self.frozen_checkpoint {
+            target_idx.max(frozen)
         } else {
-            false
+            target_idx
+        };
+
+        // Restore all values back to target
+        while self.entries.len() > target {
+            let entry = self.entries.pop().unwrap();
+            unsafe {
+                // SAFETY: Pointer was valid when recorded, and data is owned by
+                // SearchContext which owns this trail, so pointer is still valid.
+                // NonNull guarantees it's not null.
+                *entry.ptr.as_ptr() = entry.old_value;
+            }
         }
     }
 
     /// Freeze the trail at the current position.
     ///
     /// After freezing, no backtracking past this point is allowed.
-    /// This corresponds to `trailFreeze()` in the C implementation.
     pub fn freeze(&mut self) {
         self.frozen_checkpoint = Some(self.entries.len());
     }
@@ -190,11 +178,6 @@ impl Trail {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
-
-    /// Get the number of active checkpoints.
-    pub fn checkpoint_depth(&self) -> usize {
-        self.checkpoints.len()
-    }
 }
 
 impl Default for Trail {
@@ -211,7 +194,6 @@ mod tests {
     fn test_trail_new() {
         let trail = Trail::new();
         assert_eq!(trail.len(), 0);
-        assert_eq!(trail.checkpoint_depth(), 0);
         assert!(trail.is_empty());
     }
 
@@ -222,7 +204,7 @@ mod tests {
         let mut value2 = 20u64;
 
         // Record initial state
-        trail.checkpoint();
+        let checkpoint = trail.checkpoint();
 
         // Make changes
         unsafe {
@@ -235,7 +217,7 @@ mod tests {
         assert_eq!(trail.len(), 2);
 
         // Rewind restores old values
-        assert!(trail.rewind());
+        trail.rewind_to(checkpoint);
         assert_eq!(value1, 10); // Restored!
         assert_eq!(value2, 20); // Restored!
         assert_eq!(trail.len(), 0);
@@ -249,37 +231,28 @@ mod tests {
         unsafe {
             trail.record_and_set(NonNull::new_unchecked(&mut value), 20);
         }
-        let _cp1 = trail.checkpoint();
+        let cp1 = trail.checkpoint();
 
         unsafe {
             trail.record_and_set(NonNull::new_unchecked(&mut value), 30);
         }
-        let _cp2 = trail.checkpoint();
+        let cp2 = trail.checkpoint();
 
         unsafe {
             trail.record_and_set(NonNull::new_unchecked(&mut value), 40);
         }
         assert_eq!(value, 40);
         assert_eq!(trail.len(), 3);
-        assert_eq!(trail.checkpoint_depth(), 2);
 
-        // Rewind inner checkpoint
-        assert!(trail.rewind());
+        // Rewind to cp2
+        trail.rewind_to(cp2);
         assert_eq!(value, 30); // Restored to cp2
         assert_eq!(trail.len(), 2);
-        assert_eq!(trail.checkpoint_depth(), 1);
 
-        // Rewind outer checkpoint
-        assert!(trail.rewind());
+        // Rewind to cp1
+        trail.rewind_to(cp1);
         assert_eq!(value, 20); // Restored to cp1
         assert_eq!(trail.len(), 1);
-        assert_eq!(trail.checkpoint_depth(), 0);
-    }
-
-    #[test]
-    fn test_rewind_empty() {
-        let mut trail = Trail::new();
-        assert!(!trail.rewind()); // No checkpoint to rewind
     }
 
     #[test]
@@ -290,26 +263,26 @@ mod tests {
         unsafe {
             trail.record_and_set(NonNull::new_unchecked(&mut value), 20);
         }
-        trail.checkpoint();
+        let cp1 = trail.checkpoint();
 
         unsafe {
             trail.record_and_set(NonNull::new_unchecked(&mut value), 30);
         }
         trail.freeze(); // Freeze at position 2
 
-        trail.checkpoint();
+        let cp2 = trail.checkpoint();
         unsafe {
             trail.record_and_set(NonNull::new_unchecked(&mut value), 40);
         }
 
-        // Can rewind recent changes
-        assert!(trail.rewind());
+        // Can rewind to cp2 (recent changes)
+        trail.rewind_to(cp2);
         assert_eq!(value, 30);
         assert_eq!(trail.len(), 2);
 
         // Cannot rewind past freeze point
-        assert!(!trail.rewind());
-        assert_eq!(value, 30); // Still 30, not 20
+        trail.rewind_to(cp1);
+        assert_eq!(value, 30); // Still 30, not 20 (blocked by freeze)
         assert_eq!(trail.len(), 2);
     }
 
@@ -318,7 +291,7 @@ mod tests {
         let mut trail = Trail::new();
         let mut value = 42u64;
 
-        trail.checkpoint();
+        let checkpoint = trail.checkpoint();
 
         // Setting same value doesn't record in trail
         let changed = unsafe { trail.maybe_record_and_set(NonNull::new_unchecked(&mut value), 42) };
@@ -333,7 +306,7 @@ mod tests {
         assert_eq!(value, 100);
 
         // Rewind restores
-        trail.rewind();
+        trail.rewind_to(checkpoint);
         assert_eq!(value, 42);
     }
 
@@ -342,7 +315,7 @@ mod tests {
         let mut trail = Trail::new();
         let mut array = vec![0u64, 10, 20, 30, 40];
 
-        trail.checkpoint();
+        let checkpoint = trail.checkpoint();
 
         // Trail changes to array elements
         unsafe {
@@ -354,7 +327,7 @@ mod tests {
         assert_eq!(array[3], 300);
 
         // Rewind restores array elements
-        trail.rewind();
+        trail.rewind_to(checkpoint);
         assert_eq!(array[1], 10);
         assert_eq!(array[3], 30);
     }

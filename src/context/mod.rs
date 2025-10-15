@@ -19,7 +19,7 @@ use std::ptr::NonNull;
 ///
 /// # Size Estimation
 ///
-/// From the C implementation:
+/// Expected contents:
 /// - Facial cycle constraint lookup tables: ~few KB
 /// - Possible vertex configurations: 480 entries * ~32 bytes = ~15 KB
 /// - Edge and face relationship tables: ~few KB
@@ -43,8 +43,8 @@ impl MemoizedData {
 
     /// Initialize all MEMO data structures.
     ///
-    /// This corresponds to the initialize phase in the C implementation.
-    /// Will be implemented during Phase 2-3 as we port geometric types.
+    /// Computes all immutable precomputed data needed for the search.
+    /// Will be implemented during Phase 4 as we add real predicates.
     pub fn initialize() -> Self {
         // TODO: Compute all MEMO data
         Self::new()
@@ -117,9 +117,9 @@ impl Default for DynamicState {
 /// ```ignore
 /// // Single-threaded search
 /// let mut ctx = SearchContext::new();
-/// ctx.trail.checkpoint();
+/// let checkpoint = ctx.trail.checkpoint();
 /// ctx.set_example_value(42);  // Safe wrapper
-/// ctx.trail.rewind();         // Automatically restores value
+/// ctx.trail.rewind_to(checkpoint);  // Automatically restores value
 ///
 /// // Parallel search (future)
 /// let memo = MemoizedData::initialize();
@@ -173,9 +173,9 @@ impl SearchContext {
     ///
     /// # Example
     /// ```ignore
-    /// ctx.trail.checkpoint();
+    /// let checkpoint = ctx.trail.checkpoint();
     /// ctx.set_example_value(42);
-    /// ctx.trail.rewind();  // Value automatically restored
+    /// ctx.trail.rewind_to(checkpoint);  // Value automatically restored
     /// ```
     pub fn set_example_value(&mut self, value: u64) {
         unsafe {
@@ -234,13 +234,13 @@ mod tests {
     fn test_set_and_restore() {
         let mut ctx = SearchContext::new();
 
-        ctx.trail.checkpoint();
+        let checkpoint = ctx.trail.checkpoint();
         ctx.set_example_value(42);
 
         assert_eq!(ctx.state.example_value, 42);
         assert_eq!(ctx.trail.len(), 1);
 
-        ctx.trail.rewind();
+        ctx.trail.rewind_to(checkpoint);
         assert_eq!(ctx.state.example_value, 0); // Restored!
     }
 
@@ -248,14 +248,14 @@ mod tests {
     fn test_array_elements() {
         let mut ctx = SearchContext::new();
 
-        ctx.trail.checkpoint();
+        let checkpoint = ctx.trail.checkpoint();
         ctx.set_array_element(3, 100);
         ctx.set_array_element(7, 200);
 
         assert_eq!(ctx.state.example_array[3], 100);
         assert_eq!(ctx.state.example_array[7], 200);
 
-        ctx.trail.rewind();
+        ctx.trail.rewind_to(checkpoint);
         assert_eq!(ctx.state.example_array[3], 0); // Restored!
         assert_eq!(ctx.state.example_array[7], 0); // Restored!
     }
@@ -306,23 +306,23 @@ mod tests {
     fn test_nested_operations() {
         let mut ctx = SearchContext::new();
 
-        ctx.trail.checkpoint();
+        let cp1 = ctx.trail.checkpoint();
         ctx.set_example_value(10);
 
-        ctx.trail.checkpoint();
+        let cp2 = ctx.trail.checkpoint();
         ctx.set_example_value(20);
         ctx.set_array_element(0, 100);
 
         assert_eq!(ctx.state.example_value, 20);
         assert_eq!(ctx.state.example_array[0], 100);
 
-        // Rewind inner checkpoint
-        ctx.trail.rewind();
+        // Rewind to cp2
+        ctx.trail.rewind_to(cp2);
         assert_eq!(ctx.state.example_value, 10);
         assert_eq!(ctx.state.example_array[0], 0);
 
-        // Rewind outer checkpoint
-        ctx.trail.rewind();
+        // Rewind to cp1
+        ctx.trail.rewind_to(cp1);
         assert_eq!(ctx.state.example_value, 0);
     }
 
