@@ -27,6 +27,7 @@
 //!
 //! # Contents
 //!
+//! - **Cycles**: All possible facial cycles (394 for NCOLORS=6)
 //! - **Faces**: All face relationship tables, cycle constraints, adjacency lookups
 //! - **Vertices**: All possible vertex configurations and crossing points
 //!
@@ -43,8 +44,10 @@
 //! This size is excellent for copying per SearchContext, providing good
 //! cache locality without excessive memory overhead.
 
+pub mod cycles;
 pub mod faces;
 pub mod vertices;
 
+pub use cycles::CyclesArray;
 pub use faces::FacesMemo;
 pub use vertices::VerticesMemo;

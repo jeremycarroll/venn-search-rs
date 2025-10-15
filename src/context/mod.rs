@@ -10,7 +10,7 @@
 //! instances to operate on the same MEMO data.
 
 use crate::geometry::constants::NCOLORS;
-use crate::memo::{FacesMemo, VerticesMemo};
+use crate::memo::{CyclesArray, FacesMemo, VerticesMemo};
 use crate::trail::Trail;
 use std::ptr::NonNull;
 
@@ -38,6 +38,9 @@ use std::ptr::NonNull;
 /// provides excellent cache locality while enabling parallelization.
 #[derive(Debug, Clone)]
 pub struct MemoizedData {
+    /// All possible facial cycles (NCYCLES = 394 for NCOLORS=6)
+    pub cycles: CyclesArray,
+
     /// All face-related MEMO data (binomial coefficients, adjacency, etc.)
     pub faces: FacesMemo,
 
@@ -57,16 +60,22 @@ impl MemoizedData {
     pub fn new() -> Self {
         eprintln!("[MemoizedData] Initializing all MEMO structures...");
 
+        let cycles = CyclesArray::generate();
         let faces = FacesMemo::initialize();
         let vertices = VerticesMemo::initialize();
 
         eprintln!(
-            "[MemoizedData] Initialization complete ({} faces, ~{} possible vertices)",
+            "[MemoizedData] Initialization complete ({} cycles, {} faces, {} possible vertices)",
+            cycles.len(),
             faces.faces.len(),
             vertices.vertices.len()
         );
 
-        Self { faces, vertices }
+        Self {
+            cycles,
+            faces,
+            vertices,
+        }
     }
 }
 
@@ -205,6 +214,7 @@ impl SearchContext {
     /// Estimate the total heap size of MEMO data.
     ///
     /// This includes:
+    /// - Cycles Vec allocation
     /// - Face Vec allocation
     /// - Vertex Box allocation
     /// - Any other heap-allocated MEMO structures
@@ -212,6 +222,9 @@ impl SearchContext {
         use std::mem::size_of;
 
         let mut total = 0;
+
+        // Cycles Vec: capacity * size_of<Cycle>
+        total += self.memo.cycles.len() * size_of::<crate::geometry::Cycle>();
 
         // Faces Vec: capacity * size_of<Face>
         total += self.memo.faces.faces.capacity() * size_of::<crate::geometry::Face>();
