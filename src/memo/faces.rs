@@ -8,7 +8,7 @@
 //! - Cycle-to-face relationship lookups (next/previous by cycle ID)
 //! - Monotonicity constraints
 
-use crate::geometry::constants::{CYCLESET_LENGTH, NCOLORS, NFACES};
+use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
 use crate::geometry::{Color, ColorSet, CycleSet, Face, FaceId};
 
 /// MEMO data for all faces in the diagram.
@@ -27,12 +27,6 @@ use crate::geometry::{Color, ColorSet, CycleSet, Face, FaceId};
 ///   - Reason: Small fixed-size array (NCOLORS+1 elements); efficient on stack
 ///   - Size: 7 × 8 bytes = 56 bytes
 ///
-/// - Cycle lookup tables: **Stack-allocated** arrays for O(1) constraint checks
-///   - `pairs`: 6×6 × 7 u64s ≈ 2 KB
-///   - `triples`: 6×6×6 × 7 u64s ≈ 12 KB
-///   - `omitting_one`: 6 × 7 u64s ≈ 336 bytes
-///   - `omitting_pair`: 6×6 × 7 u64s ≈ 2 KB
-///   - Total: ≈16 KB
 #[derive(Debug, Clone)]
 pub struct FacesMemo {
     /// All faces in the diagram (NFACES = 2^NCOLORS faces).
@@ -62,44 +56,27 @@ pub struct FacesMemo {
     /// **Stack-allocated** array - small and fixed size (NCOLORS+1 ≤ 7 elements).
     pub face_degree_by_color_count: [u64; NCOLORS + 1],
 
-    /// Cycles containing edge (color i → color j).
+    /// Next face when traversing a cycle.
     ///
-    /// `pairs[i][j]` is a CycleSet of all cycles that contain the directed edge
-    /// from color i to color j.
+    /// `next_face_by_cycle[face_id][cycle_id]` gives the face you reach by traversing
+    /// cycle_id forward from face_id.
     ///
-    /// Used during constraint propagation to quickly find cycles with specific edges.
+    /// Only valid for cycles that are valid for the face (monotone property satisfied).
+    /// Returns None for invalid cycle/face combinations.
     ///
-    /// **Stack-allocated** - fixed size (NCOLORS × NCOLORS × CYCLESET_LENGTH).
-    pub pairs: [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
+    /// **Heap-allocated** via Vec - NFACES × NCYCLES is too large for stack (64 × 394 ≈ 25 KB).
+    pub next_face_by_cycle: Vec<Vec<Option<FaceId>>>,
 
-    /// Cycles containing triple sequence (i → j → k).
+    /// Previous face when traversing a cycle backward.
     ///
-    /// `triples[i][j][k]` is a CycleSet of all cycles containing colors i, j, k
-    /// in that consecutive order (wrapping around).
+    /// `previous_face_by_cycle[face_id][cycle_id]` gives the face you came from when
+    /// traversing cycle_id backward to face_id.
     ///
-    /// Used for vertex constraint checking - which cycles can meet at a vertex.
+    /// Only valid for cycles that are valid for the face (monotone property satisfied).
+    /// Returns None for invalid cycle/face combinations.
     ///
-    /// **Stack-allocated** - fixed size (NCOLORS × NCOLORS × NCOLORS × CYCLESET_LENGTH).
-    pub triples: [[[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS]; NCOLORS],
-
-    /// Cycles NOT containing a specific color.
-    ///
-    /// `omitting_one[i]` is a CycleSet of all cycles that do not contain color i.
-    ///
-    /// Used to constrain faces that don't include certain curves.
-    ///
-    /// **Stack-allocated** - fixed size (NCOLORS × CYCLESET_LENGTH).
-    pub omitting_one: [[u64; CYCLESET_LENGTH]; NCOLORS],
-
-    /// Cycles NOT containing edge (i → j).
-    ///
-    /// `omitting_pair[i][j]` is a CycleSet of all cycles that do not contain
-    /// the directed edge from color i to color j.
-    ///
-    /// Used for negative constraints during search.
-    ///
-    /// **Stack-allocated** - fixed size (NCOLORS × NCOLORS × CYCLESET_LENGTH).
-    pub omitting_pair: [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
+    /// **Heap-allocated** via Vec - NFACES × NCYCLES is too large for stack (64 × 394 ≈ 25 KB).
+    pub previous_face_by_cycle: Vec<Vec<Option<FaceId>>>,
 }
 
 impl FacesMemo {
@@ -107,11 +84,10 @@ impl FacesMemo {
     ///
     /// This computes:
     /// 1. Binomial coefficients for face degree validation
-    /// 2. Cycle lookup tables (pairs, triples, omitting)
-    /// 3. All NFACES faces with their color sets
-    /// 4. Face adjacency relationships
-    /// 5. Monotonicity constraints (which cycles are valid for which faces)
-    /// 6. Next/previous face lookups by cycle ID
+    /// 2. All NFACES faces with their color sets
+    /// 3. Face adjacency relationships
+    /// 4. Monotonicity constraints (which cycles are valid for which faces)
+    /// 5. Next/previous face lookups by cycle ID
     ///
     /// # Arguments
     ///
@@ -120,12 +96,6 @@ impl FacesMemo {
         eprintln!("[FacesMemo] Computing binomial coefficients...");
         let face_degree_by_color_count = compute_binomial_coefficients();
 
-        eprintln!("[FacesMemo] Computing cycle lookup tables...");
-        let pairs = compute_cycle_pairs(cycles);
-        let triples = compute_cycle_triples(cycles);
-        let omitting_one = compute_omitting_one_color(cycles);
-        let omitting_pair = compute_omitting_color_pairs(cycles);
-
         eprintln!("[FacesMemo] Creating {} faces...", NFACES);
         let mut faces = Vec::with_capacity(NFACES);
         for face_id in 0..NFACES {
@@ -133,17 +103,16 @@ impl FacesMemo {
         }
 
         eprintln!("[FacesMemo] Applying monotonicity constraints...");
-        apply_monotonicity_constraints(&mut faces, cycles);
+        let (next_face_by_cycle, previous_face_by_cycle) =
+            apply_monotonicity_constraints(&mut faces, cycles);
 
         eprintln!("[FacesMemo] Initialization complete.");
 
         Self {
             faces,
             face_degree_by_color_count,
-            pairs,
-            triples,
-            omitting_one,
-            omitting_pair,
+            next_face_by_cycle,
+            previous_face_by_cycle,
         }
     }
 
@@ -209,124 +178,119 @@ fn create_face(face_id: FaceId) -> Face {
     Face::new(face_id, colors, possible_cycles)
 }
 
-/// Compute cycle pairs lookup table.
+/// Check if a cycle is valid for a face.
 ///
-/// For each color pair (i, j), find all cycles containing edge i→j.
-fn compute_cycle_pairs(
-    cycles: &crate::memo::CyclesArray,
-) -> [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS] {
-    let mut pairs = [[[0u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS];
+/// A cycle is valid if it has some colors inside the face and some colors outside.
+/// This ensures the cycle actually crosses the face boundary.
+fn is_cycle_valid_for_face(cycle_colors: ColorSet, face_colors: ColorSet) -> bool {
+    let inside = cycle_colors.bits() & face_colors.bits();
+    let outside = cycle_colors.bits() & !face_colors.bits();
 
-    for cycle_id in 0..cycles.len() as u64 {
-        let cycle = cycles.get(cycle_id);
+    inside != 0 && outside != 0
+}
 
-        // Check each consecutive pair in the cycle
-        for i in 0..cycle.len() {
-            let next_i = (i + 1) % cycle.len();
-            let color_a = cycle.colors()[i];
-            let color_b = cycle.colors()[next_i];
+/// Check if an edge transition occurs between two consecutive colors in a cycle.
+///
+/// An edge transition occurs when one color is inside the face and the other is outside.
+/// Returns true if a transition occurs, and updates next_face or previous_face accordingly.
+///
+/// # Arguments
+///
+/// * `color1` - First color in the edge
+/// * `color2` - Second color in the edge
+/// * `face_colors` - The colorset of the current face
+/// * `previous_face` - Output: face we came from (if color1 is outside)
+/// * `next_face` - Output: face we're going to (if color1 is inside)
+fn check_edge_transition(
+    color1: Color,
+    color2: Color,
+    face_colors: ColorSet,
+    previous_face: &mut Option<FaceId>,
+    next_face: &mut Option<FaceId>,
+) -> bool {
+    let color1_inside = face_colors.contains(color1);
+    let color2_inside = face_colors.contains(color2);
 
-            // Add this cycle to the pairs[a][b] set
-            let word_idx = (cycle_id / 64) as usize;
-            let bit_idx = cycle_id % 64;
-            pairs[color_a.value() as usize][color_b.value() as usize][word_idx] |= 1u64 << bit_idx;
+    // No transition if both colors have same status
+    if color1_inside == color2_inside {
+        return false;
+    }
+
+    // Compute the XOR to get the adjacent face
+    let color1_bit = 1u64 << color1.value();
+    let color2_bit = 1u64 << color2.value();
+    let xor_mask = color1_bit | color2_bit;
+    let adjacent_face = (face_colors.bits() ^ xor_mask) as usize;
+
+    if color1_inside {
+        // Outbound transition: color1 is in, color2 is out
+        if next_face.is_none() {
+            *next_face = Some(adjacent_face);
+        }
+    } else {
+        // Inbound transition: color1 is out, color2 is in
+        if previous_face.is_none() {
+            *previous_face = Some(adjacent_face);
         }
     }
 
-    pairs
+    true
 }
 
-/// Compute cycle triples lookup table.
+/// Check if a cycle has exactly two edge transitions.
 ///
-/// For each color triple (i, j, k), find all cycles containing sequence i→j→k.
-fn compute_cycle_triples(
-    cycles: &crate::memo::CyclesArray,
-) -> [[[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS]; NCOLORS] {
-    let mut triples = [[[[0u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS]; NCOLORS];
+/// A monotone cycle must cross the face boundary exactly twice:
+/// once entering and once exiting.
+///
+/// # Returns
+///
+/// Returns Some((previous_face, next_face)) if exactly two transitions found,
+/// None otherwise.
+fn check_exactly_two_transitions(
+    cycle: &crate::geometry::Cycle,
+    face_colors: ColorSet,
+) -> Option<(FaceId, FaceId)> {
+    let mut transition_count = 0;
+    let mut previous_face = None;
+    let mut next_face = None;
 
-    for cycle_id in 0..cycles.len() as u64 {
-        let cycle = cycles.get(cycle_id);
+    let colors = cycle.colors();
+    let len = cycle.len();
 
-        // Check each consecutive triple in the cycle (including wrap-around)
-        for i in 0..cycle.len() {
-            let i1 = (i + 1) % cycle.len();
-            let i2 = (i + 2) % cycle.len();
-            let color_a = cycle.colors()[i];
-            let color_b = cycle.colors()[i1];
-            let color_c = cycle.colors()[i2];
-
-            // Add this cycle to the triples[a][b][c] set
-            let word_idx = (cycle_id / 64) as usize;
-            let bit_idx = cycle_id % 64;
-            triples[color_a.value() as usize][color_b.value() as usize]
-                [color_c.value() as usize][word_idx] |= 1u64 << bit_idx;
-        }
+    // Check wrap-around edge (last to first)
+    if check_edge_transition(
+        colors[len - 1],
+        colors[0],
+        face_colors,
+        &mut previous_face,
+        &mut next_face,
+    ) {
+        transition_count += 1;
     }
 
-    triples
-}
+    // Check all consecutive edges
+    for i in 1..len {
+        if check_edge_transition(
+            colors[i - 1],
+            colors[i],
+            face_colors,
+            &mut previous_face,
+            &mut next_face,
+        ) {
+            transition_count += 1;
 
-/// Compute cycles omitting one color.
-///
-/// For each color i, find all cycles that do NOT contain color i.
-fn compute_omitting_one_color(
-    cycles: &crate::memo::CyclesArray,
-) -> [[u64; CYCLESET_LENGTH]; NCOLORS] {
-    let mut omitting = [[0u64; CYCLESET_LENGTH]; NCOLORS];
-
-    for cycle_id in 0..cycles.len() as u64 {
-        let cycle = cycles.get(cycle_id);
-        let colorset = cycle.colorset();
-
-        // For each color, if cycle doesn't contain it, add to omitting[color]
-        for color in 0..NCOLORS {
-            if !colorset.contains(Color::new(color as u8)) {
-                let word_idx = (cycle_id / 64) as usize;
-                let bit_idx = cycle_id % 64;
-                omitting[color][word_idx] |= 1u64 << bit_idx;
+            // Early exit if we find too many transitions
+            if transition_count > 2 {
+                return None;
             }
         }
     }
 
-    omitting
-}
-
-/// Compute cycles omitting color pairs.
-///
-/// For each color pair (i, j), find all cycles that do NOT contain edge i→j.
-fn compute_omitting_color_pairs(
-    cycles: &crate::memo::CyclesArray,
-) -> [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS] {
-    let mut omitting = [[[0u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS];
-
-    for cycle_id in 0..cycles.len() as u64 {
-        let cycle = cycles.get(cycle_id);
-
-        // For each color pair (i, j), check if cycle contains edge i→j
-        for i in 0..NCOLORS {
-            for j in (i + 1)..NCOLORS {
-                // Check if cycle contains edge i→j
-                let mut has_edge = false;
-                for idx in 0..cycle.len() {
-                    let next_idx = (idx + 1) % cycle.len();
-                    if cycle.colors()[idx] == Color::new(i as u8)
-                        && cycle.colors()[next_idx] == Color::new(j as u8)
-                    {
-                        has_edge = true;
-                        break;
-                    }
-                }
-
-                if !has_edge {
-                    let word_idx = (cycle_id / 64) as usize;
-                    let bit_idx = cycle_id % 64;
-                    omitting[i][j][word_idx] |= 1u64 << bit_idx;
-                }
-            }
-        }
+    if transition_count == 2 {
+        Some((previous_face.unwrap(), next_face.unwrap()))
+    } else {
+        None
     }
-
-    omitting
 }
 
 /// Apply monotonicity constraints to filter invalid cycles.
@@ -344,22 +308,46 @@ fn compute_omitting_color_pairs(
 /// - The cycle must have exactly 2 edge transitions (in/out of face)
 /// - The next and previous faces are determined by which edges transition
 ///
-/// # TODO
+/// # Returns
 ///
-/// This is a complex function that needs:
-/// - Edge transition detection logic
-/// - Next/previous face computation
-///
-/// For now, this is a skeleton that will be filled in later.
-fn apply_monotonicity_constraints(_faces: &mut [Face], _cycles: &crate::memo::CyclesArray) {
-    // TODO: Implement monotonicity constraint filtering
-    // This requires:
-    // 1. Check cycle colors match face colors
-    // 2. Validate cycle has exactly two edge transitions (monotone property)
-    // 3. Compute next/previous faces for each valid cycle
-    // 4. Remove invalid cycles from possible_cycles
+/// Returns (next_face_by_cycle, previous_face_by_cycle) lookup tables.
+fn apply_monotonicity_constraints(
+    faces: &mut [Face],
+    cycles: &crate::memo::CyclesArray,
+) -> (Vec<Vec<Option<FaceId>>>, Vec<Vec<Option<FaceId>>>) {
+    let mut next_by_cycle = vec![vec![None; NCYCLES]; NFACES];
+    let mut previous_by_cycle = vec![vec![None; NCYCLES]; NFACES];
 
-    eprintln!("[FacesMemo] WARNING: Monotonicity constraints not yet implemented (TODO)");
+    // Skip outer face (0) and inner face (NFACES-1)
+    // These are special cases handled separately
+    for face_id in 1..(NFACES - 1) {
+        let face = &mut faces[face_id];
+        let face_colors = face.colors;
+
+        for cycle_id in 0..NCYCLES {
+            let cycle = cycles.get(cycle_id as u64);
+            let cycle_colors = cycle.colorset();
+
+            // Check if cycle is valid for this face
+            if !is_cycle_valid_for_face(cycle_colors, face_colors) {
+                face.possible_cycles.remove(cycle_id as u64);
+                continue;
+            }
+
+            // Check for exactly two edge transitions
+            if let Some((prev_face, next_face)) = check_exactly_two_transitions(cycle, face_colors)
+            {
+                // Valid monotone cycle - record adjacency
+                next_by_cycle[face_id][cycle_id] = Some(next_face);
+                previous_by_cycle[face_id][cycle_id] = Some(prev_face);
+            } else {
+                // Invalid - remove from possible cycles
+                face.possible_cycles.remove(cycle_id as u64);
+            }
+        }
+    }
+
+    (next_by_cycle, previous_by_cycle)
 }
 
 #[cfg(test)]

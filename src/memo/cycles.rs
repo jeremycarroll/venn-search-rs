@@ -31,8 +31,54 @@
 //!
 //! For NCOLORS=6, we generate 394 cycles total.
 
-use crate::geometry::constants::{NCOLORS, NCYCLES};
+use crate::geometry::constants::{CYCLESET_LENGTH, NCOLORS, NCYCLES};
 use crate::geometry::{Color, Cycle};
+
+/// MEMO data for cycle-related lookup tables.
+///
+/// This structure contains precomputed constraint lookup tables for efficient
+/// cycle-based constraint propagation during search.
+///
+/// # Memory Layout
+///
+/// All lookup tables are **stack-allocated** arrays (~16 KB total for NCOLORS=6):
+/// - `cycle_pairs`: 6×6 × 7 u64s ≈ 2 KB
+/// - `cycle_triples`: 6×6×6 × 7 u64s ≈ 12 KB
+/// - `cycles_omitting_one_color`: 6 × 7 u64s ≈ 336 bytes
+/// - `cycles_omitting_color_pair`: 6×6 × 7 u64s ≈ 2 KB
+#[derive(Debug, Clone)]
+pub struct CyclesMemo {
+    /// Cycles containing edge (color i → color j).
+    ///
+    /// `cycle_pairs[i][j]` is a CycleSet of all cycles that contain the directed edge
+    /// from color i to color j.
+    ///
+    /// Used during constraint propagation to quickly find cycles with specific edges.
+    pub cycle_pairs: [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
+
+    /// Cycles containing triple sequence (i → j → k).
+    ///
+    /// `cycle_triples[i][j][k]` is a CycleSet of all cycles containing colors i, j, k
+    /// in that consecutive order (wrapping around).
+    ///
+    /// Used for vertex constraint checking - which cycles can meet at a vertex.
+    pub cycle_triples: [[[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS]; NCOLORS],
+
+    /// Cycles NOT containing a specific color.
+    ///
+    /// `cycles_omitting_one_color[i]` is a CycleSet of all cycles that do not contain color i.
+    ///
+    /// Used to constrain faces that don't include certain curves.
+    pub cycles_omitting_one_color: [[u64; CYCLESET_LENGTH]; NCOLORS],
+
+    /// Cycles NOT containing edge (i → j).
+    ///
+    /// `cycles_omitting_color_pair[i][j]` is a CycleSet of all cycles that do not contain
+    /// the directed edge from color i to color j.
+    ///
+    /// Used for negative constraints during search.
+    pub cycles_omitting_color_pair: [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
+}
 
 /// Global array of all possible facial cycles.
 ///
@@ -183,6 +229,145 @@ fn is_cycle_valid(length: usize, max_color: u8, sequence: &[u8]) -> bool {
     }
 
     has_max
+}
+
+impl CyclesMemo {
+    /// Initialize all cycle MEMO data.
+    ///
+    /// This computes cycle constraint lookup tables from the generated cycles array.
+    pub fn initialize(cycles: &CyclesArray) -> Self {
+        eprintln!("[CyclesMemo] Computing cycle lookup tables...");
+
+        let cycle_pairs = compute_cycle_pairs(cycles);
+        let cycle_triples = compute_cycle_triples(cycles);
+        let cycles_omitting_one_color = compute_cycles_omitting_one_color(cycles);
+        let cycles_omitting_color_pair = compute_cycles_omitting_color_pair(cycles);
+
+        eprintln!("[CyclesMemo] Cycle lookup tables complete.");
+
+        Self {
+            cycle_pairs,
+            cycle_triples,
+            cycles_omitting_one_color,
+            cycles_omitting_color_pair,
+        }
+    }
+}
+
+/// Compute cycle pairs lookup table.
+///
+/// For each color pair (i, j), find all cycles containing edge i→j.
+fn compute_cycle_pairs(cycles: &CyclesArray) -> [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS] {
+    let mut pairs = [[[0u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS];
+
+    for cycle_id in 0..cycles.len() as u64 {
+        let cycle = cycles.get(cycle_id);
+
+        // Check each consecutive pair in the cycle
+        for i in 0..cycle.len() {
+            let next_i = (i + 1) % cycle.len();
+            let color_a = cycle.colors()[i];
+            let color_b = cycle.colors()[next_i];
+
+            // Add this cycle to the pairs[a][b] set
+            let word_idx = (cycle_id / 64) as usize;
+            let bit_idx = cycle_id % 64;
+            pairs[color_a.value() as usize][color_b.value() as usize][word_idx] |= 1u64 << bit_idx;
+        }
+    }
+
+    pairs
+}
+
+/// Compute cycle triples lookup table.
+///
+/// For each color triple (i, j, k), find all cycles containing sequence i→j→k.
+fn compute_cycle_triples(
+    cycles: &CyclesArray,
+) -> [[[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS]; NCOLORS] {
+    let mut triples = [[[[0u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS]; NCOLORS];
+
+    for cycle_id in 0..cycles.len() as u64 {
+        let cycle = cycles.get(cycle_id);
+
+        // Check each consecutive triple in the cycle (including wrap-around)
+        for i in 0..cycle.len() {
+            let i1 = (i + 1) % cycle.len();
+            let i2 = (i + 2) % cycle.len();
+            let color_a = cycle.colors()[i];
+            let color_b = cycle.colors()[i1];
+            let color_c = cycle.colors()[i2];
+
+            // Add this cycle to the triples[a][b][c] set
+            let word_idx = (cycle_id / 64) as usize;
+            let bit_idx = cycle_id % 64;
+            triples[color_a.value() as usize][color_b.value() as usize]
+                [color_c.value() as usize][word_idx] |= 1u64 << bit_idx;
+        }
+    }
+
+    triples
+}
+
+/// Compute cycles omitting one color.
+///
+/// For each color i, find all cycles that do NOT contain color i.
+fn compute_cycles_omitting_one_color(cycles: &CyclesArray) -> [[u64; CYCLESET_LENGTH]; NCOLORS] {
+    let mut omitting = [[0u64; CYCLESET_LENGTH]; NCOLORS];
+
+    for cycle_id in 0..cycles.len() as u64 {
+        let cycle = cycles.get(cycle_id);
+        let colorset = cycle.colorset();
+
+        // For each color, if cycle doesn't contain it, add to omitting[color]
+        for color in 0..NCOLORS {
+            if !colorset.contains(Color::new(color as u8)) {
+                let word_idx = (cycle_id / 64) as usize;
+                let bit_idx = cycle_id % 64;
+                omitting[color][word_idx] |= 1u64 << bit_idx;
+            }
+        }
+    }
+
+    omitting
+}
+
+/// Compute cycles omitting color pairs.
+///
+/// For each color pair (i, j), find all cycles that do NOT contain edge i→j.
+fn compute_cycles_omitting_color_pair(
+    cycles: &CyclesArray,
+) -> [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS] {
+    let mut omitting = [[[0u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS];
+
+    for cycle_id in 0..cycles.len() as u64 {
+        let cycle = cycles.get(cycle_id);
+
+        // For each color pair (i, j), check if cycle contains edge i→j
+        for i in 0..NCOLORS {
+            for j in (i + 1)..NCOLORS {
+                // Check if cycle contains edge i→j
+                let mut has_edge = false;
+                for idx in 0..cycle.len() {
+                    let next_idx = (idx + 1) % cycle.len();
+                    if cycle.colors()[idx] == Color::new(i as u8)
+                        && cycle.colors()[next_idx] == Color::new(j as u8)
+                    {
+                        has_edge = true;
+                        break;
+                    }
+                }
+
+                if !has_edge {
+                    let word_idx = (cycle_id / 64) as usize;
+                    let bit_idx = cycle_id % 64;
+                    omitting[i][j][word_idx] |= 1u64 << bit_idx;
+                }
+            }
+        }
+    }
+
+    omitting
 }
 
 #[cfg(test)]
