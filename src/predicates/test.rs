@@ -38,7 +38,8 @@ use crate::engine::{Predicate, PredicateResult};
 /// ]);
 ///
 /// // Will try integers and suspend
-/// assert!(!engine.search(&mut ctx)); // false = Suspended
+/// let engine = engine.search(&mut ctx);
+/// assert!(engine.is_some()); // Suspended - engine returned
 /// ```
 #[derive(Debug)]
 pub struct IntegerRangePredicate {
@@ -99,7 +100,8 @@ impl Predicate for IntegerRangePredicate {
 ///     Box::new(SuspendPredicate),
 /// ]);
 ///
-/// assert!(!engine.search(&mut ctx)); // false = Suspended
+/// let engine = engine.search(&mut ctx);
+/// assert!(engine.is_some()); // Suspended - engine returned
 /// ```
 #[derive(Debug)]
 pub struct ChoicePredicate<T: Clone> {

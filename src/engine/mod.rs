@@ -53,11 +53,15 @@
 //!
 //! let mut ctx = SearchContext::new();
 //! // All WAM programs must end with FAIL or SUSPEND
-//! let mut engine = SearchEngine::new(vec![
+//! let engine = SearchEngine::new(vec![
 //!     Box::new(SimplePredicate),
 //!     Box::new(SuspendPredicate),  // Terminal predicate
 //! ]);
-//! let result = engine.search(&mut ctx);  // Returns Err(()) for Suspend
+//!
+//! // Engine is consumed, returns Some(engine) if suspended
+//! if let Some(_engine) = engine.search(&mut ctx) {
+//!     // Can resume with _engine.search(&mut ctx)
+//! }
 //! ```
 
 pub mod predicate;
@@ -143,26 +147,58 @@ impl SearchEngine {
 
     /// Run the search to find one solution.
     ///
-    /// Returns (matching C implementation's bool):
-    /// - `true` if search exhausted all possibilities (backtracked past first predicate)
-    /// - `false` if search was suspended (PREDICATE_SUSPEND)
+    /// Consumes the engine and returns:
+    /// - `Some(engine)` if suspended (PREDICATE_SUSPEND) - can resume by calling search() again
+    /// - `None` if exhausted (backtracked past first predicate) - search is complete
     ///
     /// The search modifies `ctx` with the solution state. Success is indicated via
     /// side effects (state in `ctx`), not by the return value. This matches the WAM
     /// execution model where programs never "complete" - they either fail or suspend.
     ///
+    /// This consuming API enforces correct usage: suspended engines can be resumed,
+    /// but exhausted engines are consumed and cannot be accidentally reused.
+    ///
     /// # Panics
     ///
     /// Panics if the predicate sequence is invalid (reaches the end without FAIL or SUSPEND).
     /// All valid WAM programs must terminate with a FAIL or SUSPEND predicate.
-    pub fn search(&mut self, ctx: &mut SearchContext) -> bool {
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use venn_search::engine::{SearchEngine, Predicate, PredicateResult};
+    /// # use venn_search::context::SearchContext;
+    /// # use venn_search::predicates::test::SuspendPredicate;
+    /// # struct MyPredicate;
+    /// # impl Predicate for MyPredicate {
+    /// #     fn try_pred(&mut self, _: &mut SearchContext, _: usize) -> PredicateResult {
+    /// #         PredicateResult::Success
+    /// #     }
+    /// #     fn retry_pred(&mut self, _: &mut SearchContext, _: usize, _: usize) -> PredicateResult {
+    /// #         PredicateResult::Failure
+    /// #     }
+    /// # }
+    /// let mut ctx = SearchContext::new();
+    /// let engine = SearchEngine::new(vec![
+    ///     Box::new(MyPredicate),
+    ///     Box::new(SuspendPredicate),
+    /// ]);
+    ///
+    /// // Engine is consumed, returns Some if suspended
+    /// if let Some(engine) = engine.search(&mut ctx) {
+    ///     // Can resume the suspended engine
+    ///     let _result = engine.search(&mut ctx);
+    /// }
+    /// // If None, search exhausted - engine is consumed
+    /// ```
+    pub fn search(mut self, ctx: &mut SearchContext) -> Option<Self> {
         // Initialize with first predicate
         self.stack.clear();
         self.try_count = 0;
         self.retry_count = 0;
 
         if self.predicates.is_empty() {
-            return true;  // Empty is exhausted
+            return None;  // Empty is exhausted
         }
 
         // Push initial stack entry for first predicate
@@ -179,7 +215,7 @@ impl SearchEngine {
         loop {
             // Check if we've backtracked past the first predicate
             if self.stack.is_empty() {
-                return true; // Search exhausted (all choices failed)
+                return None; // Search exhausted (all choices failed)
             }
 
             let entry = self.stack.last_mut().unwrap();
@@ -218,8 +254,8 @@ impl SearchEngine {
                         entry.trail_checkpoint = ctx.trail.len();
                     }
                     PredicateResult::Suspend => {
-                        // Pause execution
-                        return false; // Suspended
+                        // Pause execution, return engine for resumption
+                        return Some(self); // Suspended - can resume
                     }
                 }
             } else {
@@ -311,15 +347,6 @@ impl SearchEngine {
     pub fn statistics(&self) -> (u64, u64) {
         (self.try_count, self.retry_count)
     }
-
-    /// Reset the engine to initial state.
-    ///
-    /// Clears statistics and resets the stack.
-    pub fn reset(&mut self) {
-        self.stack.clear();
-        self.try_count = 0;
-        self.retry_count = 0;
-    }
 }
 
 #[cfg(test)]
@@ -368,43 +395,42 @@ mod tests {
     #[test]
     fn test_simple_success_with_suspend() {
         let mut ctx = SearchContext::new();
-        let mut engine = SearchEngine::new(vec![
+        let engine = SearchEngine::new(vec![
             Box::new(AlwaysSucceed),
             Box::new(Suspend),  // Terminal predicate
         ]);
 
-        assert!(!engine.search(&mut ctx)); // false = Suspended
-        let (tries, retries) = engine.statistics();
-        assert_eq!(tries, 2); // AlwaysSucceed + Suspend
-        assert_eq!(retries, 0); // No backtracks
+        let engine = engine.search(&mut ctx);
+        assert!(engine.is_some()); // Suspended - engine returned
+        let engine = engine.unwrap();
+        assert_eq!(engine.statistics(), (2, 0)); // AlwaysSucceed + Suspend, no retries
     }
 
     #[test]
     fn test_immediate_failure() {
         let mut ctx = SearchContext::new();
-        let mut engine = SearchEngine::new(vec![
+        let engine = SearchEngine::new(vec![
             Box::new(AlwaysFail),
         ]);
 
-        assert!(engine.search(&mut ctx)); // true = Exhausted
-        let (tries, retries) = engine.statistics();
-        assert_eq!(tries, 1); // First predicate tried once
-        assert_eq!(retries, 0); // Failed immediately, no retry
+        let result = engine.search(&mut ctx);
+        assert!(result.is_none()); // Exhausted - engine consumed
     }
 
     #[test]
     fn test_empty_predicates() {
         let mut ctx = SearchContext::new();
-        let mut engine = SearchEngine::new(vec![]);
+        let engine = SearchEngine::new(vec![]);
 
-        assert!(engine.search(&mut ctx)); // true = Empty is exhausted
+        let result = engine.search(&mut ctx);
+        assert!(result.is_none()); // Empty is exhausted
     }
 
     #[test]
     #[should_panic(expected = "Invalid predicate sequence")]
     fn test_invalid_program_without_terminal() {
         let mut ctx = SearchContext::new();
-        let mut engine = SearchEngine::new(vec![
+        let engine = SearchEngine::new(vec![
             Box::new(AlwaysSucceed),  // Missing terminal predicate!
         ]);
 
