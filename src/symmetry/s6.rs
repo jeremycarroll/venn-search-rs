@@ -22,11 +22,11 @@ pub enum SymmetryType {
 ///
 /// Algorithm:
 /// 1. Apply all 2*NCOLORS permutations from the dihedral group
-/// 2. Sort resulting sequences in descending lexicographic order
+/// 2. Scan all resulting sequences to find the lexicographically maximal sequence and count how many times it occurs
 /// 3. Compare input with maximum:
 ///    - If input != max → NonCanonical (reject)
-///    - If input == max == second → Equivocal (accept, has symmetry)
-///    - If input == max > second → Canonical (accept)
+///    - If input == max and occurs more than once → Equivocal (accept, has symmetry)
+///    - If input == max and occurs only once → Canonical (accept)
 ///
 /// # Examples
 ///
