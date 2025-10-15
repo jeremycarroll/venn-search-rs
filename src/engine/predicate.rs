@@ -34,7 +34,7 @@ use crate::context::SearchContext;
 
 /// Result of attempting a predicate.
 ///
-/// Based on the C engine model, predicates can return:
+/// Predicates can return:
 /// - `Success`: Move to next predicate in the sequence
 /// - `SuccessSamePredicate`: Stay at same predicate, increment round (for iterative predicates)
 /// - `Failure`: Backtrack to previous predicate

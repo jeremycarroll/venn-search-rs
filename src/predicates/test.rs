@@ -8,9 +8,9 @@
 //! - Validating trail integration
 //! - Providing examples for implementing real predicates
 //!
-//! # C Engine Model
+//! # Execution Model
 //!
-//! These predicates follow the C engine's WAM-like execution model:
+//! These predicates follow the WAM-like execution model:
 //! - `try_pred(round)` is called first and can return Choices(n)
 //! - Engine then calls `retry_pred(round, choice)` for choice in 0..n
 //! - Searches succeed via side effects, then Suspend or Fail to terminate
@@ -20,7 +20,7 @@ use crate::engine::{Predicate, PredicateResult, TerminalPredicate};
 
 /// Predicate that tries integers in a range using the Choices model.
 ///
-/// This demonstrates the C engine's choice mechanism:
+/// This demonstrates the choice mechanism:
 /// - try_pred returns Choices(n) where n is the range size
 /// - retry_pred(round, choice) maps choice to an integer in [start, start+choice)
 ///
@@ -141,7 +141,6 @@ impl<T: Clone> Predicate for ChoicePredicate<T> {
 /// Predicate that suspends execution (for testing).
 ///
 /// This is useful for testing intermediate states without needing a full search.
-/// Matches the C engine's SUSPENDPredicate.
 #[derive(Debug)]
 pub struct SuspendPredicate;
 
@@ -165,7 +164,7 @@ impl TerminalPredicate for SuspendPredicate {}
 
 /// Predicate that always fails (for testing).
 ///
-/// Useful for forcing backtracking. Matches the C engine's FAILPredicate.
+/// Useful for forcing backtracking.
 #[derive(Debug)]
 pub struct AlwaysFailPredicate;
 

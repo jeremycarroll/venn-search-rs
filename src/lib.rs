@@ -2,7 +2,7 @@
 
 //! Rust implementation of Venn triangle search algorithm.
 //!
-//! This is a rewrite of the C implementation at <https://github.com/jeremycarroll/venntriangles>
+//! See <https://github.com/jeremycarroll/venntriangles> for the original implementation.
 //! which searches for monotone simple 6-Venn diagrams drawable with six triangles.
 //!
 //! # Architecture

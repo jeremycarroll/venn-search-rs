@@ -18,12 +18,12 @@ use std::ptr::NonNull;
 
 /// A single entry in the trail, recording one state change.
 ///
-/// This matches the C implementation:
-/// ```c
-/// struct trail {
-///     void* ptr;        // 8 bytes
-///     uint_trail value; // 8 bytes (uint64)
-/// };
+/// Structure: 128-bit entry with pointer (64-bit) + value (64-bit)
+/// ```
+/// struct TrailEntry {
+///     ptr: NonNull<u64>  // 8 bytes, non-null pointer
+///     old_value: u64     // 8 bytes, previous value
+/// }
 /// ```
 ///
 /// We use `NonNull<u64>` instead of `*mut u64` to guarantee the pointer is never null,
@@ -48,8 +48,7 @@ struct TrailEntry {
 ///
 /// # Implementation Notes
 ///
-/// The C implementation uses a global static array with pointer arithmetic.
-/// This Rust implementation uses a Vec with automatic restoration on rewind.
+/// Uses a Vec for dynamic storage with automatic restoration on rewind.
 ///
 /// # Safety
 ///
@@ -91,8 +90,7 @@ impl Trail {
 
     /// Rewind the trail to the most recent checkpoint.
     ///
-    /// This automatically restores all values that were changed since the checkpoint,
-    /// matching the C implementation's `trailRewindTo` behavior.
+    /// This automatically restores all values that were changed since the checkpoint.
     ///
     /// Returns true if rewound successfully, false if blocked by frozen checkpoint or no checkpoint exists.
     pub fn rewind(&mut self) -> bool {
@@ -144,7 +142,6 @@ impl Trail {
     /// Freeze the trail at the current position.
     ///
     /// After freezing, no backtracking past this point is allowed.
-    /// This corresponds to `trailFreeze()` in the C implementation.
     pub fn freeze(&mut self) {
         self.frozen_checkpoint = Some(self.entries.len());
     }

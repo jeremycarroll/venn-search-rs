@@ -19,7 +19,7 @@ use std::ptr::NonNull;
 ///
 /// # Size Estimation
 ///
-/// From the C implementation:
+/// Expected contents:
 /// - Facial cycle constraint lookup tables: ~few KB
 /// - Possible vertex configurations: 480 entries * ~32 bytes = ~15 KB
 /// - Edge and face relationship tables: ~few KB
@@ -43,8 +43,8 @@ impl MemoizedData {
 
     /// Initialize all MEMO data structures.
     ///
-    /// This corresponds to the initialize phase in the C implementation.
-    /// Will be implemented during Phase 2-3 as we port geometric types.
+    /// Computes all immutable precomputed data needed for the search.
+    /// Will be implemented during Phase 4 as we add real predicates.
     pub fn initialize() -> Self {
         // TODO: Compute all MEMO data
         Self::new()
