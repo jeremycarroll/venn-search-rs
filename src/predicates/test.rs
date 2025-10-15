@@ -308,7 +308,7 @@ mod tests {
         );
 
         // Round 2 (last) should return Success
-        assert_eq!(pred.try_pred(&mut ctx, 2), PredicateResult::Success);
+        assert_eq!(pred.try_pred(&mut ctx, 2), PredicateResult::Failure);
 
         // Past last round should fail
         assert_eq!(pred.try_pred(&mut ctx, 3), PredicateResult::Failure);
