@@ -10,13 +10,38 @@ use crate::geometry::Vertex;
 
 /// MEMO data for all possible vertices in the diagram.
 ///
-/// # The 480-Vertex Insight (Mental Somersault Required!)
+/// # The Vertex Allocation Strategy (Mental Somersault Required!)
 ///
 /// A monotone 6-Venn diagram has only **126 actual vertices** (by Euler's formula:
-/// V - E + F = 2). However, we preallocate **480 possible vertices** to enable
-/// efficient precomputation of vertex relationships.
+/// V - E + F = 2, with V=126, E=189, F=64).
 ///
-/// **Why 480?** NPOINTS = 2^(NCOLORS-2) × NCOLORS × (NCOLORS-1) = 16 × 6 × 5 = 480
+/// ## Theoretical vs Actual Allocation
+///
+/// - **Theoretical possible vertices**: NPOINTS = 2^(NCOLORS-2) × NCOLORS × (NCOLORS-1) = 16 × 6 × 5 = **480**
+/// - **Actual array allocation**: NFACES × NCOLORS × NCOLORS = 64 × 6 × 6 = **2304 slots**
+/// - **Precomputed vertices**: **480** (all theoretically possible configurations)
+/// - **Used in any specific solution**: **126** (from Euler's formula: V - E + F = 2)
+///
+/// **Memory utilization during search**: 480 of 2304 slots are Some(Vertex) (21% utilization).
+/// The remaining 1824 slots stay None. This enables **O(1) indexing** with simple 3D array lookup.
+///
+/// ## Why Allocate 2304 Instead of 480?
+///
+/// The array includes:
+/// 1. **Diagonal entries** (primary == secondary): These are never valid vertices, but
+///    including them simplifies indexing (no need to subtract 1 or remap indices).
+/// 2. **All NFACES combinations**: Not all faces will have vertices for all color pairs,
+///    but computing which faces are valid would require complex precomputation.
+///
+/// **Trade-off**: We sacrifice ~140 KB of memory to gain:
+/// - Simple 3D array indexing: `vertices[face][primary][secondary]`
+/// - No conditional logic in hot path lookups
+/// - Faster constraint propagation during search
+///
+/// **Alternative considered**: Use `[NFACES][NCOLORS][NCOLORS-1]` to exclude diagonal,
+/// reducing to 1920 slots (~34% smaller). However, this would require index remapping
+/// (`secondary - (secondary > primary ? 1 : 0)`) on every lookup. The current approach
+/// prioritizes simplicity and performance over memory efficiency
 ///
 /// ## The Indexing Trick (This is the confusing part!)
 ///
@@ -52,7 +77,8 @@ use crate::geometry::Vertex;
 /// **Performance Impact**: This indexing scheme, combined with negative constraints,
 /// is a key optimization that reduced search time from **~1 year CPU time (1999
 /// implementation)** to **~5 seconds (2025 implementation)**. The seemingly wasteful
-/// 70% memory overhead (480 slots, only 126 used) enables dramatic algorithmic speedups.
+/// memory overhead (2304 slots, 480 precomputed, 126 used per solution) enables
+/// dramatic algorithmic speedups through simple O(1) array indexing.
 ///
 /// See [`vertex.c::getOrInitializeVertex()`](https://github.com/jeremycarroll/venntriangles/blob/main/vertex.c)
 /// for the C implementation.
@@ -60,11 +86,11 @@ use crate::geometry::Vertex;
 /// # Memory Layout
 ///
 /// - `vertices`: **Heap-allocated** via Box
-///   - Reason: Large 3D array (NFACES × NCOLORS × NCOLORS elements)
+///   - Reason: Large 3D array (NFACES × NCOLORS × NCOLORS = 2304 elements for NCOLORS=6)
 ///   - Size: 64 × 6 × 6 × sizeof(Option<Vertex>) ≈ 147 KB for NCOLORS=6
 ///   - Box keeps only a pointer (8 bytes) on stack, array lives on heap
 ///   - Prevents stack overflow for large arrays
-///   - ~70% of entries remain None in any specific solution
+///   - 480 of 2304 slots precomputed (21% utilization), rest remain None
 #[derive(Debug, Clone)]
 pub struct VerticesMemo {
     /// All possible vertex configurations indexed by outside face and crossing orientation.
@@ -78,8 +104,8 @@ pub struct VerticesMemo {
     ///
     /// Returns `Some(Vertex)` if this configuration is valid, `None` otherwise.
     ///
-    /// **Note**: Approximately 70% of entries are `None` in any specific diagram.
-    /// Only ~126 of 480 possible vertices are actually used (Euler's formula: V - E + F = 2).
+    /// **Note**: After precomputation, 480 of 2304 slots contain possible vertex configurations.
+    /// In any specific solution, only 126 vertices are actually used (Euler's formula: V - E + F = 2).
     ///
     /// **Heap-allocated** via Box - 3D array is too large for stack (147 KB).
     pub vertices: Box<[[[Option<Vertex>; NCOLORS]; NCOLORS]; NFACES]>,
@@ -97,7 +123,11 @@ impl VerticesMemo {
     /// 2. If so, compute the 4 incoming edges at this vertex
     /// 3. Set primary/secondary colors and crossing orientation
     pub fn initialize() -> Self {
-        eprintln!("[VerticesMemo] Initializing {} vertices...", NPOINTS);
+        let total_slots = NFACES * NCOLORS * NCOLORS;
+        eprintln!(
+            "[VerticesMemo] Allocating {} array slots ({} theoretical possible vertices)...",
+            total_slots, NPOINTS
+        );
 
         // Allocate vertex array (Box to keep it on heap)
         let vertices = Box::new([[[None; NCOLORS]; NCOLORS]; NFACES]);
