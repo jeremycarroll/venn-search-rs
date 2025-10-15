@@ -21,14 +21,21 @@ use std::ptr::NonNull;
 ///
 /// # Size Estimation
 ///
-/// Expected contents (Phase 6):
-/// - FacesMemo: ~400 KB (64 faces × relationship tables)
-/// - VerticesMemo: ~30 KB (480 vertices for NCOLORS=6)
-/// - Future: Cycle constraint lookup tables, edge relationships
-/// - Total current estimate: ~500 KB - 1MB
+/// Measured size (Phase 6, NCOLORS=6):
+/// - Stack: 88 bytes (Vec/Box headers + face_degree_by_color_count array)
+/// - Heap: ~152 KB
+///   - FacesMemo: ~5 KB (64 Face structs in Vec)
+///   - VerticesMemo: ~147 KB (64×6×6 Option<Vertex> array in Box)
+/// - **Total: ~149 KB**
 ///
-/// Size will be measured to decide copy vs &'static strategy.
-/// Current strategy: Copy per SearchContext (good cache locality for <1MB).
+/// Future additions may increase size:
+/// - Cycle constraint lookup tables
+/// - Edge relationship tables
+/// - PCO/Chirotope structures
+/// - Expected final size: ~200-300 KB
+///
+/// **Decision: Copy strategy confirmed** - At <1MB, copying per SearchContext
+/// provides excellent cache locality while enabling parallelization.
 #[derive(Debug, Clone)]
 pub struct MemoizedData {
     /// All face-related MEMO data (binomial coefficients, adjacency, etc.)
@@ -44,19 +51,11 @@ pub struct MemoizedData {
 }
 
 impl MemoizedData {
-    /// Create empty memoized data (temporary until full initialization).
-    pub fn new() -> Self {
-        Self {
-            faces: FacesMemo::initialize(),
-            vertices: VerticesMemo::initialize(),
-        }
-    }
-
     /// Initialize all MEMO data structures.
     ///
     /// Computes all immutable precomputed data needed for the search.
     /// This is called once at SearchContext creation.
-    pub fn initialize() -> Self {
+    pub fn new() -> Self {
         eprintln!("[MemoizedData] Initializing all MEMO structures...");
 
         let faces = FacesMemo::initialize();
@@ -82,6 +81,14 @@ impl Default for MemoizedData {
 ///
 /// This data changes during search and is tracked on the trail for backtracking.
 /// Each SearchContext owns its own mutable state.
+///
+/// # Memory Allocation
+///
+/// Like MEMO data, DYNAMIC state uses mixed stack/heap allocation:
+/// - **Stack**: Small fixed-size arrays (e.g., `current_face_degrees: [u64; 6]`)
+/// - **Heap**: Variable-size collections (e.g., Vecs for edge lists, cycle sets)
+///
+/// The trail records raw pointers to these locations for O(1) backtracking.
 #[derive(Debug)]
 pub struct DynamicState {
     // TODO: Add more DYNAMIC fields during Phase 6-7:
@@ -171,7 +178,7 @@ impl SearchContext {
     /// Create a new search context with initialized MEMO data.
     pub fn new() -> Self {
         Self {
-            memo: MemoizedData::initialize(),
+            memo: MemoizedData::new(),
             trail: Trail::new(),
             state: DynamicState::new(),
         }
@@ -369,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_with_memo() {
-        let memo = MemoizedData::initialize();
+        let memo = MemoizedData::new();
         let ctx1 = SearchContext::with_memo(memo.clone());
         let ctx2 = SearchContext::with_memo(memo.clone());
 

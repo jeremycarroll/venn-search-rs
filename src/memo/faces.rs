@@ -16,12 +16,24 @@ use crate::geometry::{Color, ColorSet, CycleSet, Face, FaceId};
 /// This structure is computed once during initialization and contains
 /// all precomputed face-related lookup tables needed for efficient
 /// constraint propagation.
+///
+/// # Memory Layout
+///
+/// - `faces`: **Heap-allocated** Vec (NFACES = 64 for NCOLORS=6)
+///   - Reason: Variable size depending on NCOLORS; too large for stack
+///   - Size: 64 × sizeof(Face) ≈ 5 KB
+///
+/// - `face_degree_by_color_count`: **Stack-allocated** array (7 elements for NCOLORS=6)
+///   - Reason: Small fixed-size array (NCOLORS+1 elements); efficient on stack
+///   - Size: 7 × 8 bytes = 56 bytes
 #[derive(Debug, Clone)]
 pub struct FacesMemo {
     /// All faces in the diagram (NFACES = 2^NCOLORS faces).
     ///
     /// Indexed by face ID (0..NFACES), where face ID is the bitmask
     /// of colors bounding that face.
+    ///
+    /// **Heap-allocated** via Vec to handle variable NFACES (8 for N=3, 64 for N=6).
     pub faces: Vec<Face>,
 
     /// Expected cycle length for faces with k colors.
@@ -39,6 +51,8 @@ pub struct FacesMemo {
     /// - [4] = 15
     /// - [5] = 6
     /// - [6] = 1
+    ///
+    /// **Stack-allocated** array - small and fixed size (NCOLORS+1 ≤ 7 elements).
     pub face_degree_by_color_count: [u64; NCOLORS + 1],
 }
 
@@ -88,14 +102,7 @@ impl FacesMemo {
 ///
 /// # Algorithm
 ///
-/// This matches the C implementation in `face.c::initializeLengthOfCycleOfFaces()`:
-/// ```c
-/// FaceSumOfFaceDegree[0] = 1;
-/// for (i = 0; i < NCOLORS; i++) {
-///     FaceSumOfFaceDegree[i + 1] =
-///         FaceSumOfFaceDegree[i] * (NCOLORS - i) / (i + 1);
-/// }
-/// ```
+/// Uses the recurrence relation C(n, k) = C(n, k-1) * (n - k + 1) / k:
 fn compute_binomial_coefficients() -> [u64; NCOLORS + 1] {
     let mut coefficients = [0u64; NCOLORS + 1];
     coefficients[0] = 1;
@@ -156,23 +163,19 @@ fn create_face(face_id: FaceId) -> Face {
 /// - The cycle must have exactly 2 edge transitions (in/out of face)
 /// - The next and previous faces are determined by which edges transition
 ///
-/// # Algorithm
-///
-/// This ports the C implementation from `face.c::applyMonotonicity()`.
-///
 /// # TODO
 ///
 /// This is a complex function that needs:
-/// - Access to the global Cycles array (port from geometry module)
+/// - Access to cycle data (port from geometry module)
 /// - Edge transition detection logic
 /// - Next/previous face computation
 ///
-/// For now, this is a skeleton that will be filled in subsequent steps.
+/// For now, this is a skeleton that will be filled in Phase 6.
 fn apply_monotonicity_constraints(_faces: &mut [Face]) {
     // TODO: Implement monotonicity constraint filtering
     // This requires:
-    // 1. Port isCycleValidForFace() - check cycle colors vs face colors
-    // 2. Port exactlyTwoEdgeTransitions() - validate cycle is monotone
+    // 1. Check cycle colors match face colors
+    // 2. Validate cycle has exactly two edge transitions (monotone property)
     // 3. Compute next/previous faces for each valid cycle
     // 4. Remove invalid cycles from possible_cycles
 
