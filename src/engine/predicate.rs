@@ -27,6 +27,10 @@
 //!             PredicateResult::Failure  // No more options
 //!         }
 //!     }
+//!
+//!     fn name(&self) -> &str {
+//!         "Simple"
+//!     }
 //! }
 //! ```
 
@@ -122,6 +126,10 @@ pub trait TerminalPredicate: Predicate {}
 ///         } else {
 ///             PredicateResult::Failure
 ///         }
+///     }
+///
+///     fn name(&self) -> &str {
+///         "Choice"
 ///     }
 /// }
 /// ```
