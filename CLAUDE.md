@@ -56,15 +56,15 @@ This is a Rust rewrite of the C implementation at ../venntriangles (tag: v1.1-pc
 - ✅ **Phase 3 Complete (Oct 14, 2025)**: Non-Deterministic Search Engine
   - Predicate trait with try_pred(round) and retry_pred(round, choice)
   - PredicateResult: Success, SuccessSamePredicate, Failure, Choices(n), Suspend
-  - SearchEngine with WAM-like execution (matches C engine architecture)
+  - SearchEngine with WAM-like execution model
   - Stack-based execution tracking rounds and choices
   - Test predicates: IntegerRange, Choice, Suspend, AlwaysFail, MultiRound
   - Trail enhanced with rewind_to() for stack-based rewinding
   - **Consuming API**: search(self) -> Option<Self> enforces WAM semantics via ownership
   - **Type-safe builder**: EngineBuilder with typestate enforces terminal predicates at compile time
   - TerminalPredicate marker trait prevents invalid programs
-  - 113 tests passing (94 unit + 10 integration + 14 doc tests + internal tests)
-  - C-compatible engine ready for real predicates
+  - 117 tests passing (93 unit + 11 integration + 13 doc tests)
+  - Engine ready for real predicates
 
 **In Progress:**
 - 🚧 Nothing currently
@@ -1064,6 +1064,7 @@ Don't optimize prematurely:
 - Explain non-obvious type safety invariants
 - For geometric concepts and mathematical background, link to [docs/MATH.md](docs/MATH.md)
 - For test expectations and validation approach, reference [docs/TESTS.md](docs/TESTS.md)
+- **IMPORTANT**: Do not refer to "the C implementation" or "the C code" in Rust program internals (source code, doc comments, inline documentation). The Rust implementation should stand on its own. References to `c-reference/` files are acceptable in CLAUDE.md, commit messages, and migration documentation, but not in the Rust codebase itself.
 
 ## Advanced Rust Patterns to Explore
 

@@ -14,7 +14,7 @@
 //! - Choice mode state (whether we're trying alternatives)
 //! - Current choice index (when in choice mode)
 //!
-//! The engine follows the C implementation's WAM-like execution model:
+//! The engine follows a WAM-like execution model:
 //! 1. Call try_pred(round) on each predicate
 //! 2. If Success: advance to next predicate
 //! 3. If SuccessSamePredicate: increment round, stay at same predicate
