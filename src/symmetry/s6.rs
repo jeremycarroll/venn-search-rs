@@ -51,34 +51,40 @@ pub fn check_symmetry(degrees: &[u8; NCOLORS]) -> SymmetryType {
     ))]
     let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_6;
 
-    // Generate all permutations of the degree sequence
-    let mut permutations = Vec::with_capacity(2 * NCOLORS);
+    // Find the lexicographically maximal permutation and count ties
+    let mut max_perm = [0u8; NCOLORS];
+    let mut max_count = 0;
+    let mut first = true;
 
     for permutation in group.iter() {
         let mut permuted = [0u8; NCOLORS];
         for (i, &perm_idx) in permutation.iter().enumerate() {
             permuted[i] = degrees[perm_idx as usize];
         }
-        permutations.push(permuted);
-    }
-
-    // Sort permutations in descending lexicographic order
-    permutations.sort_by(|a, b| b.cmp(a));
-
-    // Check if input equals the maximum
-    let max = &permutations[0];
-    if degrees != max {
-        return SymmetryType::NonCanonical;
-    }
-
-    // Check if there's a tie with the second-best
-    if permutations.len() > 1 {
-        let second = &permutations[1];
-        if degrees == second {
-            return SymmetryType::Equivocal;
+        if first {
+            max_perm = permuted;
+            max_count = 1;
+            first = false;
+        } else {
+            match permuted.cmp(&max_perm) {
+                std::cmp::Ordering::Greater => {
+                    max_perm = permuted;
+                    max_count = 1;
+                }
+                std::cmp::Ordering::Equal => {
+                    max_count += 1;
+                }
+                std::cmp::Ordering::Less => {}
+            }
         }
     }
 
+    if degrees != &max_perm {
+        return SymmetryType::NonCanonical;
+    }
+    if max_count > 1 {
+        return SymmetryType::Equivocal;
+    }
     SymmetryType::Canonical
 }
 
