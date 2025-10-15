@@ -10,12 +10,6 @@
 //! - Edge: Directed, labeled sides of faces
 //! - Vertex: Oriented meeting points of curves
 //! - Face: Regions bounded by cycles
-//!
-//! # Phase 2 Status
-//!
-//! Basic type structures are implemented. Full initialization including
-//! edge connectivity and cycle constraints will be completed in Phase 3
-//! as part of the Initialize predicate.
 
 pub mod color;
 pub mod color_set;

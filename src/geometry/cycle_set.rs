@@ -21,12 +21,6 @@
 //! assert!(set.contains(1));
 //! ```
 //!
-//! # Note
-//!
-//! Full cycle enumeration (computing all 394 cycles for NCOLORS=6) will be
-//! implemented in Phase 3. This module provides the container type for sets
-//! of cycle IDs.
-
 use crate::geometry::{constants::*, CycleId};
 use std::fmt;
 
@@ -211,7 +205,6 @@ impl fmt::Display for CycleSet {
     /// Format a cycle set as "{0, 5, 12, ...}".
     ///
     /// Note: This shows cycle IDs, not the actual cycle contents.
-    /// Full cycle data will be available in Phase 3.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{{")?;
         let mut first = true;

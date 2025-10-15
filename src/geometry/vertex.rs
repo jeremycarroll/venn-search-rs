@@ -5,12 +5,6 @@
 //! A vertex represents the intersection point where two curves cross.
 //! Each vertex has four incoming edges (two from each curve) and maintains
 //! information about which curves cross and their orientation.
-//!
-//! # Phase 2 Skeleton
-//!
-//! This is a skeleton implementation providing the basic type structure.
-//! Full initialization and edge connectivity will be implemented in Phase 3
-//! as part of the Initialize predicate.
 
 use crate::geometry::{Color, ColorSet, EdgeId};
 

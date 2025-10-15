@@ -5,12 +5,6 @@
 //! An edge represents a segment of a curve that forms part of the boundary
 //! between two faces. Each edge has a color (which curve it belongs to) and
 //! connects to other edges at vertices.
-//!
-//! # Phase 2 Skeleton
-//!
-//! This is a skeleton implementation providing the basic type structure.
-//! Full initialization and pointer management will be implemented in Phase 3
-//! as part of the Initialize predicate.
 
 use crate::geometry::{Color, ColorSet};
 
