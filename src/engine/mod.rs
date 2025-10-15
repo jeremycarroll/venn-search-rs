@@ -235,7 +235,6 @@ impl SearchEngine {
                     }
                     PredicateResult::Failure => {
                         // Backtrack: pop until we find a choice point.
-                        // We must skip over deterministic Success entries that have no alternatives.
                         if !self.pop_until_choice_point(false) {
                             return None; // Search exhausted
                         }
@@ -260,7 +259,6 @@ impl SearchEngine {
                 // Check if we've exhausted all choices
                 if entry.current_choice >= entry.num_choices {
                     // Backtrack: pop current exhausted entry, then find another choice point.
-                    // We must skip over deterministic Success entries that have no alternatives.
                     if !self.pop_until_choice_point(true) {
                         return None; // Search exhausted
                     }
