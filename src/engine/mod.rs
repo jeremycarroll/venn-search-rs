@@ -234,8 +234,7 @@ impl SearchEngine {
                         self.push_same_predicate(ctx);
                     }
                     PredicateResult::Failure => {
-                        // Backtrack: pop until we find a choice point.
-                        if !self.pop_until_choice_point(false) {
+                        if !self.backtrack_by_popping_until_choice_point(false) {
                             return None; // Search exhausted
                         }
                     }
@@ -258,8 +257,8 @@ impl SearchEngine {
 
                 // Check if we've exhausted all choices
                 if entry.current_choice >= entry.num_choices {
-                    // Backtrack: pop current exhausted entry, then find another choice point.
-                    if !self.pop_until_choice_point(true) {
+                    // Pop current exhausted entry first.
+                    if !self.backtrack_by_popping_until_choice_point(true) {
                         return None; // Search exhausted
                     }
                     continue;
@@ -336,7 +335,7 @@ impl SearchEngine {
         });
     }
 
-    /// Pop stack entries until we find a choice point or exhaust the stack.
+    /// Backtrack by popping stack entries until we find a choice point or exhaust the stack.
     ///
     /// This helper unifies the two backtracking loops in the search algorithm:
     /// - After PredicateResult::Failure in call mode
@@ -361,7 +360,7 @@ impl SearchEngine {
     /// This maintains the invariant that after backtracking, either:
     /// - Stack is empty (search exhausted), or
     /// - Top entry is in choice mode (ready to try next choice)
-    fn pop_until_choice_point(&mut self, exhaust_current: bool) -> bool {
+    fn backtrack_by_popping_until_choice_point(&mut self, exhaust_current: bool) -> bool {
         // If current entry is exhausted, pop it first
         if exhaust_current {
             self.stack.pop();
