@@ -26,7 +26,7 @@ fn test_simple_integer_search_with_suspend() {
     ]);
 
     // Should suspend after first predicate succeeds
-    assert_eq!(engine.search(&mut ctx), Err(()));
+    assert!(!engine.search(&mut ctx)); // false = Suspended
     let (tries, retries) = engine.statistics();
     assert_eq!(tries, 2); // IntegerRange.try_pred + Suspend.try_pred
     assert_eq!(retries, 1); // IntegerRange.retry_pred(choice=0)
@@ -42,7 +42,7 @@ fn test_two_integer_ranges() {
     ]);
 
     // Should find solution with first choice of each
-    assert_eq!(engine.search(&mut ctx), Err(()));
+    assert!(!engine.search(&mut ctx)); // false = Suspended
     let (tries, retries) = engine.statistics();
     assert_eq!(tries, 3); // All three predicates tried
     assert_eq!(retries, 2); // Two retry_pred calls (one per IntegerRange)
@@ -57,7 +57,7 @@ fn test_choice_predicate_search() {
     ]);
 
     // Should suspend after choosing first option
-    assert_eq!(engine.search(&mut ctx), Err(()));
+    assert!(!engine.search(&mut ctx)); // false = Suspended
     let (tries, retries) = engine.statistics();
     assert_eq!(tries, 2); // Choice.try_pred + Suspend.try_pred
     assert_eq!(retries, 1); // Choice.retry_pred(choice=0)
@@ -73,7 +73,7 @@ fn test_backtracking_with_failure() {
     ]);
 
     // Should fail - second predicate always fails
-    assert_eq!(engine.search(&mut ctx), Ok(false));
+    assert!(engine.search(&mut ctx)); // true = Exhausted
     let (tries, retries) = engine.statistics();
     assert!(tries >= 2); // At least IntegerRange + AlwaysFail
     assert!(retries >= 1); // Should have tried multiple integer choices
@@ -92,7 +92,7 @@ fn test_backtracking_exhausts_options() {
         Box::new(SuspendPredicate),
     ]);
 
-    assert_eq!(engine.search(&mut ctx), Ok(false));
+    assert!(engine.search(&mut ctx)); // true = Exhausted
     let (tries, retries) = engine.statistics();
 
     // Should have tried many combinations
@@ -110,7 +110,7 @@ fn test_empty_search_space() {
         Box::new(SuspendPredicate),
     ]);
 
-    assert_eq!(engine.search(&mut ctx), Ok(false));
+    assert!(engine.search(&mut ctx)); // true = Exhausted
     let (tries, retries) = engine.statistics();
     assert_eq!(tries, 1); // Only tried first predicate
     assert_eq!(retries, 0); // Failed immediately on try_pred
@@ -125,7 +125,7 @@ fn test_engine_reset() {
     ]);
 
     // First search
-    assert_eq!(engine.search(&mut ctx), Err(()));
+    assert!(!engine.search(&mut ctx)); // false = Suspended
     let (tries1, retries1) = engine.statistics();
 
     // Reset
@@ -135,7 +135,7 @@ fn test_engine_reset() {
     assert_eq!(retries2, 0);
 
     // Second search should work again
-    assert_eq!(engine.search(&mut ctx), Err(()));
+    assert!(!engine.search(&mut ctx)); // false = Suspended
     let (tries3, retries3) = engine.statistics();
     assert_eq!(tries3, tries1);
     assert_eq!(retries3, retries1);
@@ -151,7 +151,7 @@ fn test_multi_round_predicate() {
         Box::new(SuspendPredicate),
     ]);
 
-    assert_eq!(engine.search(&mut ctx), Err(()));
+    assert!(!engine.search(&mut ctx)); // false = Suspended
     let (tries, retries) = engine.statistics();
 
     // Should call try_pred 4 times: MultiRound(0, 1, 2) + Suspend
@@ -171,7 +171,7 @@ fn test_choices_with_backtracking() {
         Box::new(SuspendPredicate),
     ]);
 
-    assert_eq!(engine.search(&mut ctx), Ok(false));
+    assert!(engine.search(&mut ctx)); // true = Exhausted
     let (tries, retries) = engine.statistics();
 
     // try_pred: Choice, AlwaysFail (x2)
@@ -194,7 +194,7 @@ fn test_complex_backtracking_scenario() {
         Box::new(SuspendPredicate),
     ]);
 
-    assert_eq!(engine.search(&mut ctx), Err(()));
+    assert!(!engine.search(&mut ctx)); // false = Suspended
     let (tries, retries) = engine.statistics();
     assert_eq!(tries, 3); // All three tried once
     assert_eq!(retries, 2); // IntegerRange.retry(0) + Choice.retry(0)
@@ -205,5 +205,5 @@ fn test_empty_predicates() {
     let mut ctx = SearchContext::new();
     let mut engine = SearchEngine::new(vec![]);
 
-    assert_eq!(engine.search(&mut ctx), Ok(false));
+    assert!(engine.search(&mut ctx)); // true = Exhausted
 }

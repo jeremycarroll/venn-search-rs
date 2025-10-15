@@ -29,6 +29,7 @@
 //! use venn_search::context::SearchContext;
 //!
 //! struct SimplePredicate;
+//! struct SuspendPredicate;
 //!
 //! impl Predicate for SimplePredicate {
 //!     fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
@@ -40,9 +41,23 @@
 //!     }
 //! }
 //!
+//! impl Predicate for SuspendPredicate {
+//!     fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
+//!         PredicateResult::Suspend
+//!     }
+//!
+//!     fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
+//!         PredicateResult::Failure
+//!     }
+//! }
+//!
 //! let mut ctx = SearchContext::new();
-//! let mut engine = SearchEngine::new(vec![Box::new(SimplePredicate)]);
-//! let found = engine.search(&mut ctx);
+//! // All WAM programs must end with FAIL or SUSPEND
+//! let mut engine = SearchEngine::new(vec![
+//!     Box::new(SimplePredicate),
+//!     Box::new(SuspendPredicate),  // Terminal predicate
+//! ]);
+//! let result = engine.search(&mut ctx);  // Returns Err(()) for Suspend
 //! ```
 
 pub mod predicate;
@@ -111,7 +126,11 @@ impl SearchEngine {
     /// #     fn try_pred(&mut self, _: &mut SearchContext, _: usize) -> PredicateResult { PredicateResult::Success }
     /// #     fn retry_pred(&mut self, _: &mut SearchContext, _: usize, _: usize) -> PredicateResult { PredicateResult::Failure }
     /// # }
-    /// let engine = SearchEngine::new(vec![Box::new(P1)]);
+    /// # struct Suspend; impl Predicate for Suspend {
+    /// #     fn try_pred(&mut self, _: &mut SearchContext, _: usize) -> PredicateResult { PredicateResult::Suspend }
+    /// #     fn retry_pred(&mut self, _: &mut SearchContext, _: usize, _: usize) -> PredicateResult { PredicateResult::Failure }
+    /// # }
+    /// let engine = SearchEngine::new(vec![Box::new(P1), Box::new(Suspend)]);
     /// ```
     pub fn new(predicates: Vec<Box<dyn Predicate>>) -> Self {
         Self {
@@ -124,21 +143,26 @@ impl SearchEngine {
 
     /// Run the search to find one solution.
     ///
-    /// Returns:
-    /// - `Ok(true)` if search completed successfully
-    /// - `Ok(false)` if search exhausted all possibilities without finding a solution
-    /// - `Err(())` if search was suspended (PREDICATE_SUSPEND)
+    /// Returns (matching C implementation's bool):
+    /// - `true` if search exhausted all possibilities (backtracked past first predicate)
+    /// - `false` if search was suspended (PREDICATE_SUSPEND)
     ///
-    /// The search modifies `ctx` with the solution state if found.
-    #[allow(clippy::result_unit_err)]
-    pub fn search(&mut self, ctx: &mut SearchContext) -> Result<bool, ()> {
+    /// The search modifies `ctx` with the solution state. Success is indicated via
+    /// side effects (state in `ctx`), not by the return value. This matches the WAM
+    /// execution model where programs never "complete" - they either fail or suspend.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the predicate sequence is invalid (reaches the end without FAIL or SUSPEND).
+    /// All valid WAM programs must terminate with a FAIL or SUSPEND predicate.
+    pub fn search(&mut self, ctx: &mut SearchContext) -> bool {
         // Initialize with first predicate
         self.stack.clear();
         self.try_count = 0;
         self.retry_count = 0;
 
         if self.predicates.is_empty() {
-            return Ok(false);
+            return true;  // Empty is exhausted
         }
 
         // Push initial stack entry for first predicate
@@ -155,7 +179,7 @@ impl SearchEngine {
         loop {
             // Check if we've backtracked past the first predicate
             if self.stack.is_empty() {
-                return Ok(false); // Search exhausted
+                return true; // Search exhausted (all choices failed)
             }
 
             let entry = self.stack.last_mut().unwrap();
@@ -174,10 +198,8 @@ impl SearchEngine {
 
                 match result {
                     PredicateResult::Success => {
-                        // Move to next predicate (or complete if at end)
-                        if !self.push_next_predicate(ctx) {
-                            return Ok(true); // Reached end of sequence!
-                        }
+                        // Move to next predicate
+                        self.push_next_predicate(ctx);
                     }
                     PredicateResult::SuccessSamePredicate => {
                         // Stay at same predicate, increment round
@@ -197,7 +219,7 @@ impl SearchEngine {
                     }
                     PredicateResult::Suspend => {
                         // Pause execution
-                        return Err(());
+                        return false; // Suspended
                     }
                 }
             } else {
@@ -222,10 +244,8 @@ impl SearchEngine {
 
                 match result {
                     PredicateResult::Success => {
-                        // Move to next predicate (or complete if at end)
-                        if !self.push_next_predicate(ctx) {
-                            return Ok(true); // Reached end of sequence!
-                        }
+                        // Move to next predicate
+                        self.push_next_predicate(ctx);
                     }
                     PredicateResult::SuccessSamePredicate => {
                         // Stay at same predicate, increment round
@@ -245,14 +265,17 @@ impl SearchEngine {
 
     /// Push a new stack entry for the next predicate in sequence.
     ///
-    /// Returns true if a stack entry was pushed, false if we reached the end of the sequence.
-    fn push_next_predicate(&mut self, ctx: &mut SearchContext) -> bool {
+    /// Panics if we've reached the end of the predicate sequence, as this indicates
+    /// an invalid program (all valid programs must end with FAIL or SUSPEND).
+    fn push_next_predicate(&mut self, ctx: &mut SearchContext) {
         let current = self.stack.last().unwrap();
         let next_index = current.predicate_index + 1;
 
         if next_index >= self.predicates.len() {
-            // Reached end of predicate sequence!
-            return false;
+            panic!(
+                "Invalid predicate sequence: reached end without FAIL or SUSPEND. \
+                 All WAM programs must terminate with a FAIL or SUSPEND predicate."
+            );
         }
 
         self.stack.push(StackEntry {
@@ -263,7 +286,6 @@ impl SearchEngine {
             num_choices: 0,
             trail_checkpoint: ctx.trail.len(),
         });
-        true
     }
 
     /// Push a new stack entry for the same predicate with incremented round.
@@ -330,16 +352,30 @@ mod tests {
         }
     }
 
+    /// Test predicate that suspends.
+    struct Suspend;
+
+    impl Predicate for Suspend {
+        fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
+            PredicateResult::Suspend
+        }
+
+        fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
+            PredicateResult::Failure
+        }
+    }
+
     #[test]
-    fn test_simple_success() {
+    fn test_simple_success_with_suspend() {
         let mut ctx = SearchContext::new();
         let mut engine = SearchEngine::new(vec![
             Box::new(AlwaysSucceed),
+            Box::new(Suspend),  // Terminal predicate
         ]);
 
-        assert_eq!(engine.search(&mut ctx), Ok(true));
+        assert!(!engine.search(&mut ctx)); // false = Suspended
         let (tries, retries) = engine.statistics();
-        assert_eq!(tries, 1); // One try_pred call
+        assert_eq!(tries, 2); // AlwaysSucceed + Suspend
         assert_eq!(retries, 0); // No backtracks
     }
 
@@ -350,7 +386,7 @@ mod tests {
             Box::new(AlwaysFail),
         ]);
 
-        assert_eq!(engine.search(&mut ctx), Ok(false));
+        assert!(engine.search(&mut ctx)); // true = Exhausted
         let (tries, retries) = engine.statistics();
         assert_eq!(tries, 1); // First predicate tried once
         assert_eq!(retries, 0); // Failed immediately, no retry
@@ -361,6 +397,17 @@ mod tests {
         let mut ctx = SearchContext::new();
         let mut engine = SearchEngine::new(vec![]);
 
-        assert_eq!(engine.search(&mut ctx), Ok(false));
+        assert!(engine.search(&mut ctx)); // true = Empty is exhausted
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid predicate sequence")]
+    fn test_invalid_program_without_terminal() {
+        let mut ctx = SearchContext::new();
+        let mut engine = SearchEngine::new(vec![
+            Box::new(AlwaysSucceed),  // Missing terminal predicate!
+        ]);
+
+        let _ = engine.search(&mut ctx); // Should panic
     }
 }

@@ -48,13 +48,25 @@ This is a Rust rewrite of the C implementation at ../venntriangles (tag: v1.1-pc
   - 29 tests passing (21 unit + 8 integration)
   - Basic Color type skeleton
   - See [docs/PHASE1_COMPLETE.md](docs/PHASE1_COMPLETE.md) for details
+- ✅ **Phase 2 Complete (Oct 14, 2025)**: Geometric Types
+  - Color, ColorSet, Cycle, CycleSet types with full API
+  - Edge, Vertex, Face types with relationships
+  - Constants module (NCOLORS, NFACES, NPOINTS, etc.)
+  - 87 tests passing (all type tests + Phase 1)
+- ✅ **Phase 3 Complete (Oct 14, 2025)**: Non-Deterministic Search Engine
+  - Predicate trait with try_pred(round) and retry_pred(round, choice)
+  - PredicateResult: Success, SuccessSamePredicate, Failure, Choices(n), Suspend
+  - SearchEngine with WAM-like execution (matches C engine architecture)
+  - Stack-based execution tracking rounds and choices
+  - Test predicates: IntegerRange, Choice, Suspend, AlwaysFail, MultiRound
+  - Trail enhanced with rewind_to() for stack-based rewinding
+  - 117 tests passing (93 unit + 11 integration + 13 doc tests)
+  - C-compatible engine ready for real predicates
 
 **In Progress:**
-- 🚧 Phase 2: Geometric types (Color, ColorSet, Cycle)
+- 🚧 Nothing currently
 
 **Not Started:**
-- ⬜ Edge, Vertex, Face geometric types
-- ⬜ Search engine framework
 - ⬜ Predicates (Initialize, InnerFace, Venn, Corners, Save)
 - ⬜ Alternating operators (PCO, Chirotope)
 - ⬜ GraphML output
