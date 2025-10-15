@@ -188,6 +188,7 @@ impl SearchEngine {
         self.try_count = 0;
         self.retry_count = 0;
 
+        // Handle empty predicate list
         if self.predicates.is_empty() {
             return None; // Empty is exhausted
         }
@@ -233,8 +234,9 @@ impl SearchEngine {
                         self.push_same_predicate(ctx);
                     }
                     PredicateResult::Failure => {
-                        // Backtrack
-                        self.stack.pop();
+                        if !self.backtrack_by_popping_until_choice_point(false) {
+                            return None; // Search exhausted
+                        }
                     }
                     PredicateResult::Choices(n) => {
                         // Enter choice mode
@@ -255,8 +257,10 @@ impl SearchEngine {
 
                 // Check if we've exhausted all choices
                 if entry.current_choice >= entry.num_choices {
-                    // Backtrack
-                    self.stack.pop();
+                    // Pop current exhausted entry first.
+                    if !self.backtrack_by_popping_until_choice_point(true) {
+                        return None; // Search exhausted
+                    }
                     continue;
                 }
 
@@ -329,6 +333,49 @@ impl SearchEngine {
             num_choices: 0,
             trail_checkpoint: ctx.trail.len(),
         });
+    }
+
+    /// Backtrack by popping stack entries until we find a choice point or exhaust the stack.
+    ///
+    /// This helper unifies the two backtracking loops in the search algorithm:
+    /// - After PredicateResult::Failure in call mode
+    /// - After exhausting all choices in choice mode
+    ///
+    /// # Parameters
+    ///
+    /// - `exhaust_current`: If true, pop the current entry first (it's exhausted).
+    ///   If false, keep current entry and only pop if it's not a choice point.
+    ///
+    /// # Returns
+    ///
+    /// - `true` if a choice point was found (stack non-empty, top entry is in choice mode)
+    /// - `false` if the stack is exhausted (no more choice points to backtrack to)
+    ///
+    /// # Algorithm
+    ///
+    /// 1. If `exhaust_current`, pop the current entry (it's exhausted)
+    /// 2. Loop: pop entries until we find one in choice mode
+    /// 3. Skip deterministic Success entries that have no alternatives
+    ///
+    /// This maintains the invariant that after backtracking, either:
+    /// - Stack is empty (search exhausted), or
+    /// - Top entry is in choice mode (ready to try next choice)
+    fn backtrack_by_popping_until_choice_point(&mut self, exhaust_current: bool) -> bool {
+        // If current entry is exhausted, pop it first
+        if exhaust_current {
+            self.stack.pop();
+        }
+
+        // Pop until we find a choice point or exhaust the stack
+        loop {
+            if self.stack.is_empty() {
+                return false; // Search exhausted
+            }
+            if self.stack.last().unwrap().in_choice_mode {
+                return true; // Found a choice point
+            }
+            self.stack.pop();
+        }
     }
 
     /// Get statistics about the search.
