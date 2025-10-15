@@ -4,14 +4,34 @@
 //!
 //! This module contains type-safe representations of geometric primitives:
 //! - Color: Edge labels (0..NCOLORS-1)
+//! - ColorSet: Bitset of colors
 //! - Cycle: Sequences of edge colors around faces
+//! - CycleSet: Bitset of cycle IDs
 //! - Edge: Directed, labeled sides of faces
 //! - Vertex: Oriented meeting points of curves
 //! - Face: Regions bounded by cycles
 //!
-//! To be implemented during Phase 2.
+//! # Phase 2 Status
+//!
+//! Basic type structures are implemented. Full initialization including
+//! edge connectivity and cycle constraints will be completed in Phase 3
+//! as part of the Initialize predicate.
 
 pub mod color;
+pub mod color_set;
+pub mod constants;
+pub mod cycle;
+pub mod cycle_set;
+pub mod edge;
+pub mod face;
+pub mod vertex;
 
 // Re-export for convenience
 pub use color::Color;
+pub use color_set::ColorSet;
+pub use constants::*;
+pub use cycle::{Cycle, CycleId};
+pub use cycle_set::CycleSet;
+pub use edge::{Edge, EdgeId};
+pub use face::{Face, FaceId};
+pub use vertex::{Vertex, VertexId};
