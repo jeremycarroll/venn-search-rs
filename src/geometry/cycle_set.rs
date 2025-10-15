@@ -452,6 +452,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)] // Validates compile-time constant
     fn test_cycleset_length_correct() {
         // Verify CYCLESET_LENGTH has enough u64s for NCYCLES bits
         assert!(CYCLESET_LENGTH * 64 >= NCYCLES);

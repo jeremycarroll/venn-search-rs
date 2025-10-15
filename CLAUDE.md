@@ -65,24 +65,35 @@ This is a Rust rewrite of the C implementation at ../venntriangles (tag: v1.1-pc
   - TerminalPredicate marker trait prevents invalid programs
   - 117 tests passing (93 unit + 11 integration + 13 doc tests)
   - Engine ready for real predicates
+- ✅ **Phase 4 Complete (Oct 15, 2025)**: GitHub Actions CI/CD
+  - Matrix strategy testing NCOLORS=3,4,5,6
+  - Three jobs: test suite, clippy linting, format checking
+  - Runs on all PRs and pushes to main
+  - Cargo dependency caching for fast builds
+  - All 117 tests passing across all NCOLORS configurations
+  - Ready for automated validation of future PRs
 
 **In Progress:**
 - 🚧 Nothing currently
 
 **Not Started:**
-- ⬜ Predicates (Initialize, InnerFace, Venn, Corners, Save)
+- ⬜ **Phase 5**: InitializePredicate & InnerFacePredicate (finding 5-face degree signatures)
+- ⬜ **Phase 6**: MEMO Data Structures (complex precomputed lookup tables, builder pattern)
+- ⬜ **Phase 7**: VennPredicate (main Venn diagram search - the critical phase)
+- ⬜ **Phase 8**: Testing & Validation (real searches, performance benchmarking)
+- ⬜ **Future Phases**: TBD after Phase 8 (Log, Save, Corners, GraphML predicates)
 - ⬜ Alternating operators (PCO, Chirotope)
-- ⬜ GraphML output
 - ⬜ CLI argument parsing
-- ⬜ Full test suite migration
-- ⬜ Performance benchmarking
 
 **Next Immediate Steps:**
 1. ✅ ~~Implement trail system (foundation for everything)~~ **COMPLETE**
 2. ✅ ~~Port basic geometric types (Color, ColorSet, Cycle)~~ **COMPLETE**
 3. ✅ ~~Implement search engine framework~~ **COMPLETE**
-4. Implement real predicates (Initialize, InnerFace, Venn, Corners)
-5. Set up additional test infrastructure with C test cases
+4. ✅ ~~Set up GitHub Actions CI/CD for automated testing~~ **COMPLETE**
+5. Implement InitializePredicate and InnerFacePredicate
+6. Build MEMO data structures with builder pattern
+7. Implement VennPredicate for main search
+8. Validate with real searches and performance benchmarks
 
 ## Reference C Implementation
 
@@ -617,6 +628,216 @@ touch src/engine/stack.rs
 - [ ] Verify backtracking works correctly
 
 **Reference files**: `c-reference/engine.h`, `c-reference/engine.c`
+
+### Phase 4: GitHub Actions CI/CD (Week 5)
+
+**Goal**: Set up automated testing infrastructure to run tests for all NCOLORS values on every push.
+
+```bash
+mkdir -p .github/workflows
+touch .github/workflows/ci.yml
+```
+
+**Implementation checklist:**
+- [ ] Create GitHub Actions workflow file
+- [ ] Run `cargo test` for NCOLORS=3,4,5,6 (note: currently only N=6 implemented)
+- [ ] Run `cargo test --doc` for documentation tests
+- [ ] Run `cargo clippy` for linting
+- [ ] Run `cargo fmt --check` for formatting validation
+- [ ] Trigger on: push to PRs and push to main
+- [ ] Cache cargo dependencies for faster builds
+- [ ] Report test results clearly
+
+**Workflow structure:**
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ncolors: [3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run tests for NCOLORS=${{ matrix.ncolors }}
+      # ... (when multiple NCOLORS support is added)
+```
+
+**Success criteria:**
+- All tests pass on CI before merge
+- Clear test results visible in PR checks
+- Fast feedback loop (< 5 minutes per run)
+
+**Reference**: See docs/TESTS.md for expected test coverage at each NCOLORS value
+
+### Phase 5: InitializePredicate & InnerFacePredicate (Week 6-7)
+
+**Goal**: Implement the first two real predicates that find 5-face degree signatures.
+
+```bash
+touch src/predicates/initialize.rs
+touch src/predicates/innerface.rs
+```
+
+**Implementation checklist:**
+- [ ] InitializePredicate: Single-call deterministic setup
+  - [ ] Compute all MEMO data (cycle constraints, vertex configs)
+  - [ ] Initialize Faces global state structure
+  - [ ] Idempotent (can be called multiple times safely)
+  - [ ] Never undone by backtracking
+- [ ] InnerFacePredicate: Non-deterministic 5-face degree signature search
+  - [ ] 6 non-deterministic calls to choose degree sequence
+  - [ ] Degrees sum to 27 (total edges in N=6 Venn diagram)
+  - [ ] Generate maximal sequences via choices
+  - [ ] Uses SuccessSamePredicate for each round (0-5)
+  - [ ] **This is the parallelization boundary** (save state here)
+- [ ] Integration tests with known degree signatures
+- [ ] Validate against NCOLORS=3,4,5 test cases
+
+**Key architectural note:**
+InnerFacePredicate is where parallelization will occur in the future. After this predicate finds each degree signature (~10-20 solutions), we can spawn independent searches for the Venn search phase.
+
+**Success criteria:**
+- Finds all valid 5-face degree signatures for NCOLORS=6
+- Can run to completion with engine + SuspendPredicate
+- State correctly saved for later predicates to use
+
+**Reference files**: `c-reference/initialize.c`, `c-reference/innerface.c`, `c-reference/nondeterminism.c`
+
+### Phase 6: MEMO Data Structures (Week 8-9)
+
+**Goal**: Implement complex precomputed lookup tables and static state structures.
+
+```bash
+mkdir -p src/memo
+touch src/memo/mod.rs
+touch src/memo/cycles.rs
+touch src/memo/vertices.rs
+touch src/memo/edges.rs
+touch src/memo/builder.rs
+```
+
+**Implementation checklist:**
+- [ ] MemoizedData structure with all precomputed tables
+  - [ ] Cycle constraint lookup tables (bitwise operations)
+  - [ ] Possible vertex configurations (480 entries for N=6)
+  - [ ] Possible edge relationships
+  - [ ] Cycle containment sets (for triples i,j,k)
+  - [ ] Edge adjacency constraints
+  - [ ] Vertex adjacency constraints
+- [ ] Builder pattern for initialization
+  - [ ] Type-safe construction via builder
+  - [ ] Validate all constraints during build
+  - [ ] Immutable after construction
+- [ ] Measure size of MemoizedData
+  - [ ] If < 1MB: Copy per SearchContext (good cache locality)
+  - [ ] If > 1MB: Use `&'static` via `Box::leak()` (zero copy)
+- [ ] Integration with SearchContext
+- [ ] Tests for all lookup operations
+
+**Key design decision:**
+The MEMO data is computed once and never changes during search. This allows aggressive optimization and enables parallelization since threads can share read-only MEMO data.
+
+**Success criteria:**
+- All MEMO tables correctly precomputed
+- Size measured and strategy chosen (copy vs. reference)
+- Fast lookup operations (bitwise operations where possible)
+- Ready for VennPredicate to use
+
+**Reference files**: `c-reference/initialize.c` (MEMO data computation), `c-reference/face.h`, `c-reference/vertex.h`, `c-reference/edge.h`
+
+### Phase 7: VennPredicate (Week 10-12)
+
+**Goal**: Implement the main Venn diagram search - the most critical predicate.
+
+```bash
+touch src/predicates/venn.rs
+```
+
+**Implementation checklist:**
+- [ ] VennPredicate: Main non-deterministic Venn diagram search
+  - [ ] Up to 64 non-deterministic calls (one per face)
+  - [ ] Choose facial cycle for each face
+  - [ ] Constraint propagation via MEMO tables
+  - [ ] Enforce Venn property (all intersections present)
+  - [ ] Track remaining possible cycles per face
+  - [ ] Choose face with fewest remaining options (heuristic)
+  - [ ] Backtrack on failure (empty possible cycles)
+- [ ] Constraint checking predicates
+  - [ ] Cycle containment constraints
+  - [ ] Edge adjacency constraints
+  - [ ] Vertex configuration constraints
+- [ ] Integration with trail for O(1) backtracking
+- [ ] Statistics tracking (for debugging and performance)
+- [ ] Comprehensive tests with NCOLORS=3,4,5,6
+
+**Key performance note:**
+This is the most computationally intensive phase. The 1999 implementation took about a year of CPU time to run up to this point, but the logic is much improved now. Expected runtime: ~200-500ms per degree signature with modern optimizations.
+
+**Success criteria:**
+- Finds valid Venn diagrams for each degree signature
+- Correctly backtracks on constraint violations
+- Performance comparable to C implementation
+- Ready for real searches
+
+**Reference files**: `c-reference/venn.c`, `c-reference/search.c`, `c-reference/failure.c`
+
+### Phase 8: Testing & Validation (Week 13-14)
+
+**Goal**: Validate the implementation with real searches and performance benchmarking.
+
+**Implementation checklist:**
+- [ ] Real search tests for NCOLORS=3,4,5,6
+  - [ ] N=3: Expect 1 solution (trivial case)
+  - [ ] N=4: Expect 3 solutions
+  - [ ] N=5: Expect 23 solutions
+  - [ ] N=6: Expect 233 solutions (target)
+- [ ] Performance benchmarking
+  - [ ] Compare with C implementation baseline
+  - [ ] Measure time to first solution
+  - [ ] Measure solutions per second
+  - [ ] Profile hot paths (trail, predicates, MEMO lookups)
+- [ ] Memory profiling
+  - [ ] Measure SearchContext size
+  - [ ] Verify no memory leaks
+  - [ ] Check trail performance (O(1) backtrack)
+- [ ] Validate against known solutions
+  - [ ] GraphML output comparison (when implemented)
+  - [ ] Solution isomorphism checking
+- [ ] Documentation of results in docs/RESULTS.md
+
+**Success criteria:**
+- All expected solutions found for NCOLORS=3,4,5,6
+- Performance within 0.5-2x of C implementation
+- No memory leaks or performance regressions
+- Ready for remaining predicates (Corners, GraphML)
+
+**Reference**: See docs/RESULTS.md for expected performance and solution counts
+
+### Future Phases (TBD after Phase 8)
+
+After Phase 8, regroup to plan remaining predicates:
+
+**Remaining predicates to implement:**
+- LogPredicate: Deterministic logging (forward/backward execution tracking)
+- SavePredicate: Write solutions to files
+- CornersPredicate: 6 calls to assign 18 corners to faces
+- GraphMLPredicate: Write variation in GraphML format
+
+**Additional work:**
+- PCO (Partial Cyclic Orders) for line crossing constraints
+- Chirotope support for oriented matroid testing
+- CLI argument parsing and output management
+- Final performance optimization and parallel execution
+
+The decision on how many phases to use for this remaining work will be made after assessing progress through Phase 8.
 
 ### Getting Unstuck
 

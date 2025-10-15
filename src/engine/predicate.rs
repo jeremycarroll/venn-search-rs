@@ -164,7 +164,12 @@ pub trait Predicate {
     /// Note: retry_pred cannot return Choices or Suspend (we're already in choice mode).
     ///
     /// The trail has already been rewound to the state before this choice was tried.
-    fn retry_pred(&mut self, ctx: &mut SearchContext, round: usize, choice: usize) -> PredicateResult;
+    fn retry_pred(
+        &mut self,
+        ctx: &mut SearchContext,
+        round: usize,
+        choice: usize,
+    ) -> PredicateResult;
 
     /// Optional: Get a name for this predicate (for debugging).
     ///

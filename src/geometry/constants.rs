@@ -191,6 +191,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)] // Validates compile-time constant
     fn test_ncolors_in_valid_range() {
         assert!(
             NCOLORS >= 3 && NCOLORS <= 6,
@@ -222,6 +223,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)] // Validates compile-time constant
     fn test_cycleset_length() {
         // Should have enough u64s to hold NCYCLES bits
         assert!(CYCLESET_LENGTH * 64 >= NCYCLES);
