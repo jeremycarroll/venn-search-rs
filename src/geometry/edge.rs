@@ -70,7 +70,6 @@ impl Edge {
     /// Check if this edge is clockwise around its face.
     ///
     /// An edge is clockwise if its color is a member of the face's color set.
-    /// This matches the C macro `IS_CLOCKWISE_EDGE`.
     pub fn is_clockwise(&self) -> bool {
         self.face_colors.contains(self.color)
     }

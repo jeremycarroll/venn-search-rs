@@ -3,8 +3,7 @@
 //! ColorSet type for representing sets of colors as bitsets.
 //!
 //! A ColorSet is a compact representation of a set of colors using a bitset,
-//! where bit i represents the presence of color i. This matches the C
-//! implementation's COLORSET type.
+//! where bit i represents the presence of color i.
 //!
 //! # Examples
 //!
@@ -121,7 +120,7 @@ impl Iterator for ColorSetIter {
 }
 
 impl fmt::Display for ColorSet {
-    /// Format a color set as "|abc|" (matching C colorSetToString).
+    /// Format a color set as "|abc|".
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "|")?;
         for color in self.iter() {
