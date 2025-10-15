@@ -22,19 +22,12 @@
 //! assert_eq!(format!("{}", cycle), "(abc)");
 //! ```
 //!
-//! # Note
-//!
-//! This module provides the basic Cycle type and operations. Full cycle enumeration
-//! and initialization (computing all 394 cycles for NCOLORS=6) will be implemented
-//! in Phase 3.
-
 use crate::geometry::{constants::NCOLORS, Color, ColorSet};
 use std::fmt;
 
 /// A cycle ID (index into the global Cycles array).
 ///
 /// Each possible facial cycle is assigned a unique ID from 0..NCYCLES-1.
-/// This will be used once we implement full cycle enumeration in Phase 3.
 pub type CycleId = u64;
 
 /// A facial cycle representing a cyclic sequence of colors.

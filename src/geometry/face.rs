@@ -5,12 +5,6 @@
 //! A face is a region enclosed by edges of different colors. Each face is
 //! defined by a set of colors (representing which curves bound it) and has
 //! a facial cycle describing the order of colors around its boundary.
-//!
-//! # Phase 2 Skeleton
-//!
-//! This is a skeleton implementation providing the basic type structure.
-//! Full initialization with edge arrays and cycle constraints will be
-//! implemented in Phase 3 as part of the Initialize predicate.
 
 use crate::geometry::{Color, ColorSet, CycleId, CycleSet};
 
