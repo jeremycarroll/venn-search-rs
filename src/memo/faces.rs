@@ -302,6 +302,7 @@ fn check_exactly_two_transitions(
     }
 
     if transition_count == 2 {
+        // Invariant: transition_count == 2 guarantees both faces are set
         Some((previous_face.unwrap(), next_face.unwrap()))
     } else {
         None

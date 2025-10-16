@@ -83,8 +83,10 @@ pub struct CyclesMemo {
     /// `for i < j` and only accesses `[i][j]` entries. The lower triangle ([j][i] for j > i)
     /// is never populated or accessed, and attempting to access it is a bug.
     ///
+    /// **Private**: Access via `get_cycles_omitting_color_pair(i, j)` which enforces i < j.
+    ///
     /// Used for negative constraints during search to restrict non-vertex-adjacent faces.
-    pub cycles_omitting_color_pair: [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
+    cycles_omitting_color_pair: [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
 }
 
 /// Global array of all possible facial cycles.
@@ -258,6 +260,38 @@ impl CyclesMemo {
             cycles_omitting_one_color,
             cycles_omitting_color_pair,
         }
+    }
+
+    /// Get cycles omitting a color pair (upper triangle only).
+    ///
+    /// Returns the CycleSet of all cycles that do NOT contain the directed edge i→j.
+    ///
+    /// # Arguments
+    ///
+    /// * `i` - First color (must be less than `j`)
+    /// * `j` - Second color (must be greater than `i`)
+    ///
+    /// # Panics
+    ///
+    /// In debug builds, panics if `i >= j`. This catches bugs where the lower triangle
+    /// is accessed (which is never populated). In release builds, the check is optimized away.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let cycles_memo = CyclesMemo::initialize(&cycles);
+    /// let omitting = cycles_memo.get_cycles_omitting_color_pair(2, 4); // OK: 2 < 4
+    /// // let omitting = cycles_memo.get_cycles_omitting_color_pair(4, 2); // PANIC in debug!
+    /// ```
+    #[inline]
+    pub fn get_cycles_omitting_color_pair(&self, i: usize, j: usize) -> &[u64; CYCLESET_LENGTH] {
+        debug_assert!(
+            i < j,
+            "cycles_omitting_color_pair only valid for i < j (upper triangle), got i={}, j={}",
+            i,
+            j
+        );
+        &self.cycles_omitting_color_pair[i][j]
     }
 }
 
@@ -469,5 +503,41 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_cycles_omitting_color_pair_accessor() {
+        let cycles = CyclesArray::generate();
+        let memo = CyclesMemo::initialize(&cycles);
+
+        // Should work for upper triangle (i < j)
+        for i in 0..NCOLORS {
+            for j in (i + 1)..NCOLORS {
+                let _omitting = memo.get_cycles_omitting_color_pair(i, j);
+                // Just verify it doesn't panic
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "cycles_omitting_color_pair only valid for i < j")]
+    #[cfg(debug_assertions)]
+    fn test_cycles_omitting_color_pair_lower_triangle_panics() {
+        let cycles = CyclesArray::generate();
+        let memo = CyclesMemo::initialize(&cycles);
+
+        // Should panic in debug mode for lower triangle (i > j)
+        let _omitting = memo.get_cycles_omitting_color_pair(3, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "cycles_omitting_color_pair only valid for i < j")]
+    #[cfg(debug_assertions)]
+    fn test_cycles_omitting_color_pair_diagonal_panics() {
+        let cycles = CyclesArray::generate();
+        let memo = CyclesMemo::initialize(&cycles);
+
+        // Should panic in debug mode for diagonal (i == j)
+        let _omitting = memo.get_cycles_omitting_color_pair(2, 2);
     }
 }
