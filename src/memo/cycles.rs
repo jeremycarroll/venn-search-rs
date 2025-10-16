@@ -335,7 +335,6 @@ fn compute_cycles_omitting_one_color(cycles: &CyclesArray) -> [[u64; CYCLESET_LE
 /// Compute cycles omitting color pairs.
 ///
 /// For each color pair (i, j), find all cycles that do NOT contain edge i→j.
-#[allow(clippy::needless_range_loop)] // Upper triangular iteration needs actual j value
 fn compute_cycles_omitting_color_pair(
     cycles: &CyclesArray,
 ) -> [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS] {
@@ -346,7 +345,7 @@ fn compute_cycles_omitting_color_pair(
 
         // For each color pair (i, j), check if cycle contains edge i→j
         for (i, omitting_i) in omitting.iter_mut().enumerate() {
-            for j in (i + 1)..NCOLORS {
+            for (j, omitting_i_j) in omitting_i.iter_mut().enumerate().skip(i + 1) {
                 // Check if cycle contains edge i→j
                 let mut has_edge = false;
                 for idx in 0..cycle.len() {
@@ -362,7 +361,7 @@ fn compute_cycles_omitting_color_pair(
                 if !has_edge {
                     let word_idx = (cycle_id / 64) as usize;
                     let bit_idx = cycle_id % 64;
-                    omitting_i[j][word_idx] |= 1u64 << bit_idx;
+                    omitting_i_j[word_idx] |= 1u64 << bit_idx;
                 }
             }
         }
