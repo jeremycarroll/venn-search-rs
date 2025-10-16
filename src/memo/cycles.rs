@@ -194,8 +194,8 @@ fn generate_cycles_with_max_and_length(max_color: usize, length: usize, cycles: 
         }
 
         // Reset all positions to the right to max_color
-        for i in (pos + 1)..length {
-            current[i] = max_color as u8;
+        for item in current.iter_mut().skip(pos + 1).take(length - pos - 1) {
+            *item = max_color as u8;
         }
     }
 }
@@ -320,11 +320,11 @@ fn compute_cycles_omitting_one_color(cycles: &CyclesArray) -> [[u64; CYCLESET_LE
         let colorset = cycle.colorset();
 
         // For each color, if cycle doesn't contain it, add to omitting[color]
-        for color in 0..NCOLORS {
+        for (color, omitting_set) in omitting.iter_mut().enumerate() {
             if !colorset.contains(Color::new(color as u8)) {
                 let word_idx = (cycle_id / 64) as usize;
                 let bit_idx = cycle_id % 64;
-                omitting[color][word_idx] |= 1u64 << bit_idx;
+                omitting_set[word_idx] |= 1u64 << bit_idx;
             }
         }
     }
@@ -335,6 +335,7 @@ fn compute_cycles_omitting_one_color(cycles: &CyclesArray) -> [[u64; CYCLESET_LE
 /// Compute cycles omitting color pairs.
 ///
 /// For each color pair (i, j), find all cycles that do NOT contain edge i→j.
+#[allow(clippy::needless_range_loop)] // Upper triangular iteration needs actual j value
 fn compute_cycles_omitting_color_pair(
     cycles: &CyclesArray,
 ) -> [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS] {
@@ -344,7 +345,7 @@ fn compute_cycles_omitting_color_pair(
         let cycle = cycles.get(cycle_id);
 
         // For each color pair (i, j), check if cycle contains edge i→j
-        for i in 0..NCOLORS {
+        for (i, omitting_i) in omitting.iter_mut().enumerate() {
             for j in (i + 1)..NCOLORS {
                 // Check if cycle contains edge i→j
                 let mut has_edge = false;
@@ -361,7 +362,7 @@ fn compute_cycles_omitting_color_pair(
                 if !has_edge {
                     let word_idx = (cycle_id / 64) as usize;
                     let bit_idx = cycle_id % 64;
-                    omitting[i][j][word_idx] |= 1u64 << bit_idx;
+                    omitting_i[j][word_idx] |= 1u64 << bit_idx;
                 }
             }
         }
@@ -395,7 +396,6 @@ mod tests {
     fn test_cycles_non_empty() {
         let cycles = CyclesArray::generate();
         assert!(!cycles.is_empty());
-        assert!(cycles.len() > 0);
     }
 
     #[test]

@@ -21,6 +21,11 @@
 use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
 use crate::geometry::{Color, ColorSet, CycleSet, Face, FaceId};
 
+/// Type alias for face adjacency lookup tables.
+///
+/// Maps face_id → cycle_id → adjacent face (or None if invalid).
+type FaceAdjacencyTable = Vec<Vec<Option<FaceId>>>;
+
 /// MEMO data for all faces in the diagram.
 ///
 /// This structure is computed once during initialization and contains
@@ -75,7 +80,7 @@ pub struct FacesMemo {
     /// Returns None for invalid cycle/face combinations.
     ///
     /// **Heap-allocated** via Vec - NFACES × NCYCLES is too large for stack (64 × 394 ≈ 25 KB).
-    pub next_face_by_cycle: Vec<Vec<Option<FaceId>>>,
+    pub next_face_by_cycle: FaceAdjacencyTable,
 
     /// Previous face when traversing a cycle backward.
     ///
@@ -86,7 +91,7 @@ pub struct FacesMemo {
     /// Returns None for invalid cycle/face combinations.
     ///
     /// **Heap-allocated** via Vec - NFACES × NCYCLES is too large for stack (64 × 394 ≈ 25 KB).
-    pub previous_face_by_cycle: Vec<Vec<Option<FaceId>>>,
+    pub previous_face_by_cycle: FaceAdjacencyTable,
 }
 
 impl FacesMemo {
@@ -340,7 +345,7 @@ fn check_exactly_two_transitions(
 fn apply_monotonicity_constraints(
     faces: &mut [Face],
     cycles: &crate::memo::CyclesArray,
-) -> (Vec<Vec<Option<FaceId>>>, Vec<Vec<Option<FaceId>>>) {
+) -> (FaceAdjacencyTable, FaceAdjacencyTable) {
     let mut next_by_cycle = vec![vec![None; NCYCLES]; NFACES];
     let mut previous_by_cycle = vec![vec![None; NCYCLES]; NFACES];
 
