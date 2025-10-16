@@ -56,6 +56,19 @@ impl ColorSet {
         set
     }
 
+    /// Create a color set from a raw bit value.
+    ///
+    /// # Arguments
+    ///
+    /// * `bits` - The raw bitset value (u64)
+    ///
+    /// # Note
+    ///
+    /// This is useful when converting face IDs (which are bitmasks) to ColorSets.
+    pub const fn from_bits(bits: u64) -> Self {
+        Self(bits)
+    }
+
     /// Check if the set contains a specific color.
     pub fn contains(self, color: Color) -> bool {
         (self.0 >> color.value()) & 1 != 0

@@ -52,9 +52,16 @@ This is a Rust rewrite of the C implementation at ../venntriangles (tag: v1.1-pc
   - InitializePredicate skeleton (minimal, ready for Phase 6)
   - InnerFacePredicate finds 56 canonical degree signatures for NCOLORS=6 in 0.18s
   - Fixed critical engine backtracking bug (pop until finding choice point)
+- ✅ **Phase 6 Complete (Oct 15, 2025)**: MEMO Data Structures
+  - CyclesArray: Generate all 394 possible facial cycles for NCOLORS=6
+  - CyclesMemo: Precomputed lookup tables (pairs, triples, omitting)
+  - FacesMemo: Binomial coefficients, monotonicity constraints, face adjacency tables
+  - VerticesMemo: All 480 possible vertex configurations with primary/secondary colors
+  - Edge slot computation and vertex indexing (outside_face trick)
+  - ~230 KB total MEMO size (excellent for per-context copying)
+  - 132 tests passing
 
 **Next:**
-- ⬜ **Phase 6**: MEMO Data Structures (complex precomputed lookup tables, builder pattern)
 - ⬜ **Phase 7**: VennPredicate (main Venn diagram search - the critical phase)
 - ⬜ **Phase 8**: Testing & Validation (real searches, performance benchmarking)
 - ⬜ **Future**: Log, Save, Corners, GraphML predicates; PCO/Chirotope; CLI
@@ -141,23 +148,6 @@ Use newtypes and enums for type safety:
 - Cycles (sequences of edge colors)
 
 ## Next Phases
-
-### Phase 6: MEMO Data Structures
-
-**Goal**: Implement complex precomputed lookup tables.
-
-**Implementation checklist:**
-- [ ] MemoizedData structure with all precomputed tables
-  - [ ] Cycle constraint lookup tables (bitwise operations)
-  - [ ] Possible vertex configurations (480 entries for N=6)
-  - [ ] Edge adjacency constraints
-  - [ ] Vertex adjacency constraints
-- [ ] Builder pattern for initialization
-- [ ] Measure size of MemoizedData (choose copy vs. &'static)
-- [ ] Integration with SearchContext
-- [ ] Tests for all lookup operations
-
-**Reference files**: `c-reference/initialize.c`, `c-reference/face.h`, `c-reference/vertex.h`, `c-reference/edge.h`
 
 ### Phase 7: VennPredicate
 
