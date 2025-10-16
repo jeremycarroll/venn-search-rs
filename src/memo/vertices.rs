@@ -6,7 +6,7 @@
 //! cross in the Venn diagram.
 
 use crate::geometry::constants::{NCOLORS, NFACES, NPOINTS};
-use crate::geometry::Vertex;
+use crate::geometry::{Color, ColorSet, Vertex};
 
 /// MEMO data for all possible vertices in the diagram.
 ///
@@ -111,6 +111,121 @@ pub struct VerticesMemo {
     pub vertices: Box<[[[Option<Vertex>; NCOLORS]; NCOLORS]; NFACES]>,
 }
 
+/// Check if an edge is clockwise around its face.
+///
+/// An edge is clockwise if its color is a member of the face's color set.
+///
+/// # Arguments
+///
+/// * `edge_color` - The color of the edge
+/// * `face_colors` - The colors bounding the face
+///
+/// # Returns
+///
+/// True if the edge is clockwise, false otherwise.
+#[inline]
+fn is_edge_clockwise(edge_color: Color, face_colors: ColorSet) -> bool {
+    face_colors.contains(edge_color)
+}
+
+/// Compute which slot (0-3) an incoming edge occupies in a vertex.
+///
+/// The slot is determined by:
+/// - Whether the edge is clockwise or counterclockwise
+/// - Whether the other crossing color is inside or outside the face
+///
+/// # Slot Mapping
+///
+/// - Slot 0: Clockwise edge, other color inside face (primary clockwise)
+/// - Slot 1: Counterclockwise edge, other color outside face (primary counterclockwise)
+/// - Slot 2: Counterclockwise edge, other color inside face (secondary counterclockwise)
+/// - Slot 3: Clockwise edge, other color outside face (secondary clockwise)
+///
+/// See docs/DESIGN.md "Vertex Structure and Edge Organization" for details.
+///
+/// # Arguments
+///
+/// * `edge_color` - The color of the edge
+/// * `other_color` - The other color crossing at this vertex
+/// * `face_colors` - The colors bounding the face
+///
+/// # Returns
+///
+/// Slot index (0-3) for this edge in the vertex's incoming_edges array.
+fn compute_incoming_edge_slot(
+    edge_color: Color,
+    other_color: Color,
+    face_colors: ColorSet,
+) -> usize {
+    let is_clockwise = is_edge_clockwise(edge_color, face_colors);
+    let other_in_face = face_colors.contains(other_color);
+
+    if is_clockwise {
+        if other_in_face {
+            0 // Primary clockwise, other in face
+        } else {
+            3 // Secondary clockwise, other not in face
+        }
+    } else if other_in_face {
+        2 // Secondary counterclockwise, other in face
+    } else {
+        1 // Primary counterclockwise, other not in face
+    }
+}
+
+/// Determine primary and secondary colors from the incoming edge slot.
+///
+/// # Slot to Color Mapping
+///
+/// - Slots 0, 1: Primary = edge_color, Secondary = other_color
+/// - Slots 2, 3: Primary = other_color, Secondary = edge_color
+///
+/// # Arguments
+///
+/// * `slot` - The slot index (0-3)
+/// * `edge_color` - The color of the edge
+/// * `other_color` - The other color crossing at this vertex
+///
+/// # Returns
+///
+/// Tuple of (primary_color, secondary_color).
+fn determine_primary_secondary(
+    slot: usize,
+    edge_color: Color,
+    other_color: Color,
+) -> (Color, Color) {
+    match slot {
+        0 | 1 => (edge_color, other_color),
+        2 | 3 => (other_color, edge_color),
+        _ => unreachable!("Slot must be 0-3, got {}", slot),
+    }
+}
+
+/// Compute the "outside face" index for vertex indexing.
+///
+/// The outside face is the set of colors that are outside BOTH the primary
+/// and secondary curves. This is used as the first index in the 3D vertex array.
+///
+/// # Formula
+///
+/// outside_face = face_colors & ~(1 << primary) & ~(1 << secondary)
+///
+/// # Arguments
+///
+/// * `face_colors` - The colors bounding the current face
+/// * `primary` - The primary color crossing at the vertex
+/// * `secondary` - The secondary color crossing at the vertex
+///
+/// # Returns
+///
+/// Face ID (bitmask) of colors outside both crossing curves.
+fn compute_outside_face(face_colors: ColorSet, primary: Color, secondary: Color) -> usize {
+    let mut outside = face_colors;
+    outside.remove(primary);
+    outside.remove(secondary);
+    outside.bits() as usize
+}
+
 impl VerticesMemo {
     /// Initialize all vertex MEMO data.
     ///
@@ -118,10 +233,21 @@ impl VerticesMemo {
     ///
     /// # Algorithm
     ///
-    /// For each face, for each pair of colors (a, b):
-    /// 1. Check if colors a and b both bound this face
-    /// 2. If so, compute the 4 incoming edges at this vertex
-    /// 3. Set primary/secondary colors and crossing orientation
+    /// For each face (0..NFACES):
+    ///   For each color pair (edge_color, other_color) where edge_color ≠ other_color:
+    ///     1. Determine incoming edge slot (0-3) based on edge orientation and face membership
+    ///     2. Determine primary/secondary colors from slot
+    ///     3. Compute outside_face = colors outside BOTH primary and secondary
+    ///     4. Get or create vertex at vertices[outside_face][primary][secondary]
+    ///     5. Record this edge in the vertex's incoming_edges array
+    ///
+    /// This generates exactly NPOINTS = 2^(NCOLORS-2) × NCOLORS × (NCOLORS-1) vertices.
+    ///
+    /// # Note
+    ///
+    /// The incoming_edges array is set to placeholder EdgeIds (0) since edges don't
+    /// exist yet. Phase 7 (VennPredicate) will create the full edge infrastructure
+    /// and properly connect vertices to edges.
     pub fn initialize() -> Self {
         let total_slots = NFACES * NCOLORS * NCOLORS;
         eprintln!(
@@ -130,17 +256,65 @@ impl VerticesMemo {
         );
 
         // Allocate vertex array (Box to keep it on heap)
-        let vertices = Box::new([[[None; NCOLORS]; NCOLORS]; NFACES]);
+        let mut vertices = Box::new([[[None; NCOLORS]; NCOLORS]; NFACES]);
+        let mut vertex_id_counter = 0;
 
-        // TODO: Compute actual vertex configurations
-        // This requires:
-        // 1. Port initializeVertexIncomingEdge() logic
-        // 2. Determine which 4 edges meet at each vertex
-        // 3. Set primary/secondary colors
-        //
-        // For now, just return empty array
+        eprintln!("[VerticesMemo] Computing vertex configurations...");
 
-        eprintln!("[VerticesMemo] WARNING: Vertex computation not yet implemented (TODO)");
+        // Iterate through all (face, edge_color, other_color) combinations
+        for face_id in 0..NFACES {
+            // Convert face ID to ColorSet (face ID is a bitmask of colors)
+            let face_colors = ColorSet::from_bits(face_id as u64);
+
+            for edge_color_val in 0..NCOLORS {
+                let edge_color = Color::new(edge_color_val as u8);
+
+                for other_color_val in 0..NCOLORS {
+                    if other_color_val == edge_color_val {
+                        continue; // Skip when edge_color == other_color
+                    }
+                    let other_color = Color::new(other_color_val as u8);
+
+                    // Compute vertex parameters using helper functions
+                    let _slot = compute_incoming_edge_slot(edge_color, other_color, face_colors);
+                    let (primary, secondary) =
+                        determine_primary_secondary(_slot, edge_color, other_color);
+                    let outside_face = compute_outside_face(face_colors, primary, secondary);
+
+                    // Get or create vertex at [outside_face][primary][secondary]
+                    let primary_idx = primary.value() as usize;
+                    let secondary_idx = secondary.value() as usize;
+
+                    if vertices[outside_face][primary_idx][secondary_idx].is_none() {
+                        // Create new vertex
+                        let vertex = Vertex::new(
+                            vertex_id_counter,
+                            primary,
+                            secondary,
+                            [0, 0, 0, 0], // Placeholder EdgeIds - will be set in Phase 7
+                        );
+
+                        vertices[outside_face][primary_idx][secondary_idx] = Some(vertex);
+                        vertex_id_counter += 1;
+                    }
+
+                    // Note: In the C code, we would also set incoming_edges[slot] here.
+                    // In Rust, we skip this for now since EdgeIds don't exist yet.
+                    // Phase 7 will properly connect vertices to edges.
+                }
+            }
+        }
+
+        assert_eq!(
+            vertex_id_counter, NPOINTS,
+            "Expected {} vertices, generated {}",
+            NPOINTS, vertex_id_counter
+        );
+
+        eprintln!(
+            "[VerticesMemo] Generated {} vertices (21% utilization of {} slots).",
+            vertex_id_counter, total_slots
+        );
 
         Self { vertices }
     }
@@ -167,6 +341,101 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_is_edge_clockwise() {
+        let color_a = Color::new(0);
+        let color_b = Color::new(1);
+
+        // Edge with color 'a' on face {a, b} is clockwise
+        let face_ab = ColorSet::from_colors(&[color_a, color_b]);
+        assert!(is_edge_clockwise(color_a, face_ab));
+
+        // Edge with color 'a' on face {b} is not clockwise (edge is outside)
+        let face_b = ColorSet::from_colors(&[color_b]);
+        assert!(!is_edge_clockwise(color_a, face_b));
+    }
+
+    #[test]
+    fn test_compute_incoming_edge_slot() {
+        let edge_color = Color::new(0);
+        let other_color = Color::new(1);
+
+        // Case 1: Clockwise edge, other in face → Slot 0
+        let face1 = ColorSet::from_colors(&[edge_color, other_color]);
+        assert_eq!(
+            compute_incoming_edge_slot(edge_color, other_color, face1),
+            0
+        );
+
+        // Case 2: Counterclockwise edge, other not in face → Slot 1
+        let face2 = ColorSet::from_colors(&[Color::new(2)]);
+        assert_eq!(
+            compute_incoming_edge_slot(edge_color, other_color, face2),
+            1
+        );
+
+        // Case 3: Counterclockwise edge, other in face → Slot 2
+        let face3 = ColorSet::from_colors(&[other_color]);
+        assert_eq!(
+            compute_incoming_edge_slot(edge_color, other_color, face3),
+            2
+        );
+
+        // Case 4: Clockwise edge, other not in face → Slot 3
+        let face4 = ColorSet::from_colors(&[edge_color]);
+        assert_eq!(
+            compute_incoming_edge_slot(edge_color, other_color, face4),
+            3
+        );
+    }
+
+    #[test]
+    fn test_determine_primary_secondary() {
+        let edge_color = Color::new(0);
+        let other_color = Color::new(1);
+
+        // Slots 0, 1: Primary = edge_color, Secondary = other_color
+        assert_eq!(
+            determine_primary_secondary(0, edge_color, other_color),
+            (edge_color, other_color)
+        );
+        assert_eq!(
+            determine_primary_secondary(1, edge_color, other_color),
+            (edge_color, other_color)
+        );
+
+        // Slots 2, 3: Primary = other_color, Secondary = edge_color
+        assert_eq!(
+            determine_primary_secondary(2, edge_color, other_color),
+            (other_color, edge_color)
+        );
+        assert_eq!(
+            determine_primary_secondary(3, edge_color, other_color),
+            (other_color, edge_color)
+        );
+    }
+
+    #[test]
+    fn test_compute_outside_face() {
+        let primary = Color::new(0);
+        let secondary = Color::new(1);
+
+        // Face {0, 1, 2} → outside = {2} = 0b100 = 4
+        let face_012 = ColorSet::from_colors(&[Color::new(0), Color::new(1), Color::new(2)]);
+        assert_eq!(compute_outside_face(face_012, primary, secondary), 0b100);
+
+        // Face {0, 1} → outside = {} = 0b000 = 0
+        let face_01 = ColorSet::from_colors(&[primary, secondary]);
+        assert_eq!(compute_outside_face(face_01, primary, secondary), 0);
+
+        // Face {2, 3} → outside = {2, 3} = 0b1100 = 12 (only for NCOLORS >= 4)
+        #[cfg(not(feature = "ncolors_3"))]
+        {
+            let face_23 = ColorSet::from_colors(&[Color::new(2), Color::new(3)]);
+            assert_eq!(compute_outside_face(face_23, primary, secondary), 0b1100);
+        }
+    }
+
+    #[test]
     fn test_vertices_memo_initialization() {
         let memo = VerticesMemo::initialize();
 
@@ -177,10 +446,109 @@ mod tests {
     }
 
     #[test]
-    fn test_get_vertex_out_of_bounds() {
+    fn test_vertex_count() {
         let memo = VerticesMemo::initialize();
 
-        // Should return None for most vertices (since we haven't computed them yet)
-        assert_eq!(memo.get_vertex(0, 0, 1), None);
+        // Count how many vertices were actually generated
+        let mut count = 0;
+        for face in 0..NFACES {
+            for color_a in 0..NCOLORS {
+                for color_b in 0..NCOLORS {
+                    if memo.vertices[face][color_a][color_b].is_some() {
+                        count += 1;
+                    }
+                }
+            }
+        }
+
+        // Should generate exactly NPOINTS vertices
+        assert_eq!(count, NPOINTS);
+
+        // Verify specific counts for each NCOLORS
+        match NCOLORS {
+            3 => assert_eq!(count, 12),  // 2 * 3 * 2
+            4 => assert_eq!(count, 48),  // 4 * 4 * 3
+            5 => assert_eq!(count, 160), // 8 * 5 * 4
+            6 => assert_eq!(count, 480), // 16 * 6 * 5
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn test_no_diagonal_vertices() {
+        let memo = VerticesMemo::initialize();
+
+        // Vertices on the diagonal (primary == secondary) should not exist
+        for face in 0..NFACES {
+            for color in 0..NCOLORS {
+                assert!(
+                    memo.vertices[face][color][color].is_none(),
+                    "Unexpected vertex at [{}][{}][{}]",
+                    face,
+                    color,
+                    color
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_vertex_lookups() {
+        let memo = VerticesMemo::initialize();
+
+        // Test that we can retrieve vertices
+        let mut found_at_least_one = false;
+        for face in 0..NFACES {
+            for color_a in 0..NCOLORS {
+                for color_b in 0..NCOLORS {
+                    if let Some(vertex) = memo.get_vertex(face, color_a, color_b) {
+                        found_at_least_one = true;
+
+                        // Verify vertex has correct primary/secondary
+                        assert_eq!(vertex.primary.value() as usize, color_a);
+                        assert_eq!(vertex.secondary.value() as usize, color_b);
+
+                        // Verify vertex has both colors in its colorset
+                        assert!(vertex.colors.contains(vertex.primary));
+                        assert!(vertex.colors.contains(vertex.secondary));
+                    }
+                }
+            }
+        }
+
+        assert!(found_at_least_one, "Should have found at least one vertex");
+    }
+
+    #[test]
+    fn test_vertex_ids_unique() {
+        let memo = VerticesMemo::initialize();
+
+        // Collect all vertex IDs
+        let mut ids = Vec::new();
+        for face in 0..NFACES {
+            for color_a in 0..NCOLORS {
+                for color_b in 0..NCOLORS {
+                    if let Some(vertex) = memo.get_vertex(face, color_a, color_b) {
+                        ids.push(vertex.id);
+                    }
+                }
+            }
+        }
+
+        // All IDs should be unique
+        ids.sort();
+        for i in 1..ids.len() {
+            assert_ne!(ids[i - 1], ids[i], "Found duplicate vertex ID: {}", ids[i]);
+        }
+
+        // IDs should be sequential from 0 to NPOINTS-1
+        assert_eq!(ids.len(), NPOINTS);
+        for (i, &id) in ids.iter().enumerate() {
+            assert_eq!(
+                id, i,
+                "Expected vertex ID {}, found {} at position {}",
+                i, id, i
+            );
+        }
     }
 }
