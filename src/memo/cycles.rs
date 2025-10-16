@@ -71,12 +71,19 @@ pub struct CyclesMemo {
     /// Used to constrain faces that don't include certain curves.
     pub cycles_omitting_one_color: [[u64; CYCLESET_LENGTH]; NCOLORS],
 
-    /// Cycles NOT containing edge (i → j).
+    /// Cycles NOT containing directed edge (i → j) for unordered color pairs.
     ///
-    /// `cycles_omitting_color_pair[i][j]` is a CycleSet of all cycles that do not contain
-    /// the directed edge from color i to color j.
+    /// **IMPORTANT**: Only upper triangle (i < j) is populated and accessed.
     ///
-    /// Used for negative constraints during search.
+    /// `cycles_omitting_color_pair[i][j]` where i < j contains all cycles that do NOT
+    /// contain the directed edge from color i to color j.
+    ///
+    /// **Design note**: Although this checks DIRECTED edges (i→j distinct from j→i),
+    /// only the upper triangle is used. The search algorithm (venn.c:98-109) iterates
+    /// `for i < j` and only accesses `[i][j]` entries. The lower triangle ([j][i] for j > i)
+    /// is never populated or accessed, and attempting to access it is a bug.
+    ///
+    /// Used for negative constraints during search to restrict non-vertex-adjacent faces.
     pub cycles_omitting_color_pair: [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
 }
 
@@ -332,9 +339,16 @@ fn compute_cycles_omitting_one_color(cycles: &CyclesArray) -> [[u64; CYCLESET_LE
     omitting
 }
 
-/// Compute cycles omitting color pairs.
+/// Compute cycles omitting color pairs (upper triangle only).
 ///
-/// For each color pair (i, j), find all cycles that do NOT contain edge i→j.
+/// For each unordered color pair (i, j) where i < j, finds all cycles that do NOT
+/// contain the DIRECTED edge from color i to color j.
+///
+/// **IMPORTANT**: Only populates upper triangle (i < j). The lower triangle is left
+/// as zeros and should never be accessed - that would be a bug in the search logic.
+///
+/// Matches C implementation in cycleset.c:initializeOmittingColorPairs() which also
+/// only populates the upper triangle.
 fn compute_cycles_omitting_color_pair(
     cycles: &CyclesArray,
 ) -> [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS] {
@@ -343,10 +357,11 @@ fn compute_cycles_omitting_color_pair(
     for cycle_id in 0..cycles.len() as u64 {
         let cycle = cycles.get(cycle_id);
 
-        // For each color pair (i, j), check if cycle contains edge i→j
+        // Only iterate upper triangle (i < j), matching C code behavior
         for (i, omitting_i) in omitting.iter_mut().enumerate() {
             for (j, omitting_i_j) in omitting_i.iter_mut().enumerate().skip(i + 1) {
-                // Check if cycle contains edge i→j
+                // Check if cycle contains the DIRECTED edge i→j
+                // (Note: i→j is different from j→i, but we only check i→j where i < j)
                 let mut has_edge = false;
                 for idx in 0..cycle.len() {
                     let next_idx = (idx + 1) % cycle.len();
@@ -367,6 +382,7 @@ fn compute_cycles_omitting_color_pair(
         }
     }
 
+    // Lower triangle (j < i) is left as zeros - never populated, never accessed
     omitting
 }
 
