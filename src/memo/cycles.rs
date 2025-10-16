@@ -194,7 +194,7 @@ fn generate_cycles_with_max_and_length(max_color: usize, length: usize, cycles: 
         }
 
         // Reset all positions to the right to max_color
-        for item in current.iter_mut().skip(pos + 1).take(length - pos - 1) {
+        for item in current[(pos + 1)..length].iter_mut() {
             *item = max_color as u8;
         }
     }
