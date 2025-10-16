@@ -276,8 +276,7 @@ impl VerticesMemo {
                     let other_color = Color::new(other_color_val as u8);
 
                     // Compute vertex parameters using helper functions
-                    let _slot =
-                        compute_incoming_edge_slot(edge_color, other_color, face_colors);
+                    let _slot = compute_incoming_edge_slot(edge_color, other_color, face_colors);
                     let (primary, secondary) =
                         determine_primary_secondary(_slot, edge_color, other_color);
                     let outside_face = compute_outside_face(face_colors, primary, secondary);
@@ -428,9 +427,12 @@ mod tests {
         let face_01 = ColorSet::from_colors(&[primary, secondary]);
         assert_eq!(compute_outside_face(face_01, primary, secondary), 0);
 
-        // Face {2, 3} → outside = {2, 3} = 0b1100 = 12
-        let face_23 = ColorSet::from_colors(&[Color::new(2), Color::new(3)]);
-        assert_eq!(compute_outside_face(face_23, primary, secondary), 0b1100);
+        // Face {2, 3} → outside = {2, 3} = 0b1100 = 12 (only for NCOLORS >= 4)
+        #[cfg(not(feature = "ncolors_3"))]
+        {
+            let face_23 = ColorSet::from_colors(&[Color::new(2), Color::new(3)]);
+            assert_eq!(compute_outside_face(face_23, primary, secondary), 0b1100);
+        }
     }
 
     #[test]
@@ -464,8 +466,8 @@ mod tests {
 
         // Verify specific counts for each NCOLORS
         match NCOLORS {
-            3 => assert_eq!(count, 12), // 2 * 3 * 2
-            4 => assert_eq!(count, 48), // 4 * 4 * 3
+            3 => assert_eq!(count, 12),  // 2 * 3 * 2
+            4 => assert_eq!(count, 48),  // 4 * 4 * 3
             5 => assert_eq!(count, 160), // 8 * 5 * 4
             6 => assert_eq!(count, 480), // 16 * 6 * 5
             _ => unreachable!(),
@@ -536,12 +538,7 @@ mod tests {
         // All IDs should be unique
         ids.sort();
         for i in 1..ids.len() {
-            assert_ne!(
-                ids[i - 1],
-                ids[i],
-                "Found duplicate vertex ID: {}",
-                ids[i]
-            );
+            assert_ne!(ids[i - 1], ids[i], "Found duplicate vertex ID: {}", ids[i]);
         }
 
         // IDs should be sequential from 0 to NPOINTS-1
