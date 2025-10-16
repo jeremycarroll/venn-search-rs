@@ -7,9 +7,24 @@
 //! - Face adjacency tables
 //! - Cycle-to-face relationship lookups (next/previous by cycle ID)
 //! - Monotonicity constraints
+//!
+//! # Monotonicity and Convex Curves
+//!
+//! This implementation searches for **monotone Venn diagrams**, which can be drawn
+//! with convex curves. Triangles are convex, so any diagram drawable with triangles
+//! must be monotone.
+//!
+//! A monotone diagram has the property that each facial cycle crosses each curve
+//! at most once. This constraint eliminates many invalid configurations and is
+//! enforced during MEMO initialization by filtering out non-monotone cycles.
 
-use crate::geometry::constants::{NCOLORS, NFACES};
+use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
 use crate::geometry::{Color, ColorSet, CycleSet, Face, FaceId};
+
+/// Type alias for face adjacency lookup tables.
+///
+/// Maps face_id → cycle_id → adjacent face (or None if invalid).
+type FaceAdjacencyTable = Vec<Vec<Option<FaceId>>>;
 
 /// MEMO data for all faces in the diagram.
 ///
@@ -26,6 +41,7 @@ use crate::geometry::{Color, ColorSet, CycleSet, Face, FaceId};
 /// - `face_degree_by_color_count`: **Stack-allocated** array (7 elements for NCOLORS=6)
 ///   - Reason: Small fixed-size array (NCOLORS+1 elements); efficient on stack
 ///   - Size: 7 × 8 bytes = 56 bytes
+///
 #[derive(Debug, Clone)]
 pub struct FacesMemo {
     /// All faces in the diagram (NFACES = 2^NCOLORS faces).
@@ -54,6 +70,28 @@ pub struct FacesMemo {
     ///
     /// **Stack-allocated** array - small and fixed size (NCOLORS+1 ≤ 7 elements).
     pub face_degree_by_color_count: [u64; NCOLORS + 1],
+
+    /// Next face when traversing a cycle.
+    ///
+    /// `next_face_by_cycle[face_id][cycle_id]` gives the face you reach by traversing
+    /// cycle_id forward from face_id.
+    ///
+    /// Only valid for cycles that are valid for the face (monotone property satisfied).
+    /// Returns None for invalid cycle/face combinations.
+    ///
+    /// **Heap-allocated** via Vec - NFACES × NCYCLES is too large for stack (64 × 394 ≈ 25 KB).
+    pub next_face_by_cycle: FaceAdjacencyTable,
+
+    /// Previous face when traversing a cycle backward.
+    ///
+    /// `previous_face_by_cycle[face_id][cycle_id]` gives the face you came from when
+    /// traversing cycle_id backward to face_id.
+    ///
+    /// Only valid for cycles that are valid for the face (monotone property satisfied).
+    /// Returns None for invalid cycle/face combinations.
+    ///
+    /// **Heap-allocated** via Vec - NFACES × NCYCLES is too large for stack (64 × 394 ≈ 25 KB).
+    pub previous_face_by_cycle: FaceAdjacencyTable,
 }
 
 impl FacesMemo {
@@ -65,7 +103,11 @@ impl FacesMemo {
     /// 3. Face adjacency relationships
     /// 4. Monotonicity constraints (which cycles are valid for which faces)
     /// 5. Next/previous face lookups by cycle ID
-    pub fn initialize() -> Self {
+    ///
+    /// # Arguments
+    ///
+    /// * `cycles` - The global array of all possible cycles
+    pub fn initialize(cycles: &crate::memo::CyclesArray) -> Self {
         eprintln!("[FacesMemo] Computing binomial coefficients...");
         let face_degree_by_color_count = compute_binomial_coefficients();
 
@@ -76,13 +118,16 @@ impl FacesMemo {
         }
 
         eprintln!("[FacesMemo] Applying monotonicity constraints...");
-        apply_monotonicity_constraints(&mut faces);
+        let (next_face_by_cycle, previous_face_by_cycle) =
+            apply_monotonicity_constraints(&mut faces, cycles);
 
         eprintln!("[FacesMemo] Initialization complete.");
 
         Self {
             faces,
             face_degree_by_color_count,
+            next_face_by_cycle,
+            previous_face_by_cycle,
         }
     }
 
@@ -148,6 +193,122 @@ fn create_face(face_id: FaceId) -> Face {
     Face::new(face_id, colors, possible_cycles)
 }
 
+/// Check if a cycle is valid for a face.
+///
+/// A cycle is valid if it has some colors inside the face and some colors outside.
+/// This ensures the cycle actually crosses the face boundary.
+fn is_cycle_valid_for_face(cycle_colors: ColorSet, face_colors: ColorSet) -> bool {
+    let inside = cycle_colors.bits() & face_colors.bits();
+    let outside = cycle_colors.bits() & !face_colors.bits();
+
+    inside != 0 && outside != 0
+}
+
+/// Check if an edge transition occurs between two consecutive colors in a cycle.
+///
+/// An edge transition occurs when one color is inside the face and the other is outside.
+/// Returns true if a transition occurs, and updates next_face or previous_face accordingly.
+///
+/// # Arguments
+///
+/// * `color1` - First color in the edge
+/// * `color2` - Second color in the edge
+/// * `face_colors` - The colorset of the current face
+/// * `previous_face` - Output: face we came from (if color1 is outside)
+/// * `next_face` - Output: face we're going to (if color1 is inside)
+fn check_edge_transition(
+    color1: Color,
+    color2: Color,
+    face_colors: ColorSet,
+    previous_face: &mut Option<FaceId>,
+    next_face: &mut Option<FaceId>,
+) -> bool {
+    let color1_inside = face_colors.contains(color1);
+    let color2_inside = face_colors.contains(color2);
+
+    // No transition if both colors have same status
+    if color1_inside == color2_inside {
+        return false;
+    }
+
+    // Compute the XOR to get the adjacent face
+    let color1_bit = 1u64 << color1.value();
+    let color2_bit = 1u64 << color2.value();
+    let xor_mask = color1_bit | color2_bit;
+    let adjacent_face = (face_colors.bits() ^ xor_mask) as usize;
+
+    if color1_inside {
+        // Outbound transition: color1 is in, color2 is out
+        if next_face.is_none() {
+            *next_face = Some(adjacent_face);
+        }
+    } else {
+        // Inbound transition: color1 is out, color2 is in
+        if previous_face.is_none() {
+            *previous_face = Some(adjacent_face);
+        }
+    }
+
+    true
+}
+
+/// Check if a cycle has exactly two edge transitions.
+///
+/// A monotone cycle must cross the face boundary exactly twice:
+/// once entering and once exiting.
+///
+/// # Returns
+///
+/// Returns Some((previous_face, next_face)) if exactly two transitions found,
+/// None otherwise.
+fn check_exactly_two_transitions(
+    cycle: &crate::geometry::Cycle,
+    face_colors: ColorSet,
+) -> Option<(FaceId, FaceId)> {
+    let mut transition_count = 0;
+    let mut previous_face = None;
+    let mut next_face = None;
+
+    let colors = cycle.colors();
+    let len = cycle.len();
+
+    // Check wrap-around edge (last to first)
+    if check_edge_transition(
+        colors[len - 1],
+        colors[0],
+        face_colors,
+        &mut previous_face,
+        &mut next_face,
+    ) {
+        transition_count += 1;
+    }
+
+    // Check all consecutive edges
+    for i in 1..len {
+        if check_edge_transition(
+            colors[i - 1],
+            colors[i],
+            face_colors,
+            &mut previous_face,
+            &mut next_face,
+        ) {
+            transition_count += 1;
+
+            // Early exit if we find too many transitions
+            if transition_count > 2 {
+                return None;
+            }
+        }
+    }
+
+    if transition_count == 2 {
+        // Invariant: transition_count == 2 guarantees both faces are set
+        Some((previous_face.unwrap(), next_face.unwrap()))
+    } else {
+        None
+    }
+}
+
 /// Apply monotonicity constraints to filter invalid cycles.
 ///
 /// For each face, for each cycle:
@@ -155,31 +316,89 @@ fn create_face(face_id: FaceId) -> Face {
 /// 2. If valid, compute next/previous faces for this cycle
 /// 3. If invalid, remove from possible_cycles
 ///
-/// # Monotonicity
+/// # Monotonicity and Convex Curves
 ///
-/// A monotone Venn diagram has the property that each facial cycle
-/// crosses each curve at most once. This means:
+/// This constraint is fundamental to drawing Venn diagrams with **convex curves**.
+/// Since **triangles are convex**, any diagram drawable with triangles must be monotone.
+///
+/// A monotone Venn diagram has the property that each facial cycle crosses each curve
+/// at most once. This means:
 /// - A cycle for face {a,b,c} must have colors from {a,b,c}
 /// - The cycle must have exactly 2 edge transitions (in/out of face)
 /// - The next and previous faces are determined by which edges transition
 ///
-/// # TODO
+/// Non-monotone diagrams (where cycles can cross curves multiple times) cannot be
+/// drawn with convex curves and are excluded from this search
 ///
-/// This is a complex function that needs:
-/// - Access to cycle data (port from geometry module)
-/// - Edge transition detection logic
-/// - Next/previous face computation
+/// # Special Cases
 ///
-/// For now, this is a skeleton that will be filled in Phase 6.
-fn apply_monotonicity_constraints(_faces: &mut [Face]) {
-    // TODO: Implement monotonicity constraint filtering
-    // This requires:
-    // 1. Check cycle colors match face colors
-    // 2. Validate cycle has exactly two edge transitions (monotone property)
-    // 3. Compute next/previous faces for each valid cycle
-    // 4. Remove invalid cycles from possible_cycles
+/// - **Outer face (0)**: Can only have cycles of length NCOLORS (full 6-cycles)
+///   - Monotonicity requires the outer boundary to cross each curve exactly once
+/// - **Inner face (NFACES-1)**: Can only have cycles of length NCOLORS (full 6-cycles)
+///   - Monotonicity requires the inner boundary to cross each curve exactly once
+///   - (Non-monotone diagrams can have 4- or 5-cycles, but not with convex curves)
+///   - The inner face will later be assigned the canonical cycle (0,1,2,3,4,5)
+///     for symmetry breaking (done during search, not here)
+///
+/// # Returns
+///
+/// Returns (next_face_by_cycle, previous_face_by_cycle) lookup tables.
+fn apply_monotonicity_constraints(
+    faces: &mut [Face],
+    cycles: &crate::memo::CyclesArray,
+) -> (FaceAdjacencyTable, FaceAdjacencyTable) {
+    let mut next_by_cycle = vec![vec![None; NCYCLES]; NFACES];
+    let mut previous_by_cycle = vec![vec![None; NCYCLES]; NFACES];
 
-    eprintln!("[FacesMemo] WARNING: Monotonicity constraints not yet implemented (TODO)");
+    // Handle regular faces (not outer or inner)
+    for face_id in 1..(NFACES - 1) {
+        let face = &mut faces[face_id];
+        let face_colors = face.colors;
+
+        for cycle_id in 0..NCYCLES {
+            let cycle = cycles.get(cycle_id as u64);
+            let cycle_colors = cycle.colorset();
+
+            // Check if cycle is valid for this face
+            if !is_cycle_valid_for_face(cycle_colors, face_colors) {
+                face.possible_cycles.remove(cycle_id as u64);
+                continue;
+            }
+
+            // Check for exactly two edge transitions
+            if let Some((prev_face, next_face)) = check_exactly_two_transitions(cycle, face_colors)
+            {
+                // Valid monotone cycle - record adjacency
+                next_by_cycle[face_id][cycle_id] = Some(next_face);
+                previous_by_cycle[face_id][cycle_id] = Some(prev_face);
+            } else {
+                // Invalid - remove from possible cycles
+                face.possible_cycles.remove(cycle_id as u64);
+            }
+        }
+    }
+
+    // Handle outer face (0): Can only have full NCOLORS-cycles
+    filter_cycles_by_length(&mut faces[0], cycles, NCOLORS);
+
+    // Handle inner face (NFACES-1): Can only have full NCOLORS-cycles
+    // The inner face will be assigned cycle (0,1,2,3,4,5) during search for symmetry breaking
+    filter_cycles_by_length(&mut faces[NFACES - 1], cycles, NCOLORS);
+
+    (next_by_cycle, previous_by_cycle)
+}
+
+/// Filter a face to only allow cycles of a specific length.
+///
+/// This is used for the outer and inner faces, which can only have
+/// cycles that use all NCOLORS colors.
+fn filter_cycles_by_length(face: &mut Face, cycles: &crate::memo::CyclesArray, length: usize) {
+    for cycle_id in 0..NCYCLES {
+        let cycle = cycles.get(cycle_id as u64);
+        if cycle.len() != length {
+            face.possible_cycles.remove(cycle_id as u64);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -247,7 +466,8 @@ mod tests {
 
     #[test]
     fn test_faces_memo_initialization() {
-        let memo = FacesMemo::initialize();
+        let cycles = crate::memo::CyclesArray::generate();
+        let memo = FacesMemo::initialize(&cycles);
 
         // Should create exactly NFACES faces
         assert_eq!(memo.faces.len(), NFACES);
@@ -263,5 +483,51 @@ mod tests {
         // Binomial coefficients should be computed
         assert_eq!(memo.face_degree_by_color_count[0], 1);
         assert_eq!(memo.face_degree_by_color_count[NCOLORS], 1);
+    }
+
+    #[test]
+    fn test_outer_and_inner_face_cycle_constraints() {
+        let cycles = crate::memo::CyclesArray::generate();
+        let memo = FacesMemo::initialize(&cycles);
+
+        // Outer face (0) can only have NCOLORS-length cycles
+        let outer = memo.get_face(0);
+        for cycle_id in 0..NCYCLES as u64 {
+            let cycle = cycles.get(cycle_id);
+            if outer.possible_cycles.contains(cycle_id) {
+                assert_eq!(
+                    cycle.len(),
+                    NCOLORS,
+                    "Outer face cycle {} has wrong length {}",
+                    cycle_id,
+                    cycle.len()
+                );
+            }
+        }
+
+        // Inner face (NFACES-1) can only have NCOLORS-length cycles
+        let inner = memo.get_face(NFACES - 1);
+        for cycle_id in 0..NCYCLES as u64 {
+            let cycle = cycles.get(cycle_id);
+            if inner.possible_cycles.contains(cycle_id) {
+                assert_eq!(
+                    cycle.len(),
+                    NCOLORS,
+                    "Inner face cycle {} has wrong length {}",
+                    cycle_id,
+                    cycle.len()
+                );
+            }
+        }
+
+        // Both should have at least one possible cycle
+        assert!(
+            !outer.possible_cycles.is_empty(),
+            "Outer face has no possible cycles"
+        );
+        assert!(
+            !inner.possible_cycles.is_empty(),
+            "Inner face has no possible cycles"
+        );
     }
 }
