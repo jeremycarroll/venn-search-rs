@@ -155,8 +155,8 @@ mod tests {
 
         // Create dummy adjacent faces (face XOR (1 << i))
         let mut adjacent_faces = [0; NCOLORS];
-        for i in 0..NCOLORS {
-            adjacent_faces[i] = id ^ (1 << i);
+        for (i, item) in adjacent_faces.iter_mut().enumerate().take(NCOLORS) {
+            *item = id ^ (1 << i);
         }
 
         Face::new(id, colors, possible_cycles, edges, adjacent_faces)

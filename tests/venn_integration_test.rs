@@ -5,26 +5,34 @@
 //! These tests verify that the VennPredicate correctly finds all valid Venn diagrams
 //! for different NCOLORS values, matching the expected solution counts from the C reference.
 
+#[cfg(any(feature = "ncolors_3", feature = "ncolors_4"))]
 use std::cell::RefCell;
+#[cfg(any(feature = "ncolors_3", feature = "ncolors_4"))]
 use std::rc::Rc;
+#[cfg(any(feature = "ncolors_3", feature = "ncolors_4"))]
 use venn_search::context::SearchContext;
+#[cfg(any(feature = "ncolors_3", feature = "ncolors_4"))]
 use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
+#[cfg(any(feature = "ncolors_3", feature = "ncolors_4"))]
 use venn_search::predicates::{
     FailPredicate, InitializePredicate, InnerFacePredicate, VennPredicate,
 };
 
 /// Simple counter predicate that increments on each solution.
+#[cfg(any(feature = "ncolors_3", feature = "ncolors_4"))]
 #[derive(Clone)]
 struct CounterPredicate {
     count: Rc<RefCell<usize>>,
 }
 
+#[cfg(any(feature = "ncolors_3", feature = "ncolors_4"))]
 impl CounterPredicate {
     fn new(count: Rc<RefCell<usize>>) -> Self {
         Self { count }
     }
 }
 
+#[cfg(any(feature = "ncolors_3", feature = "ncolors_4"))]
 impl Predicate for CounterPredicate {
     fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
         *self.count.borrow_mut() += 1;
