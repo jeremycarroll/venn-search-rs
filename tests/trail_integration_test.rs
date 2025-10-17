@@ -132,42 +132,62 @@ fn test_trail_freeze() {
 
 #[test]
 fn test_array_operations() {
+    use venn_search::geometry::constants::NCOLORS;
+
     let mut ctx = SearchContext::new();
 
     let checkpoint = ctx.trail.checkpoint();
-    ctx.set_face_degree(0, 10);
-    ctx.set_face_degree(3, 50);
-    ctx.set_face_degree(5, 90);
 
+    // Set face degree 0
+    ctx.set_face_degree(0, 10);
+
+    // Set middle face degree (if NCOLORS >= 4)
+    let middle_idx = NCOLORS / 2;
+    if NCOLORS >= 4 {
+        ctx.set_face_degree(middle_idx, 50);
+    }
+
+    // Set last face degree
+    ctx.set_face_degree(NCOLORS - 1, 90);
+
+    // Verify values
     assert_eq!(ctx.get_face_degree(0), 10);
-    assert_eq!(ctx.get_face_degree(3), 50);
-    assert_eq!(ctx.get_face_degree(5), 90);
-    assert_eq!(ctx.trail.len(), 3);
+    if NCOLORS >= 4 {
+        assert_eq!(ctx.get_face_degree(middle_idx), 50);
+    }
+    assert_eq!(ctx.get_face_degree(NCOLORS - 1), 90);
+
+    let expected_trail_len = if NCOLORS >= 4 { 3 } else { 2 };
+    assert_eq!(ctx.trail.len(), expected_trail_len);
 
     // Rewind restores all array elements
     ctx.trail.rewind_to(checkpoint);
     assert_eq!(ctx.get_face_degree(0), 0);
-    assert_eq!(ctx.get_face_degree(3), 0);
-    assert_eq!(ctx.get_face_degree(5), 0);
+    if NCOLORS >= 4 {
+        assert_eq!(ctx.get_face_degree(middle_idx), 0);
+    }
+    assert_eq!(ctx.get_face_degree(NCOLORS - 1), 0);
 }
 
 #[test]
 fn test_deep_nesting() {
+    use venn_search::geometry::constants::NCOLORS;
+
     let mut ctx = SearchContext::new();
 
-    // Create 6 nested checkpoints (one for each face degree)
+    // Create NCOLORS nested checkpoints (one for each face degree)
     let mut checkpoints = Vec::new();
-    for i in 0..6 {
+    for i in 0..NCOLORS {
         let cp = ctx.trail.checkpoint();
         checkpoints.push(cp);
         ctx.set_face_degree(i, (i + 1) as u64 * 10);
     }
 
-    assert_eq!(ctx.get_face_degree(5), 60);
-    assert_eq!(ctx.trail.len(), 6);
+    assert_eq!(ctx.get_face_degree(NCOLORS - 1), NCOLORS as u64 * 10);
+    assert_eq!(ctx.trail.len(), NCOLORS);
 
     // Rewind all the way back
-    for i in (0..6).rev() {
+    for i in (0..NCOLORS).rev() {
         ctx.trail.rewind_to(checkpoints[i]);
         if i > 0 {
             assert_eq!(ctx.get_face_degree(i - 1), i as u64 * 10);
