@@ -6,88 +6,64 @@
 //! for different NCOLORS values, matching the expected solution counts from the C reference.
 
 use venn_search::context::SearchContext;
-use venn_search::engine::{EngineBuilder, SearchEngine};
-use venn_search::geometry::constants::{NCOLORS, NFACES};
-use venn_search::predicates::test::SuspendPredicate;
-use venn_search::predicates::{InitializePredicate, InnerFacePredicate, VennPredicate};
+use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
+use venn_search::predicates::{FailPredicate, InitializePredicate, InnerFacePredicate, VennPredicate};
+use std::cell::RefCell;
+use std::rc::Rc;
 
-/// Count all solutions from a search engine.
-///
-/// Runs the search to exhaustion, counting how many solutions are found.
-fn count_all_solutions(engine: SearchEngine, ctx: &mut SearchContext) -> usize {
-    let mut count = 0;
-    let mut current = Some(engine);
-
-    while let Some(engine) = current {
-        current = engine.search(ctx);
-        if current.is_some() {
-            count += 1;
-        }
-    }
-
-    count
+/// Simple counter predicate that increments on each solution.
+#[derive(Clone)]
+struct CounterPredicate {
+    count: Rc<RefCell<usize>>,
 }
 
-/// Validate that a solution has all faces assigned.
-fn validate_solution_complete(ctx: &SearchContext, solution_num: usize) {
-    for face_id in 0..NFACES {
-        let face = ctx.state.faces.get(face_id);
-        assert!(
-            face.current_cycle().is_some(),
-            "Solution {} has unassigned face {}",
-            solution_num,
-            face_id
-        );
+impl CounterPredicate {
+    fn new(count: Rc<RefCell<usize>>) -> Self {
+        Self { count }
+    }
+}
+
+impl Predicate for CounterPredicate {
+    fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
+        *self.count.borrow_mut() += 1;
+        eprintln!("Found solution {}", *self.count.borrow());
+        PredicateResult::Success
+    }
+
+    fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
+        PredicateResult::Failure
     }
 }
 
 #[test]
+#[cfg(feature = "ncolors_3")]
 fn test_venn_search_ncolors_3_baseline() {
-    // Skip if not NCOLORS=3
-    if NCOLORS != 3 {
-        eprintln!(
-            "Skipping test_venn_search_ncolors_3_baseline (NCOLORS={})",
-            NCOLORS
-        );
-        return;
-    }
-
-    eprintln!("\n=== Testing VennPredicate for NCOLORS=3 (Phase 7.3 baseline) ===");
-    eprintln!("Expected: 2 valid solutions (when fully implemented)");
-    eprintln!("Current: Edge adjacency implemented but needs refinement");
-    eprintln!("Limiting to 10 solutions for CI\n");
+    eprintln!("\n=== Testing VennPredicate for NCOLORS=3 ===");
+    eprintln!("Expected: 2 valid solutions");
+    eprintln!("Testing full constraint propagation\n");
 
     let mut ctx = SearchContext::new();
+    let solution_count = Rc::new(RefCell::new(0));
+
     let engine = EngineBuilder::new()
         .add(Box::new(InitializePredicate))
         .add(Box::new(InnerFacePredicate))
         .add(Box::new(VennPredicate::new()))
-        .terminal(Box::new(SuspendPredicate))
+        .add(Box::new(CounterPredicate::new(Rc::clone(&solution_count))))
+        .terminal(Box::new(FailPredicate))
         .build();
 
-    let mut solution_count = 0;
-    let max_solutions = 10; // Limit for CI
-    let mut current = Some(engine);
+    // Run search to exhaustion (FailPredicate forces backtracking)
+    engine.search(&mut ctx);
 
-    while let Some(engine) = current {
-        current = engine.search(&mut ctx);
-        if current.is_some() {
-            solution_count += 1;
-            eprintln!("Found solution {}", solution_count);
-            validate_solution_complete(&ctx, solution_count);
-
-            if solution_count >= max_solutions {
-                eprintln!("(Limiting to {} solutions for CI)", max_solutions);
-                break;
-            }
-        }
-    }
-
+    let final_count = *solution_count.borrow();
     eprintln!("\n=== Results ===");
-    eprintln!("Solutions found: {} (limited)", solution_count);
-    eprintln!("Note: Edge adjacency needs further refinement for exact count");
-    eprintln!("✓ Test passes - validates constraint propagation is working");
+    eprintln!("Solutions found: {}", final_count);
+    eprintln!("Expected: 2");
 
-    // Verify we found at least one complete solution
-    assert!(solution_count > 0, "Should find at least one solution")
+    // For NCOLORS=3, we expect exactly 2 solutions
+    assert_eq!(
+        final_count, 2,
+        "Expected exactly 2 solutions for NCOLORS=3"
+    )
 }
