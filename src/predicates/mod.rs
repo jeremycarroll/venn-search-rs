@@ -10,15 +10,18 @@
 //! - `test`: Simple test predicates for validating the engine
 //! - `initialize`: InitializePredicate for setting up MEMO data
 //! - `innerface`: InnerFacePredicate for finding degree signatures
+//! - `venn`: VennPredicate for main Venn diagram search
 //! - Built-in predicates: `FailPredicate`, `SuspendPredicate`
 
 pub mod initialize;
 pub mod innerface;
 pub mod test;
+pub mod venn;
 
 // Re-export main predicates for convenience
 pub use initialize::InitializePredicate;
 pub use innerface::InnerFacePredicate;
+pub use venn::VennPredicate;
 
 use crate::context::SearchContext;
 use crate::engine::{Predicate, PredicateResult, TerminalPredicate};

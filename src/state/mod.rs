@@ -2,11 +2,13 @@
 
 //! Tier 2: DYNAMIC state (mutable, tracked on trail).
 //!
-//! This module will contain all mutable search state:
+//! This module contains all mutable search state:
 //! - Faces state (current facial cycle assignments)
 //! - EdgeColorCount (crossing counts)
 //! - Other mutable search variables
 //!
 //! All state modifications are tracked on the trail for O(1) backtracking.
-//!
-//! To be implemented during Phase 3-4.
+
+pub mod faces;
+
+pub use faces::{DynamicFace, DynamicFaces};
