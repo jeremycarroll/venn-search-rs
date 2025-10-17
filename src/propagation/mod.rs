@@ -265,6 +265,11 @@ pub fn restrict_face_cycles(
     if new_cycles.len() == 1 {
         let forced_cycle = new_cycles.iter().next().unwrap();
 
+        // Check depth limit before recursive call
+        if depth + 1 > MAX_PROPAGATION_DEPTH {
+            return Err(PropagationFailure::DepthExceeded { depth: depth + 1 });
+        }
+
         // Assign the forced cycle (trail-tracked)
         let encoded = forced_cycle + 1;
         unsafe {
@@ -342,7 +347,7 @@ fn propagate_non_adjacent_faces(
         let adjacent_face_id = face_colors.bits() as usize ^ (1 << color_idx);
 
         // Get cycles omitting this color
-        let omitting_words = memo.cycles_memo.cycles_omitting_one_color[color_idx];
+        let omitting_words = memo.cycles_memo.get_cycles_omitting_one_color(color_idx);
         let omitting_cycleset = CycleSet::from_words(omitting_words);
 
         // Restrict adjacent face to these cycles
