@@ -67,3 +67,39 @@ fn test_venn_search_ncolors_3_baseline() {
         "Expected exactly 2 solutions for NCOLORS=3"
     )
 }
+
+#[test]
+#[cfg(feature = "ncolors_4")]
+fn test_venn_search_ncolors_4() {
+    eprintln!("\n=== Testing VennPredicate for NCOLORS=4 ===");
+    eprintln!("Expected: 48 solutions (current implementation)");
+    eprintln!("Note: Will be 3 when edge crossing limits implemented");
+    eprintln!("Testing constraint propagation\n");
+
+    let mut ctx = SearchContext::new();
+    let solution_count = Rc::new(RefCell::new(0));
+
+    let engine = EngineBuilder::new()
+        .add(Box::new(InitializePredicate))
+        .add(Box::new(InnerFacePredicate))
+        .add(Box::new(VennPredicate::new()))
+        .add(Box::new(CounterPredicate::new(Rc::clone(&solution_count))))
+        .terminal(Box::new(FailPredicate))
+        .build();
+
+    // Run search to exhaustion
+    engine.search(&mut ctx);
+
+    let final_count = *solution_count.borrow();
+    eprintln!("\n=== Results ===");
+    eprintln!("Solutions found: {}", final_count);
+    eprintln!("Current: 48 (without edge crossing limit checks)");
+    eprintln!("Target: 3 (with full constraints)");
+
+    // For NCOLORS=4 with current constraints, we find 48 solutions
+    // This will reduce to 3 when edge crossing limit checks are added
+    assert_eq!(
+        final_count, 48,
+        "Expected 48 solutions for NCOLORS=4 (current implementation)"
+    )
+}
