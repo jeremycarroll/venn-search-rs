@@ -31,7 +31,7 @@ use std::fmt;
 ///
 /// For NCOLORS=6 (NCYCLES=394), this uses 7 u64 words (448 bits total, 394 used).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CycleSet([u64; CYCLESET_LENGTH]);
+pub struct CycleSet(pub(crate) [u64; CYCLESET_LENGTH]);
 
 impl CycleSet {
     /// Create an empty cycle set.

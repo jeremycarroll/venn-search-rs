@@ -13,22 +13,24 @@ use crate::memo::FacesMemo;
 pub struct DynamicFace {
     /// Current cycle for this face - serves as both iterator cursor and assignment indicator.
     ///
-    /// **None** = unassigned face (used in face selection heuristic)
-    /// **Some(cycle_id)** = assigned face (either by choice or forcing)
+    /// Encoded as u64 for trail tracking: 0 = None, n+1 = Some(n)
+    ///
+    /// **0** = unassigned face (used in face selection heuristic)
+    /// **n+1** = assigned to cycle n (either by choice or forcing)
     ///
     /// # Trail semantics (different depending on WHO sets it):
     ///
-    /// 1. **try_pred**: Trail-sets to None (reset on backtrack)
+    /// 1. **try_pred**: Trail-sets to 0/None (reset on backtrack)
     ///    - Matches C: `TRAIL_SET_POINTER(&face->cycle, NULL);`
     ///
     /// 2. **retry_pred**: Sets directly WITHOUT trail (iterator cursor)
     ///    - Matches C: `face->cycle = chooseCycle(face, face->cycle);`
     ///    - Comment in C: "Not on trail, otherwise it would get unset before the next retry."
     ///
-    /// 3. **Constraint propagation** (PR #2): Trail-sets to Some(cycle_id) (forced assignment)
+    /// 3. **Constraint propagation**: Trail-sets to n+1/Some(n) (forced assignment)
     ///    - Uses `ctx.force_face_cycle()` wrapper
     ///    - Matches C: `trailMaybeSetInt(&face->possibleCycles[i], ...)` in dynamicSetFaceCycleSetToSingleton
-    pub current_cycle: Option<CycleId>,
+    pub(crate) current_cycle_encoded: u64,
 
     /// Set of possible cycles for this face (trail-tracked).
     /// Starts with all valid cycles, gets filtered by constraint propagation.
@@ -44,10 +46,32 @@ impl DynamicFace {
     pub fn new(possible_cycles: CycleSet) -> Self {
         let cycle_count = possible_cycles.len() as u64;
         Self {
-            current_cycle: None,
+            current_cycle_encoded: 0, // None
             possible_cycles,
             cycle_count,
         }
+    }
+
+    /// Get current cycle (decodes from u64).
+    #[inline]
+    pub fn current_cycle(&self) -> Option<CycleId> {
+        if self.current_cycle_encoded == 0 {
+            None
+        } else {
+            Some(self.current_cycle_encoded - 1)
+        }
+    }
+
+    /// Set current cycle (encodes to u64).
+    ///
+    /// This is for direct assignment (NOT trail-tracked).
+    /// Use SearchContext::reset_face_cycle() or force_face_cycle() for trail-tracked updates.
+    #[inline]
+    pub fn set_current_cycle(&mut self, cycle: Option<CycleId>) {
+        self.current_cycle_encoded = match cycle {
+            None => 0,
+            Some(id) => id + 1,
+        };
     }
 }
 

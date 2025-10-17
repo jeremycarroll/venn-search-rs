@@ -287,8 +287,11 @@ impl SearchContext {
     ///
     /// Matches C: `TRAIL_SET_POINTER(&facesInOrderOfChoice[round]->cycle, NULL);`
     pub fn reset_face_cycle(&mut self, face_id: usize) {
-        let face = &mut self.state.faces.faces[face_id];
-        face.current_cycle = None;
+        unsafe {
+            let ptr =
+                NonNull::new_unchecked(&mut self.state.faces.faces[face_id].current_cycle_encoded);
+            self.trail.record_and_set(ptr, 0); // 0 = None
+        }
     }
 
     /// Force assign a cycle to a face (trail-tracked).
@@ -297,23 +300,50 @@ impl SearchContext {
     /// reduces to a singleton. Trail will restore on backtrack.
     ///
     /// Matches C: dynamicSetFaceCycleSetToSingleton
-    ///
-    /// [PR #2 will implement this - needs proper trail support for Option<u64>]
     #[allow(dead_code)]
-    pub fn force_face_cycle(&mut self, _face_id: usize, _cycle_id: CycleId) {
-        // TODO: Implement proper trail support for Option<u64> in PR #2
-        // For now, this is a placeholder that will be implemented with constraint propagation
-        unimplemented!("force_face_cycle will be implemented in PR #2");
+    pub fn force_face_cycle(&mut self, face_id: usize, cycle_id: CycleId) {
+        unsafe {
+            let ptr =
+                NonNull::new_unchecked(&mut self.state.faces.faces[face_id].current_cycle_encoded);
+            self.trail.record_and_set(ptr, cycle_id + 1); // n+1 = Some(n)
+        }
     }
 
     /// Set possible cycles for a face (trail-tracked).
     ///
-    /// [PR #2 will implement constraint propagation using this]
+    /// Only trails words that actually change (optimization).
+    /// Also updates the cached cycle_count.
     #[allow(dead_code)]
-    pub fn set_face_possible_cycles(&mut self, _face_id: usize, _cycles: CycleSet) {
-        // TODO: Implement in PR #2 with proper trail support for CycleSet
-        // Need to trail each word in the bitset and the cycle_count
-        unimplemented!("set_face_possible_cycles will be implemented in PR #2");
+    pub fn set_face_possible_cycles(&mut self, face_id: usize, new_cycles: CycleSet) {
+        use crate::geometry::constants::CYCLESET_LENGTH;
+
+        let face = &mut self.state.faces.faces[face_id];
+
+        // Copy old words to avoid borrow checker issues
+        let old_words = *face.possible_cycles.words();
+        let new_words = *new_cycles.words();
+
+        // Trail only modified words
+        unsafe {
+            for i in 0..CYCLESET_LENGTH {
+                if old_words[i] != new_words[i] {
+                    // Get pointer to word i in the CycleSet
+                    // Note: CycleSet is CycleSet([u64; CYCLESET_LENGTH]), so we access .0[i]
+                    let ptr = &mut face.possible_cycles.0[i] as *mut u64;
+                    let ptr = NonNull::new_unchecked(ptr);
+                    self.trail.record_and_set(ptr, new_words[i]);
+                }
+            }
+        }
+
+        // Update cached cycle count (also trail-tracked)
+        let new_count = new_cycles.len() as u64;
+        if face.cycle_count != new_count {
+            unsafe {
+                let ptr = NonNull::new_unchecked(&mut face.cycle_count);
+                self.trail.record_and_set(ptr, new_count);
+            }
+        }
     }
 
     /// Get a face's possible cycles.

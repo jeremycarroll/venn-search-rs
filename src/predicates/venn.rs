@@ -83,7 +83,7 @@ impl Predicate for VennPredicate {
         let face_id = self.faces_in_order[round];
 
         // Get current_cycle to use as iterator cursor
-        let current_cycle = ctx.state.faces.faces[face_id].current_cycle;
+        let current_cycle = ctx.state.faces.faces[face_id].current_cycle();
 
         // Choose next cycle from possible_cycles
         // Matches C: face->cycle = chooseCycle(face, face->cycle);
@@ -91,7 +91,7 @@ impl Predicate for VennPredicate {
 
         // Set current_cycle directly (NOT trail-tracked, iterator usage)
         // Matches C: face->cycle = chooseCycle(...); (comment: "Not on trail, otherwise it would get unset before the next retry.")
-        ctx.state.faces.faces[face_id].current_cycle = Some(next_cycle);
+        ctx.state.faces.faces[face_id].set_current_cycle(Some(next_cycle));
 
         // [PR #2] Constraint propagation will go here
         // Matches C: dynamicFaceBacktrackableChoice(face)
@@ -116,7 +116,7 @@ fn choose_next_face(ctx: &SearchContext) -> Option<usize> {
 
         // Skip if already assigned (current_cycle != None)
         // Matches C: Faces[i].cycle == NULL
-        if face.current_cycle.is_some() {
+        if face.current_cycle().is_some() {
             continue;
         }
 
@@ -176,7 +176,7 @@ mod tests {
         // All faces should start with no assigned cycle
         for face_id in 0..NFACES {
             let face = ctx.state.faces.get(face_id);
-            assert!(face.current_cycle.is_none());
+            assert!(face.current_cycle().is_none());
         }
     }
 
@@ -194,7 +194,7 @@ mod tests {
         let mut ctx = SearchContext::new();
 
         // Assign a cycle to face 0
-        ctx.state.faces.faces[0].current_cycle = Some(0);
+        ctx.state.faces.faces[0].set_current_cycle(Some(0));
 
         // Should choose a different face
         let face_id = choose_next_face(&ctx);
@@ -260,7 +260,7 @@ mod tests {
 
         // After try_pred, the chosen face should have current_cycle = None
         let face_id = pred.faces_in_order[0];
-        assert!(ctx.state.faces.faces[face_id].current_cycle.is_none());
+        assert!(ctx.state.faces.faces[face_id].current_cycle().is_none());
     }
 
     #[test]
@@ -277,7 +277,7 @@ mod tests {
 
         // Should have assigned a cycle
         let face_id = pred.faces_in_order[0];
-        assert!(ctx.state.faces.faces[face_id].current_cycle.is_some());
+        assert!(ctx.state.faces.faces[face_id].current_cycle().is_some());
     }
 
     #[test]

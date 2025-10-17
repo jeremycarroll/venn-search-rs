@@ -191,7 +191,11 @@ fn test_memo_size_is_small() {
     let ctx = SearchContext::new();
     let heap_size = ctx.estimate_memo_heap_size();
     let total = size + heap_size;
-    println!("MemoizedData total size: {} bytes ({:.2} KB)", total, total as f64 / 1024.0);
+    println!(
+        "MemoizedData total size: {} bytes ({:.2} KB)",
+        total,
+        total as f64 / 1024.0
+    );
 
     assert!(total < 1024 * 1024, "MEMO data should be under 1MB");
 }
