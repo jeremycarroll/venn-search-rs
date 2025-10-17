@@ -284,8 +284,6 @@ impl SearchContext {
     ///
     /// Used by try_pred to reset cycle on entry. Trail will restore
     /// the previous value on backtrack.
-    ///
-    /// Matches C: `TRAIL_SET_POINTER(&facesInOrderOfChoice[round]->cycle, NULL);`
     pub fn reset_face_cycle(&mut self, face_id: usize) {
         unsafe {
             let ptr =
@@ -294,14 +292,12 @@ impl SearchContext {
         }
     }
 
-    /// Force assign a cycle to a face (trail-tracked).
+    /// Set a face's cycle assignment (trail-tracked).
     ///
     /// Used by constraint propagation when a face's possible_cycles
     /// reduces to a singleton. Trail will restore on backtrack.
-    ///
-    /// Matches C: dynamicSetFaceCycleSetToSingleton
     #[allow(dead_code)]
-    pub fn force_face_cycle(&mut self, face_id: usize, cycle_id: CycleId) {
+    pub fn set_face_cycle(&mut self, face_id: usize, cycle_id: CycleId) {
         unsafe {
             let ptr =
                 NonNull::new_unchecked(&mut self.state.faces.faces[face_id].current_cycle_encoded);
@@ -325,11 +321,11 @@ impl SearchContext {
 
         // Trail only modified words
         unsafe {
+            let words_mut = face.possible_cycles.words_mut();
             for i in 0..CYCLESET_LENGTH {
                 if old_words[i] != new_words[i] {
-                    // Get pointer to word i in the CycleSet
-                    // Note: CycleSet is CycleSet([u64; CYCLESET_LENGTH]), so we access .0[i]
-                    let ptr = &mut face.possible_cycles.0[i] as *mut u64;
+                    // Get pointer to word i in the mutable words array
+                    let ptr = &mut words_mut[i] as *mut u64;
                     let ptr = NonNull::new_unchecked(ptr);
                     self.trail.record_and_set(ptr, new_words[i]);
                 }

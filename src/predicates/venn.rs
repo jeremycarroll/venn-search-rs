@@ -60,7 +60,6 @@ impl Predicate for VennPredicate {
             self.faces_in_order[round] = face_id;
 
             // Trail-set current_cycle to None (will be restored on backtrack)
-            // Matches C: TRAIL_SET_POINTER(&facesInOrderOfChoice[round]->cycle, NULL);
             ctx.reset_face_cycle(face_id);
 
             // Get number of choices
@@ -86,15 +85,13 @@ impl Predicate for VennPredicate {
         let current_cycle = ctx.state.faces.faces[face_id].current_cycle();
 
         // Choose next cycle from possible_cycles
-        // Matches C: face->cycle = chooseCycle(face, face->cycle);
         let next_cycle = choose_next_cycle(ctx, face_id, current_cycle);
 
         // Set current_cycle directly (NOT trail-tracked, iterator usage)
-        // Matches C: face->cycle = chooseCycle(...); (comment: "Not on trail, otherwise it would get unset before the next retry.")
+        // Not trail-tracked, otherwise it would get unset before the next retry.
         ctx.state.faces.faces[face_id].set_current_cycle(Some(next_cycle));
 
         // [PR #2] Constraint propagation will go here
-        // Matches C: dynamicFaceBacktrackableChoice(face)
 
         PredicateResult::SuccessSamePredicate
     }
@@ -105,8 +102,6 @@ impl Predicate for VennPredicate {
 }
 
 /// Choose next unassigned face with minimum cycle count (fail-fast heuristic).
-///
-/// Matches C: searchChooseNextFace() in venn.c:107-119
 fn choose_next_face(ctx: &SearchContext) -> Option<usize> {
     let mut min_count = u64::MAX;
     let mut best_face = None;
@@ -115,7 +110,6 @@ fn choose_next_face(ctx: &SearchContext) -> Option<usize> {
         let face = &ctx.state.faces.faces[face_id];
 
         // Skip if already assigned (current_cycle != None)
-        // Matches C: Faces[i].cycle == NULL
         if face.current_cycle().is_some() {
             continue;
         }
@@ -133,8 +127,6 @@ fn choose_next_face(ctx: &SearchContext) -> Option<usize> {
 ///
 /// If current is None, returns first cycle.
 /// Otherwise, returns next cycle after current.
-///
-/// Matches C: chooseCycle() → cycleSetNext()
 fn choose_next_cycle(ctx: &SearchContext, face_id: usize, current: Option<u64>) -> u64 {
     let possible_cycles = ctx.get_face_possible_cycles(face_id);
 

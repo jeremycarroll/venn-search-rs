@@ -31,7 +31,7 @@ use std::fmt;
 ///
 /// For NCOLORS=6 (NCYCLES=394), this uses 7 u64 words (448 bits total, 394 used).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CycleSet(pub(crate) [u64; CYCLESET_LENGTH]);
+pub struct CycleSet([u64; CYCLESET_LENGTH]);
 
 impl CycleSet {
     /// Create an empty cycle set.
@@ -122,6 +122,13 @@ impl CycleSet {
     /// Get a reference to the underlying bitset words.
     pub fn words(&self) -> &[u64; CYCLESET_LENGTH] {
         &self.0
+    }
+
+    /// Get a mutable reference to the underlying bitset words.
+    ///
+    /// This is primarily used by the trail system for efficient backtracking.
+    pub(crate) fn words_mut(&mut self) -> &mut [u64; CYCLESET_LENGTH] {
+        &mut self.0
     }
 
     /// Iterate over all cycle IDs in the set.

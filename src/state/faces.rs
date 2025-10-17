@@ -21,15 +21,12 @@ pub struct DynamicFace {
     /// # Trail semantics (different depending on WHO sets it):
     ///
     /// 1. **try_pred**: Trail-sets to 0/None (reset on backtrack)
-    ///    - Matches C: `TRAIL_SET_POINTER(&face->cycle, NULL);`
     ///
     /// 2. **retry_pred**: Sets directly WITHOUT trail (iterator cursor)
-    ///    - Matches C: `face->cycle = chooseCycle(face, face->cycle);`
-    ///    - Comment in C: "Not on trail, otherwise it would get unset before the next retry."
+    ///    - Not trail-tracked, otherwise it would get unset before the next retry.
     ///
     /// 3. **Constraint propagation**: Trail-sets to n+1/Some(n) (forced assignment)
-    ///    - Uses `ctx.force_face_cycle()` wrapper
-    ///    - Matches C: `trailMaybeSetInt(&face->possibleCycles[i], ...)` in dynamicSetFaceCycleSetToSingleton
+    ///    - Uses `ctx.set_face_cycle()` wrapper
     pub(crate) current_cycle_encoded: u64,
 
     /// Set of possible cycles for this face (trail-tracked).
@@ -65,7 +62,7 @@ impl DynamicFace {
     /// Set current cycle (encodes to u64).
     ///
     /// This is for direct assignment (NOT trail-tracked).
-    /// Use SearchContext::reset_face_cycle() or force_face_cycle() for trail-tracked updates.
+    /// Use SearchContext::reset_face_cycle() or set_face_cycle() for trail-tracked updates.
     #[inline]
     pub fn set_current_cycle(&mut self, cycle: Option<CycleId>) {
         self.current_cycle_encoded = match cycle {
