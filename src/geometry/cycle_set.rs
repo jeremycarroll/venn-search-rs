@@ -58,6 +58,11 @@ impl CycleSet {
         Self(words)
     }
 
+    /// Create a cycle set from a word array.
+    pub fn from_words(words: [u64; CYCLESET_LENGTH]) -> Self {
+        Self(words)
+    }
+
     /// Check if the set contains a specific cycle.
     ///
     /// # Panics

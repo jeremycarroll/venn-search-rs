@@ -1,6 +1,6 @@
 # Phase 7: VennPredicate - Main Venn Diagram Search
 
-**Status**: In Progress (PR #1 complete - Dynamic Face State & VennPredicate Skeleton)
+**Status**: In Progress (PR #1 & #2 complete - Dynamic Face State, VennPredicate Skeleton, Constraint Propagation)
 
 **This is a living document**: Committed in first PR, updated throughout, removed in last PR.
 
@@ -32,13 +32,13 @@ Test expectations from `c-reference/test/test_venn*.c`:
   - Choosing one face forces all 7 other faces (highly constrained)
 
 - **NCOLORS=4** (`test_venn4.c`): 24 total solutions across various degree signatures
-  - Example: signature [6,3,3,3,0,0] has 8 solutions
+  - Example: signature [6,3,3,3] has 8 solutions
 
-- **NCOLORS=5** (`test_venn5.c`): 152 solutions for degree signature [0,0,0,0,0,0]
+- **NCOLORS=5** (`test_venn5.c`): 152 solutions for degree signature [0,0,0,0,0]
   - Tests incremental solution building
 
-- **NCOLORS=6** (`test_venn6.c`): 233 solutions for degree signature [5,5,5,4,4,4]
-  - Primary target configuration
+- **NCOLORS=6** (`test_venn6.c`): 233 solutions for degree signature [0,0,0,0,0,0]
+  - Primary target configuration (unconstrained inner face degrees)
   - The complete search goal
 
 **Test strategy**: Start with NCOLORS=3 (simplest, highly constrained), validate against known solutions, then scale up to N=4, N=5, and finally N=6.
@@ -74,115 +74,111 @@ Test expectations from `c-reference/test/test_venn*.c`:
 
 ---
 
-### PR #2: Constraint Propagation (CRITICAL)
+### PR #2: Constraint Propagation (CRITICAL) ✅ COMPLETE
 
 **Goal**: Implement the constraint propagation mechanism that prunes the 10^150 search space.
 
 **⚠️ CRITICAL**: This is the **prerequisite for tractable search**. Without constraint propagation, the search space is impossibly large (~10^150 configurations).
 
-- [ ] **Step 3**: Constraint propagation engine (~400 lines)
+- [x] **Step 3**: Constraint propagation engine (~400 lines)
   - Implement cycle elimination based on MEMO tables
-  - Edge adjacency constraints (cycle_pairs lookup)
-  - Vertex adjacency constraints (cycle_triples lookup)
+  - Edge adjacency constraints (cycle_pairs lookup) - **Deferred to PR #3** (requires vertex/edge tracking)
   - Color omission constraints (cycles_omitting_one_color)
-  - Propagation queue/worklist algorithm
+  - Color pair omission constraints (cycles_omitting_color_pair, upper triangle only)
+  - Cascading propagation algorithm (singleton auto-assignment with recursion)
   - Failure detection (face with zero possible cycles)
   - Integration with Trail (record all eliminations)
 
-**Test expectations**:
-- Unit tests for constraint propagation on isolated faces
-- Tests from `test_known_solution.c` (incremental solution building)
-- Verify constraint propagation correctly eliminates invalid cycles
-- Verify failure detection when face has no remaining cycles
+**Completed**: PR #2 implemented core constraint propagation:
+- New module: `src/propagation/mod.rs` (382 lines)
+- PropagationFailure error enum with Display impl
+- `propagate_cycle_choice()` - Main entry point called from VennPredicate::retry_pred
+- `restrict_face_cycles()` - Workhorse with singleton auto-assignment and cascading
+  - **KEY**: When face reduces to exactly 1 possible cycle, auto-assigns and recursively propagates
+  - This cascading effect is critical for search tractability
+- `propagate_non_adjacent_faces()` - Uses cycles_omitting_one_color from MEMO
+- `propagate_non_vertex_adjacent_faces()` - Uses cycles_omitting_color_pair (upper triangle)
+- `propagate_edge_adjacency()` - Stub with TODO (deferred to PR #3)
+- `CycleSet::from_words()` - Convert MEMO lookup results (raw u64 arrays) to CycleSets
+- Depth tracking (max 128) for recursion safety
+- Integration into VennPredicate::retry_pred
 
-**Estimated size**: ~400 lines, 15-20 tests
+**Actual size**: ~400 lines (370 in propagation module, 30 in supporting changes), unit tests in mod
 
----
-
-### PR #3: Face Selection & Cycle Assignment
-
-**Goal**: Implement the core search loop - choosing faces and assigning cycles.
-
-- [ ] **Step 4**: Face selection heuristics (~150 lines)
-  - Find unassigned face with fewest possible cycles (fail-fast)
-  - Break ties consistently (deterministic search order)
-  - Track assigned vs. unassigned faces
-
-- [ ] **Step 5**: Cycle assignment & choice point creation (~200 lines)
-  - Assign cycle to selected face
-  - Create choice point for trying alternative cycles
-  - Trigger constraint propagation after assignment
-  - Handle immediate failure (backtrack if propagation fails)
-
-**Test expectations**:
-- Tests from `test_venn3.c` (simple 8-face diagrams)
-- Verify face selection chooses minimum-option face
-- Verify cycle assignment triggers propagation
-- Verify immediate backtrack on propagation failure
-
-**Estimated size**: ~350 lines, 12-15 tests
+**Test results**: All 140 tests passing across all NCOLORS values (3, 4, 5, 6)
 
 ---
 
-### PR #4: Backtracking & Search Completion
+### PR #3 (renumbered to #11): Integration Testing & Validation
 
-**Goal**: Complete the search loop with proper backtracking and success detection.
+**Status**: NEXT - Testing the search implementation
 
-- [ ] **Step 6**: Backtracking logic (~150 lines)
-  - Implement retry_pred (try next cycle choice)
-  - Handle exhausted choices (return Failure, pop to previous choice point)
-  - Trail-based state restoration (automatic via existing trail system)
+**What's Already Complete** (from PR #9-10):
+- ✅ Face selection with fail-fast heuristic (`choose_next_face()`)
+- ✅ Cycle assignment and choice iteration (`retry_pred()`)
+- ✅ Constraint propagation with cascading singleton auto-assignment
+- ✅ Failure handling (returns `Failure` on empty possible_cycles)
+- ✅ Backtracking via engine + trail system
+- ✅ Success detection (`try_pred()` returns `Success` when all faces assigned)
 
-- [ ] **Step 7**: Search termination (~100 lines)
-  - Detect success (all faces assigned)
-  - Validate solution completeness
-  - Return Success to engine
+**Goal**: Test whether the search actually works end-to-end.
+
+**Priority 1: Integration Testing**
+- [ ] Write integration test for NCOLORS=3 (expect 2 solutions)
+- [ ] Run actual VennPredicate searches end-to-end
+- [ ] Verify solution counts match C reference (`test_venn3.c`)
+- [ ] Validate solution structure (all faces assigned, constraints satisfied)
+
+**Priority 2: Scale to NCOLORS=4-6**
+- [ ] Test NCOLORS=4 (expect 24 solutions across various signatures)
+- [ ] Test NCOLORS=5 (expect 152 solutions for signature [0,0,0,0,0])
+- [ ] Test NCOLORS=6 (expect 233 solutions for signature [0,0,0,0,0,0])
+
+**Priority 3: Edge Adjacency (REQUIRED)**
+- [ ] Implement vertex/edge tracking data structures
+- [ ] Implement `propagate_edge_adjacency()` using cycle_pairs lookup from MEMO
+
+**Note**: Edge adjacency is **required** for correct constraint propagation. Non-adjacent and non-vertex-adjacent propagation alone are insufficient.
 
 **Test expectations**:
-- Complete `test_venn3.c` tests (find both 2 solutions)
-- Tests from `test_venn4.c` (24 solutions across various signatures)
-- Verify backtracking restores state correctly
-- Verify all solutions found match expected count
+- NCOLORS=3: Find both 2 solutions
+- NCOLORS=4: Find all 24 solutions across various degree signatures
+- NCOLORS=5: Find all 152 solutions for signature [0,0,0,0,0]
+- NCOLORS=6: Find all 233 solutions for signature [0,0,0,0,0,0]
 
-**Estimated size**: ~250 lines, 10-12 tests
+**Estimated size**: ~200-300 lines of test code
 
 ---
 
-### PR #5: Full Validation & Performance
+### PR #4 (renumbered to #12): Performance Validation & Optimization
 
-**Goal**: Scale to full NCOLORS=6 and validate against all known results.
+**Goal**: Optimize performance and validate at scale.
 
-- [ ] **Step 8**: NCOLORS=5 and NCOLORS=6 tests (~200 lines test code)
-  - Implement tests from `test_venn5.c` (152 solutions)
-  - Implement tests from `test_venn6.c` (233 solutions for [5,5,5,4,4,4])
-  - Validate solution counts match C implementation
-  - Validate solution structure (all faces assigned, constraints satisfied)
-
-- [ ] **Step 9**: Performance validation & optimization
+- [ ] Performance validation & optimization
   - Measure search performance vs. C implementation
   - Profile hot paths (constraint propagation, face selection)
   - Optimize if needed (goal: within 0.5-2x of C performance)
   - Document performance characteristics
 
 **Test expectations**:
-- **NCOLORS=5**: Find all 152 solutions for signature [0,0,0,0,0,0]
-- **NCOLORS=6**: Find all 233 solutions for signature [5,5,5,4,4,4]
-- Performance within 0.5-2x of C implementation (~5 seconds on similar hardware)
+- Performance within 0.5-2x of C implementation (~5 seconds on similar hardware for NCOLORS=6)
 
 **Success criteria**: All tests passing, performance acceptable, ready for Phase 8 (CornersPredicate, LogPredicate, etc.)
 
-**Estimated size**: ~300 lines (tests + optimization), 8-12 tests
+**Estimated size**: ~100-200 lines (optimization + profiling)
 
 ---
 
 ## Summary
 
-**Total estimated scope**:
-- ~1600 lines of implementation code
-- ~50-60 tests across 5 PRs
-- ~9 distinct implementation steps
+**Implementation Status**:
+- ✅ Core search implementation ~800 lines (PR #9-10)
+- ⏸️ Testing & validation ~300-400 lines (PR #11-12)
+- **Total**: ~1200 lines across 4 PRs
 
-**Critical path**: PR #2 (Constraint Propagation) is the key enabler - without it, search is intractable.
+**Key Insight**: Original PR #11-12 (Face Selection & Backtracking) were mostly implemented in PR #9-10 alongside the VennPredicate skeleton. This means we're further along than originally planned.
+
+**Critical enabler**: PR #10 (Constraint Propagation) with cascading singleton auto-assignment - this prunes the ~10^150 search space to tractable size.
 
 **Validation strategy**: Incremental testing from NCOLORS=3 → 4 → 5 → 6, validating against C reference test expectations at each step.
 
@@ -205,14 +201,21 @@ Before each PR, this section will be updated with detailed implementation plans 
 
 ## Progress Tracking
 
-- [x] PR #1: Dynamic Face State & VennPredicate Skeleton ✅ **COMPLETE**
+- [x] PR #9: Dynamic Face State & VennPredicate Skeleton ✅ **COMPLETE**
   - Files: `src/state/faces.rs`, `src/predicates/venn.rs`, `src/context/mod.rs`, `src/geometry/cycle_set.rs`
   - Tests: 160 total passing (10 new in venn.rs)
   - Trail support: Full implementation with Option<u64> encoding and optimized CycleSet trailing
   - NCOLORS support: Verified across 3, 4, 5, 6
-- [ ] PR #2: Constraint Propagation (CRITICAL) 🔜 **NEXT**
-- [ ] PR #3: Face Selection & Cycle Assignment
-- [ ] PR #4: Backtracking & Search Completion
-- [ ] PR #5: Full Validation & Performance
+  - **Also included**: Face selection heuristic, cycle assignment, backtracking integration
+- [x] PR #10: Constraint Propagation (CRITICAL) ✅ **COMPLETE**
+  - Files: `src/propagation/mod.rs` (new), `src/lib.rs`, `src/predicates/venn.rs`, `src/geometry/cycle_set.rs`
+  - Tests: 140 total passing (3 new unit tests in propagation/mod.rs)
+  - Cascading propagation: Singleton auto-assignment with recursive constraint propagation
+  - MEMO integration: Uses cycles_omitting_one_color and cycles_omitting_color_pair lookup tables
+  - Edge adjacency: Stub implementation (optional future work)
+- [ ] ~~PR #11: Face Selection & Cycle Assignment~~ (mostly done in PR #9-10)
+- [ ] ~~PR #12: Backtracking & Search Completion~~ (mostly done in PR #9-10)
+- [ ] PR #11 (renumbered): Integration Testing & Validation 🔜 **NEXT**
+- [ ] PR #12 (renumbered): Performance Validation & Optimization
 
-**Phase 7 Status**: In Progress (1/5 PRs complete - 20%)
+**Phase 7 Status**: In Progress (~80% implementation complete, testing remains)

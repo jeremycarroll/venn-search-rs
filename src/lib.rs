@@ -52,6 +52,7 @@ pub mod engine;
 pub mod geometry;
 pub mod memo;
 pub mod predicates;
+pub mod propagation;
 pub mod state;
 pub mod symmetry;
 pub mod trail;

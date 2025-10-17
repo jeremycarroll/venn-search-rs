@@ -293,6 +293,35 @@ impl CyclesMemo {
         );
         &self.cycles_omitting_color_pair[i][j]
     }
+
+    /// Get cycles omitting a single color.
+    ///
+    /// Returns the CycleSet of all cycles that do NOT contain the specified color.
+    ///
+    /// # Arguments
+    ///
+    /// * `color_idx` - The color index (0..NCOLORS-1)
+    ///
+    /// # Panics
+    ///
+    /// In debug builds, panics if `color_idx >= NCOLORS`.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let cycles_memo = CyclesMemo::initialize(&cycles);
+    /// let omitting = cycles_memo.get_cycles_omitting_one_color(3); // Cycles without color 3
+    /// ```
+    #[inline]
+    pub fn get_cycles_omitting_one_color(&self, color_idx: usize) -> [u64; CYCLESET_LENGTH] {
+        debug_assert!(
+            color_idx < NCOLORS,
+            "color_idx out of range: {} >= {}",
+            color_idx,
+            NCOLORS
+        );
+        self.cycles_omitting_one_color[color_idx]
+    }
 }
 
 /// Compute cycle pairs lookup table.
