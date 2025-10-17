@@ -64,8 +64,8 @@ impl MemoizedData {
     pub fn new() -> Self {
         eprintln!("[MemoizedData] Initializing all MEMO structures...");
 
-        let cycles = CyclesArray::generate();
-        let cycles_memo = CyclesMemo::initialize(&cycles);
+        let mut cycles = CyclesArray::generate();
+        let cycles_memo = CyclesMemo::initialize(&mut cycles);
         let faces = FacesMemo::initialize(&cycles);
         let vertices = VerticesMemo::initialize();
 

@@ -22,7 +22,7 @@
 //! assert_eq!(format!("{}", cycle), "(abc)");
 //! ```
 //!
-use crate::geometry::{constants::NCOLORS, Color, ColorSet};
+use crate::geometry::{constants::NCOLORS, Color, ColorSet, CycleSet};
 use std::fmt;
 
 /// A cycle ID (index into the global Cycles array).
@@ -42,6 +42,26 @@ pub struct Cycle {
     colors: [Color; 6], // Fixed size array, only use first `length` elements
     /// Bitset of which colors are present
     colorset: ColorSet,
+    /// Cycles containing edge colors[i] → colors[i+1] (one CycleSet per edge)
+    ///
+    /// `same_direction[i]` contains all cycles that include the directed edge
+    /// from colors[i] to colors[i+1] (wrapping around at the end).
+    ///
+    /// Used by edge adjacency propagation to find compatible cycles for
+    /// doubly-adjacent faces (faces that share two colors).
+    ///
+    /// Matches C `CYCLESET *sameDirection` in `struct facialCycle`.
+    same_direction: Vec<CycleSet>,
+    /// Cycles containing triple colors[i-1], colors[i], colors[i+1] (one CycleSet per vertex)
+    ///
+    /// `opposite_direction[i]` contains all cycles that include the triple
+    /// colors[i-1] → colors[i] → colors[i+1] in that order (with wrapping).
+    ///
+    /// Used by edge adjacency propagation to find compatible cycles for
+    /// adjacent faces (faces that share one color).
+    ///
+    /// Matches C `CYCLESET *oppositeDirection` in `struct facialCycle`.
+    opposite_direction: Vec<CycleSet>,
 }
 
 impl Cycle {
@@ -78,6 +98,8 @@ impl Cycle {
             length,
             colors: cycle_colors,
             colorset,
+            same_direction: Vec::new(), // Will be populated during initialization
+            opposite_direction: Vec::new(), // Will be populated during initialization
         }
     }
 
@@ -149,6 +171,92 @@ impl Cycle {
         }
 
         Self::new(&reversed_colors)
+    }
+
+    /// Get the same-direction cycle set for a given edge index.
+    ///
+    /// `same_direction(i)` returns cycles containing edge colors[i] → colors[i+1].
+    ///
+    /// # Panics
+    ///
+    /// Panics if index >= cycle length or if direction tables not initialized.
+    pub fn same_direction(&self, index: usize) -> &CycleSet {
+        assert!(
+            index < self.len(),
+            "Index {} out of bounds for cycle of length {}",
+            index,
+            self.len()
+        );
+        assert!(
+            !self.same_direction.is_empty(),
+            "Direction tables not initialized"
+        );
+        &self.same_direction[index]
+    }
+
+    /// Get the opposite-direction cycle set for a given vertex index.
+    ///
+    /// `opposite_direction(i)` returns cycles containing triple
+    /// colors[i-1] → colors[i] → colors[i+1].
+    ///
+    /// # Panics
+    ///
+    /// Panics if index >= cycle length or if direction tables not initialized.
+    pub fn opposite_direction(&self, index: usize) -> &CycleSet {
+        assert!(
+            index < self.len(),
+            "Index {} out of bounds for cycle of length {}",
+            index,
+            self.len()
+        );
+        assert!(
+            !self.opposite_direction.is_empty(),
+            "Direction tables not initialized"
+        );
+        &self.opposite_direction[index]
+    }
+
+    /// Initialize direction tables for this cycle.
+    ///
+    /// This is called during cycle initialization to populate same_direction
+    /// and opposite_direction lookup tables from cycle_pairs and cycle_triples.
+    ///
+    /// # Arguments
+    ///
+    /// * `cycle_pairs` - Lookup table of cycles containing each edge
+    /// * `cycle_triples` - Lookup table of cycles containing each triple
+    pub(crate) fn init_direction_tables(
+        &mut self,
+        cycle_pairs: &[[[u64; crate::geometry::constants::CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
+        cycle_triples: &[[[[u64; crate::geometry::constants::CYCLESET_LENGTH]; NCOLORS]; NCOLORS]; NCOLORS],
+    ) {
+        // Initialize same_direction (one CycleSet per edge)
+        self.same_direction = Vec::with_capacity(self.len());
+        for i in 0..self.len() {
+            let next_i = (i + 1) % self.len();
+            let color_a = self.colors[i].value() as usize;
+            let color_b = self.colors[next_i].value() as usize;
+
+            // Get cycles containing edge color_a → color_b
+            let words = cycle_pairs[color_a][color_b];
+            self.same_direction.push(CycleSet::from_words(words));
+        }
+
+        // Initialize opposite_direction (one CycleSet per vertex)
+        self.opposite_direction = Vec::with_capacity(self.len());
+        for i in 0..self.len() {
+            let prev_i = if i == 0 { self.len() - 1 } else { i - 1 };
+            let next_i = (i + 1) % self.len();
+
+            let color_prev = self.colors[prev_i].value() as usize;
+            let color_curr = self.colors[i].value() as usize;
+            let color_next = self.colors[next_i].value() as usize;
+
+            // Get cycles containing triple color_next → color_curr → color_prev (REVERSED!)
+            // C code: CycleSetTriples[cycle->curves[j]][cycle->curves[j - 1]][cycle->curves[j - 2]]
+            let words = cycle_triples[color_next][color_curr][color_prev];
+            self.opposite_direction.push(CycleSet::from_words(words));
+        }
     }
 }
 

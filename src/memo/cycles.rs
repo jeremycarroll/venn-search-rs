@@ -243,14 +243,22 @@ fn is_cycle_valid(length: usize, max_color: u8, sequence: &[u8]) -> bool {
 impl CyclesMemo {
     /// Initialize all cycle MEMO data.
     ///
-    /// This computes cycle constraint lookup tables from the generated cycles array.
-    pub fn initialize(cycles: &CyclesArray) -> Self {
+    /// This computes cycle constraint lookup tables from the generated cycles array
+    /// and populates direction tables for each cycle.
+    pub fn initialize(cycles: &mut CyclesArray) -> Self {
         eprintln!("[CyclesMemo] Computing cycle lookup tables...");
 
         let cycle_pairs = compute_cycle_pairs(cycles);
         let cycle_triples = compute_cycle_triples(cycles);
         let cycles_omitting_one_color = compute_cycles_omitting_one_color(cycles);
         let cycles_omitting_color_pair = compute_cycles_omitting_color_pair(cycles);
+
+        eprintln!("[CyclesMemo] Initializing direction tables for all cycles...");
+
+        // Initialize direction tables for each cycle using the computed lookup tables
+        for cycle_id in 0..cycles.len() {
+            cycles.cycles[cycle_id].init_direction_tables(&cycle_pairs, &cycle_triples);
+        }
 
         eprintln!("[CyclesMemo] Cycle lookup tables complete.");
 
@@ -536,8 +544,8 @@ mod tests {
 
     #[test]
     fn test_cycles_omitting_color_pair_accessor() {
-        let cycles = CyclesArray::generate();
-        let memo = CyclesMemo::initialize(&cycles);
+        let mut cycles = CyclesArray::generate();
+        let memo = CyclesMemo::initialize(&mut cycles);
 
         // Should work for upper triangle (i < j)
         for i in 0..NCOLORS {
@@ -552,8 +560,8 @@ mod tests {
     #[should_panic(expected = "cycles_omitting_color_pair only valid for i < j")]
     #[cfg(debug_assertions)]
     fn test_cycles_omitting_color_pair_lower_triangle_panics() {
-        let cycles = CyclesArray::generate();
-        let memo = CyclesMemo::initialize(&cycles);
+        let mut cycles = CyclesArray::generate();
+        let memo = CyclesMemo::initialize(&mut cycles);
 
         // Should panic in debug mode for lower triangle (i > j)
         let _omitting = memo.get_cycles_omitting_color_pair(3, 1);
@@ -563,8 +571,8 @@ mod tests {
     #[should_panic(expected = "cycles_omitting_color_pair only valid for i < j")]
     #[cfg(debug_assertions)]
     fn test_cycles_omitting_color_pair_diagonal_panics() {
-        let cycles = CyclesArray::generate();
-        let memo = CyclesMemo::initialize(&cycles);
+        let mut cycles = CyclesArray::generate();
+        let memo = CyclesMemo::initialize(&mut cycles);
 
         // Should panic in debug mode for diagonal (i == j)
         let _omitting = memo.get_cycles_omitting_color_pair(2, 2);
