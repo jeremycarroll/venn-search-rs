@@ -10,7 +10,7 @@
 //! instances to operate on the same MEMO data.
 
 use crate::geometry::constants::NCOLORS;
-use crate::geometry::{CycleId, CycleSet};
+use crate::geometry::{CrossingCounts, CycleId, CycleSet};
 use crate::memo::{CyclesArray, CyclesMemo, FacesMemo, VerticesMemo};
 use crate::state::DynamicFaces;
 use crate::trail::Trail;
@@ -117,6 +117,14 @@ pub struct DynamicState {
     ///
     /// Contains current_cycle, possible_cycles, and cycle_count for each face.
     pub faces: DynamicFaces,
+
+    /// Crossing counts between color pairs (for corner detection).
+    ///
+    /// Tracks how many times each pair of colors crosses in the current solution.
+    /// Used to enforce the triangle constraint (max 6 crossings per pair).
+    ///
+    /// All modifications must be trail-tracked.
+    pub crossing_counts: CrossingCounts,
 }
 
 impl DynamicState {
@@ -125,6 +133,7 @@ impl DynamicState {
         Self {
             current_face_degrees: [0; NCOLORS],
             faces: DynamicFaces::new(&memo.faces),
+            crossing_counts: CrossingCounts::new(),
         }
     }
 }
