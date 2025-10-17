@@ -5,11 +5,13 @@
 //! These tests verify that the VennPredicate correctly finds all valid Venn diagrams
 //! for different NCOLORS values, matching the expected solution counts from the C reference.
 
-use venn_search::context::SearchContext;
-use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
-use venn_search::predicates::{FailPredicate, InitializePredicate, InnerFacePredicate, VennPredicate};
 use std::cell::RefCell;
 use std::rc::Rc;
+use venn_search::context::SearchContext;
+use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
+use venn_search::predicates::{
+    FailPredicate, InitializePredicate, InnerFacePredicate, VennPredicate,
+};
 
 /// Simple counter predicate that increments on each solution.
 #[derive(Clone)]
@@ -30,7 +32,12 @@ impl Predicate for CounterPredicate {
         PredicateResult::Success
     }
 
-    fn retry_pred(&mut self, _ctx: &mut SearchContext, _round: usize, _choice: usize) -> PredicateResult {
+    fn retry_pred(
+        &mut self,
+        _ctx: &mut SearchContext,
+        _round: usize,
+        _choice: usize,
+    ) -> PredicateResult {
         PredicateResult::Failure
     }
 }
@@ -62,10 +69,7 @@ fn test_venn_search_ncolors_3_baseline() {
     eprintln!("Expected: 2");
 
     // For NCOLORS=3, we expect exactly 2 solutions
-    assert_eq!(
-        final_count, 2,
-        "Expected exactly 2 solutions for NCOLORS=3"
-    )
+    assert_eq!(final_count, 2, "Expected exactly 2 solutions for NCOLORS=3")
 }
 
 #[test]

@@ -15,12 +15,15 @@
 //! Edges connect to vertices via CurveLink structures:
 //! - **possibly_to**: Precomputed array of all possible vertex connections (MEMO)
 //! - **to**: Current vertex connection set during search (DYNAMIC, trail-tracked)
-//!
-//! This structure matches the C implementation's separation of `struct edge` into
-//! MEMO and DYNAMIC parts.
 
 use crate::geometry::constants::NCOLORS;
 use crate::geometry::{Color, ColorSet};
+
+/// Sentinel bit used to distinguish None from Some in CurveLink encoding.
+///
+/// When bit 63 is set, the value represents Some(CurveLink). When clear (value is 0),
+/// it represents None. This is a standard tagged pointer pattern.
+const CURVELINK_SOME_BIT: u64 = 1 << 63;
 
 /// Reference to an edge by its location in the face/color grid.
 ///
@@ -51,8 +54,6 @@ impl EdgeRef {
 /// around the vertex. This structure is used in both:
 /// - **possibly_to**: All possible vertex connections (MEMO)
 /// - **to**: Current vertex connection during search (DYNAMIC)
-///
-/// Matches C `struct curveLink`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CurveLink {
     /// The next edge around the vertex (in counterclockwise order)
@@ -77,8 +78,6 @@ impl CurveLink {
 ///
 /// Each face has NCOLORS EdgeMemo structures in its edges array.
 /// EdgeMemo is part of the MEMO tier and never changes after initialization.
-///
-/// Matches MEMO fields of C `struct edge`.
 #[derive(Debug, Clone, Copy)]
 pub struct EdgeMemo {
     /// The color (curve) this edge belongs to
@@ -95,8 +94,6 @@ pub struct EdgeMemo {
     /// During initialization, we precompute all possible ways this edge could
     /// connect to a vertex. During search, one of these is selected and placed
     /// in EdgeDynamic.to.
-    ///
-    /// Matches C `struct curveLink possiblyTo[NCOLORS]`.
     pub possibly_to: [Option<CurveLink>; NCOLORS],
 }
 
@@ -130,12 +127,10 @@ impl EdgeMemo {
 /// DYNAMIC (mutable, trail-tracked) edge data.
 ///
 /// EdgeDynamic contains runtime state that changes during search:
-/// - Current vertex connection (set by dynamicCheckFacePoints)
+/// - Current vertex connection (set during vertex configuration)
 ///
 /// Each DynamicFace has NCOLORS EdgeDynamic structures in its edge_dynamic array.
 /// All modifications must be trail-tracked for backtracking.
-///
-/// Matches DYNAMIC fields of C `struct edge`.
 #[derive(Debug, Clone, Copy)]
 pub struct EdgeDynamic {
     /// Encoded vertex connection (set during search, trail-tracked)
@@ -145,15 +140,13 @@ pub struct EdgeDynamic {
     ///
     /// **Encoding**: Uses u64 for trail compatibility:
     /// - 0 = None
-    /// - non-zero = Some(CurveLink) encoded as:
+    /// - bit 63 set = Some(CurveLink) with data in lower bits:
     ///   - bits 0-5: face_id (6 bits, supports 0-63)
     ///   - bits 6-8: color_idx (3 bits, supports 0-7)
     ///   - bits 9-17: vertex_id (9 bits, supports 0-511)
-    ///   - Offset by 1 so 0 is reserved for None
+    ///   - bit 63: sentinel bit (always 1 for Some)
     ///
-    /// Use `get_to()` and `set_to()` accessor methods to work with Option<CurveLink>.
-    ///
-    /// Matches C `DYNAMIC CURVELINK to`.
+    /// Use `get_to()` and `encode_to()` accessor methods to work with Option<CurveLink>.
     pub to_encoded: u64,
 }
 
@@ -186,11 +179,11 @@ impl EdgeDynamic {
 ///
 /// Encoding:
 /// - 0 = None
-/// - non-zero = Some(CurveLink) encoded as:
+/// - bit 63 set = Some(CurveLink) with data in lower bits:
 ///   - bits 0-5: face_id (6 bits, supports 0-63)
 ///   - bits 6-8: color_idx (3 bits, supports 0-7)
 ///   - bits 9-17: vertex_id (9 bits, supports 0-511)
-///   - Offset by 1 so 0 is reserved for None
+///   - bit 63: sentinel bit (always 1 for Some)
 #[inline]
 fn encode_curve_link(link: Option<CurveLink>) -> u64 {
     match link {
@@ -205,8 +198,8 @@ fn encode_curve_link(link: Option<CurveLink>) -> u64 {
                 | ((color_idx & 0x7) << 6)           // bits 6-8
                 | ((vertex_id & 0x1FF) << 9); // bits 9-17
 
-            // Offset by 1 so 0 is None
-            encoded + 1
+            // Set sentinel bit to mark as Some
+            encoded | CURVELINK_SOME_BIT
         }
     }
 }
@@ -214,11 +207,12 @@ fn encode_curve_link(link: Option<CurveLink>) -> u64 {
 /// Decode u64 to Option<CurveLink>.
 #[inline]
 fn decode_curve_link(encoded: u64) -> Option<CurveLink> {
-    if encoded == 0 {
+    // Check sentinel bit to distinguish None from Some
+    if encoded & CURVELINK_SOME_BIT == 0 {
         None
     } else {
-        // Subtract offset
-        let value = encoded - 1;
+        // Mask out sentinel bit to get data
+        let value = encoded & !CURVELINK_SOME_BIT;
 
         // Unpack fields
         let face_id = (value & 0x3F) as usize; // bits 0-5

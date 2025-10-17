@@ -42,25 +42,21 @@ pub struct Cycle {
     colors: [Color; 6], // Fixed size array, only use first `length` elements
     /// Bitset of which colors are present
     colorset: ColorSet,
-    /// Cycles containing edge colors[i] → colors[i+1] (one CycleSet per edge)
+    /// Cycles containing edge colors[i] → colors[i+1] (one CycleSet per edge in this cycle)
     ///
     /// `same_direction[i]` contains all cycles that include the directed edge
     /// from colors[i] to colors[i+1] (wrapping around at the end).
     ///
     /// Used by edge adjacency propagation to find compatible cycles for
     /// doubly-adjacent faces (faces that share two colors).
-    ///
-    /// Matches C `CYCLESET *sameDirection` in `struct facialCycle`.
     same_direction: Vec<CycleSet>,
-    /// Cycles containing triple colors[i-1], colors[i], colors[i+1] (one CycleSet per vertex)
+    /// Cycles containing triple colors[i-1], colors[i], colors[i+1] (one CycleSet per vertex in this cycle)
     ///
     /// `opposite_direction[i]` contains all cycles that include the triple
     /// colors[i-1] → colors[i] → colors[i+1] in that order (with wrapping).
     ///
     /// Used by edge adjacency propagation to find compatible cycles for
     /// adjacent faces (faces that share one color).
-    ///
-    /// Matches C `CYCLESET *oppositeDirection` in `struct facialCycle`.
     opposite_direction: Vec<CycleSet>,
 }
 
