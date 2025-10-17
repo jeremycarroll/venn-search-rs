@@ -189,16 +189,12 @@ fn create_face_with_edges(face_id: FaceId) -> Face {
 
     // Compute adjacent faces (face XOR (1 << color))
     let mut adjacent_faces = [0; NCOLORS];
-    for i in 0..NCOLORS {
-        adjacent_faces[i] = face_id ^ (1 << i);
+    for (i, item) in adjacent_faces.iter_mut().enumerate().take(NCOLORS) {
+        *item = face_id ^ (1 << i);
     }
 
     // Create edges for this face (one per color)
-    let mut edges = [EdgeMemo::new(
-        Color::new(0),
-        colors,
-        EdgeRef::new(0, 0)
-    ); NCOLORS];
+    let mut edges = [EdgeMemo::new(Color::new(0), colors, EdgeRef::new(0, 0)); NCOLORS];
 
     for color_idx in 0..NCOLORS {
         let color = Color::new(color_idx as u8);

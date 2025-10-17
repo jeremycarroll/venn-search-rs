@@ -41,10 +41,7 @@ pub struct EdgeRef {
 impl EdgeRef {
     /// Create a new edge reference.
     pub fn new(face_id: usize, color_idx: usize) -> Self {
-        Self {
-            face_id,
-            color_idx,
-        }
+        Self { face_id, color_idx }
     }
 }
 
@@ -206,7 +203,7 @@ fn encode_curve_link(link: Option<CurveLink>) -> u64 {
             // Pack into u64: face_id (6 bits) | color_idx (3 bits) | vertex_id (9 bits)
             let encoded = (face_id & 0x3F)           // bits 0-5
                 | ((color_idx & 0x7) << 6)           // bits 6-8
-                | ((vertex_id & 0x1FF) << 9);        // bits 9-17
+                | ((vertex_id & 0x1FF) << 9); // bits 9-17
 
             // Offset by 1 so 0 is None
             encoded + 1
@@ -224,8 +221,8 @@ fn decode_curve_link(encoded: u64) -> Option<CurveLink> {
         let value = encoded - 1;
 
         // Unpack fields
-        let face_id = (value & 0x3F) as usize;           // bits 0-5
-        let color_idx = ((value >> 6) & 0x7) as usize;   // bits 6-8
+        let face_id = (value & 0x3F) as usize; // bits 0-5
+        let color_idx = ((value >> 6) & 0x7) as usize; // bits 6-8
         let vertex_id = ((value >> 9) & 0x1FF) as usize; // bits 9-17
 
         Some(CurveLink::new(EdgeRef::new(face_id, color_idx), vertex_id))
@@ -348,8 +345,8 @@ mod tests {
     #[test]
     fn test_curve_link_encoding_bounds() {
         // Test maximum values for each field
-        let max_face = 63;  // 6 bits (0-63)
-        let max_color = 5;  // 3 bits (0-7, we use 0-5)
+        let max_face = 63; // 6 bits (0-63)
+        let max_color = 5; // 3 bits (0-7, we use 0-5)
         let max_vertex = 479; // 9 bits (0-511, we use 0-479)
 
         let link = CurveLink::new(EdgeRef::new(max_face, max_color), max_vertex);

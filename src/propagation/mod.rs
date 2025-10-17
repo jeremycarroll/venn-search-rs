@@ -183,6 +183,9 @@ pub fn propagate_cycle_choice(
     // Update face's possible cycles (trail-tracked)
     set_face_possible_cycles(state, trail, face_id, singleton);
 
+    // Check and configure vertices for this cycle (sets edge->to pointers)
+    check_face_vertices(memo, state, trail, face_id, cycle_id, depth)?;
+
     // Propagate all constraint types
     propagate_edge_adjacency(memo, state, trail, face_id, cycle_id, depth)?;
     propagate_non_adjacent_faces(memo, state, trail, face_id, cycle_id, depth)?;
@@ -367,7 +370,7 @@ pub fn check_face_vertices(
             let encoded = EdgeDynamic::encode_to(Some(link));
             unsafe {
                 let ptr = NonNull::new_unchecked(
-                    &mut state.faces.faces[face_id].edge_dynamic[color_a_idx].to_encoded
+                    &mut state.faces.faces[face_id].edge_dynamic[color_a_idx].to_encoded,
                 );
                 trail.record_and_set(ptr, encoded);
             }
@@ -384,25 +387,56 @@ pub fn check_face_vertices(
 /// For each edge in the assigned cycle, propagate constraints to adjacent faces
 /// based on vertex and edge configuration.
 ///
-/// **TODO (Step 9)**: This requires implementing edge adjacency logic using
-/// the direction tables we just set up. This function will:
-/// 1. For each edge in the cycle, use the vertex it connects to
-/// 2. Determine which faces are adjacent/doubly-adjacent through that vertex
-/// 3. Use `same_direction` and `opposite_direction` lookup from cycle direction tables
-/// 4. Restrict adjacent faces to compatible cycles
+/// Algorithm (from C dynamicFacePropagateChoice):
+/// 1. For each edge in the cycle:
+///    - Get vertex from edge->to pointer
+///    - Determine aColor (edge color) and bColor (other color at vertex)
+///    - Find aFace (adjacent through aColor) and abFace (adjacent through aColor AND bColor)
+///    - Propagate same_direction to abFace (doubly-adjacent)
+///    - Propagate opposite_direction to aFace (singly-adjacent)
 ///
-/// For now, this is a no-op stub. Will be implemented in Step 9.
+/// This uses the direction tables (same_direction, opposite_direction) computed during
+/// cycle initialization (Step 6).
 fn propagate_edge_adjacency(
-    _memo: &MemoizedData,
-    _state: &mut DynamicState,
-    _trail: &mut Trail,
-    _face_id: usize,
-    _cycle_id: CycleId,
-    _depth: usize,
+    memo: &MemoizedData,
+    state: &mut DynamicState,
+    trail: &mut Trail,
+    face_id: usize,
+    cycle_id: CycleId,
+    depth: usize,
 ) -> Result<(), PropagationFailure> {
-    // TODO (Step 9): Implement edge/vertex adjacency propagation
-    // Now that check_face_vertices has set up edge->to pointers,
-    // we can use the vertex configuration to propagate constraints.
+    let cycle = memo.cycles.get(cycle_id);
+    let cycle_colors = cycle.colors();
+    let face_memo = memo.faces.get_face(face_id);
+    let face_colors = face_memo.colors;
+
+    // For each edge in the cycle
+    for i in 0..cycle.len() {
+        let a_color = cycle_colors[i];
+        let a_color_idx = a_color.value() as usize;
+
+        // bColor is simply the next color in the cycle (vertex connects aColor->bColor)
+        let next_i = (i + 1) % cycle.len();
+        let b_color = cycle_colors[next_i];
+        let b_color_idx = b_color.value() as usize;
+
+        // Determine adjacent faces:
+        // - aFace: adjacent through aColor only (XOR with a_color bit)
+        // - abFace: adjacent through BOTH aColor and bColor (XOR with both bits)
+        let a_face_id = face_colors.bits() as usize ^ (1 << a_color_idx);
+        let ab_face_id = face_colors.bits() as usize ^ (1 << a_color_idx) ^ (1 << b_color_idx);
+
+        // Get direction cycle sets from the cycle
+        let same_dir_cycles = cycle.same_direction(i);
+        let opposite_dir_cycles = cycle.opposite_direction(i);
+
+        // Propagate to doubly-adjacent face (same direction)
+        restrict_face_cycles(memo, state, trail, ab_face_id, same_dir_cycles, depth)?;
+
+        // Propagate to singly-adjacent face (opposite direction)
+        restrict_face_cycles(memo, state, trail, a_face_id, opposite_dir_cycles, depth)?;
+    }
+
     Ok(())
 }
 
@@ -530,6 +564,8 @@ fn propagate_non_vertex_adjacent_faces(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::SearchContext;
+    use crate::geometry::constants::NCYCLES;
 
     #[test]
     fn test_propagation_failure_display() {
@@ -558,5 +594,34 @@ mod tests {
         // Verify MAX_PROPAGATION_DEPTH is reasonable
         assert!(MAX_PROPAGATION_DEPTH >= 64); // At least NFACES for NCOLORS=6
         assert!(MAX_PROPAGATION_DEPTH <= 256); // Not too large
+    }
+
+    #[test]
+    fn test_direction_tables_populated() {
+        let ctx = SearchContext::new();
+
+        // Check all cycles have non-empty direction tables
+        for cycle_id in 0..NCYCLES as u64 {
+            let cycle = ctx.memo.cycles.get(cycle_id);
+
+            for i in 0..cycle.len() {
+                let same_dir = cycle.same_direction(i);
+                let opp_dir = cycle.opposite_direction(i);
+
+                // Direction tables should have at least one cycle
+                assert!(
+                    !same_dir.is_empty(),
+                    "Cycle {} edge {} has empty same_direction table",
+                    cycle_id,
+                    i
+                );
+                assert!(
+                    !opp_dir.is_empty(),
+                    "Cycle {} edge {} has empty opposite_direction table",
+                    cycle_id,
+                    i
+                );
+            }
+        }
     }
 }

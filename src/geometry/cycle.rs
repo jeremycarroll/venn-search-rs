@@ -228,7 +228,8 @@ impl Cycle {
     pub(crate) fn init_direction_tables(
         &mut self,
         cycle_pairs: &[[[u64; crate::geometry::constants::CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
-        cycle_triples: &[[[[u64; crate::geometry::constants::CYCLESET_LENGTH]; NCOLORS]; NCOLORS]; NCOLORS],
+        cycle_triples: &[[[[u64; crate::geometry::constants::CYCLESET_LENGTH]; NCOLORS]; NCOLORS];
+             NCOLORS],
     ) {
         // Initialize same_direction (one CycleSet per edge)
         self.same_direction = Vec::with_capacity(self.len());
