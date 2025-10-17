@@ -119,10 +119,8 @@ fn set_face_possible_cycles(
         let words_mut = face.possible_cycles.words_mut();
         for i in 0..CYCLESET_LENGTH {
             if old_words[i] != new_words[i] {
-                // Get pointer to word i in the mutable words array
-                let ptr = &mut words_mut[i] as *mut u64;
-                let ptr = NonNull::new_unchecked(ptr);
-                trail.record_and_set(ptr, new_words[i]);
+                // Record change on trail (NonNull::from provides null checking)
+                trail.record_and_set(NonNull::from(&mut words_mut[i]), new_words[i]);
             }
         }
     }
@@ -131,8 +129,7 @@ fn set_face_possible_cycles(
     let new_count = new_cycles.len() as u64;
     if face.cycle_count != new_count {
         unsafe {
-            let ptr = NonNull::new_unchecked(&mut face.cycle_count);
-            trail.record_and_set(ptr, new_count);
+            trail.record_and_set(NonNull::from(&mut face.cycle_count), new_count);
         }
     }
 }
@@ -276,8 +273,10 @@ pub fn restrict_face_cycles(
         // Assign the forced cycle (trail-tracked)
         let encoded = forced_cycle + 1;
         unsafe {
-            let ptr = NonNull::new_unchecked(&mut state.faces.faces[face_id].current_cycle_encoded);
-            trail.record_and_set(ptr, encoded);
+            trail.record_and_set(
+                NonNull::from(&mut state.faces.faces[face_id].current_cycle_encoded),
+                encoded,
+            );
         }
 
         // RECURSIVE PROPAGATION - this is the cascade effect!
@@ -293,9 +292,6 @@ pub fn restrict_face_cycles(
 /// 1. Retrieves the precomputed vertex from the vertex array
 /// 2. Sets the edge->to pointer (trail-tracked) to connect to that vertex
 /// 3. Validates vertex configuration compatibility
-///
-/// This corresponds to `dynamicCheckFacePoints` in the C code, which calls
-/// `dynamicFaceIncludeVertex` for each edge pair in the cycle.
 ///
 /// # Algorithm
 ///
@@ -369,10 +365,10 @@ pub fn check_face_vertices(
             // Set edge->to_encoded pointer (trail-tracked)
             let encoded = EdgeDynamic::encode_to(Some(link));
             unsafe {
-                let ptr = NonNull::new_unchecked(
-                    &mut state.faces.faces[face_id].edge_dynamic[color_a_idx].to_encoded,
+                trail.record_and_set(
+                    NonNull::from(&mut state.faces.faces[face_id].edge_dynamic[color_a_idx].to_encoded),
+                    encoded,
                 );
-                trail.record_and_set(ptr, encoded);
             }
         }
         // If vertex_link is None, that's OK - not all edges may have vertices
@@ -387,16 +383,17 @@ pub fn check_face_vertices(
 /// For each edge in the assigned cycle, propagate constraints to adjacent faces
 /// based on vertex and edge configuration.
 ///
-/// Algorithm (from C dynamicFacePropagateChoice):
-/// 1. For each edge in the cycle:
-///    - Get vertex from edge->to pointer
-///    - Determine aColor (edge color) and bColor (other color at vertex)
-///    - Find aFace (adjacent through aColor) and abFace (adjacent through aColor AND bColor)
-///    - Propagate same_direction to abFace (doubly-adjacent)
-///    - Propagate opposite_direction to aFace (singly-adjacent)
+/// # Algorithm
+///
+/// For each edge in the cycle:
+/// 1. Get vertex from edge->to pointer
+/// 2. Determine aColor (edge color) and bColor (other color at vertex)
+/// 3. Find aFace (adjacent through aColor) and abFace (adjacent through aColor AND bColor)
+/// 4. Propagate same_direction to abFace (doubly-adjacent)
+/// 5. Propagate opposite_direction to aFace (singly-adjacent)
 ///
 /// This uses the direction tables (same_direction, opposite_direction) computed during
-/// cycle initialization (Step 6).
+/// cycle initialization.
 fn propagate_edge_adjacency(
     memo: &MemoizedData,
     state: &mut DynamicState,

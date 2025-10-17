@@ -193,6 +193,11 @@ fn encode_curve_link(link: Option<CurveLink>) -> u64 {
             let color_idx = l.next.color_idx as u64;
             let vertex_id = l.vertex_id as u64;
 
+            // Validate bounds to prevent data corruption
+            debug_assert!(face_id < 64, "face_id {} exceeds 6-bit limit (0-63)", face_id);
+            debug_assert!(color_idx < 8, "color_idx {} exceeds 3-bit limit (0-7)", color_idx);
+            debug_assert!(vertex_id < 512, "vertex_id {} exceeds 9-bit limit (0-511)", vertex_id);
+
             // Pack into u64: face_id (6 bits) | color_idx (3 bits) | vertex_id (9 bits)
             let encoded = (face_id & 0x3F)           // bits 0-5
                 | ((color_idx & 0x7) << 6)           // bits 6-8

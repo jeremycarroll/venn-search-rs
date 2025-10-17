@@ -256,8 +256,10 @@ impl SearchContext {
     pub fn set_face_degree(&mut self, round: usize, degree: u64) {
         assert!(round < NCOLORS, "Face round out of bounds: {}", round);
         unsafe {
-            let ptr = NonNull::new_unchecked(&mut self.state.current_face_degrees[round]);
-            self.trail.record_and_set(ptr, degree);
+            self.trail.record_and_set(
+                NonNull::from(&mut self.state.current_face_degrees[round]),
+                degree,
+            );
         }
     }
 
@@ -286,9 +288,10 @@ impl SearchContext {
     /// the previous value on backtrack.
     pub fn reset_face_cycle(&mut self, face_id: usize) {
         unsafe {
-            let ptr =
-                NonNull::new_unchecked(&mut self.state.faces.faces[face_id].current_cycle_encoded);
-            self.trail.record_and_set(ptr, 0); // 0 = None
+            self.trail.record_and_set(
+                NonNull::from(&mut self.state.faces.faces[face_id].current_cycle_encoded),
+                0, // 0 = None
+            );
         }
     }
 
@@ -299,9 +302,10 @@ impl SearchContext {
     #[allow(dead_code)]
     pub fn set_face_cycle(&mut self, face_id: usize, cycle_id: CycleId) {
         unsafe {
-            let ptr =
-                NonNull::new_unchecked(&mut self.state.faces.faces[face_id].current_cycle_encoded);
-            self.trail.record_and_set(ptr, cycle_id + 1); // n+1 = Some(n)
+            self.trail.record_and_set(
+                NonNull::from(&mut self.state.faces.faces[face_id].current_cycle_encoded),
+                cycle_id + 1, // n+1 = Some(n)
+            );
         }
     }
 
@@ -325,9 +329,8 @@ impl SearchContext {
             for i in 0..CYCLESET_LENGTH {
                 if old_words[i] != new_words[i] {
                     // Get pointer to word i in the mutable words array
-                    let ptr = &mut words_mut[i] as *mut u64;
-                    let ptr = NonNull::new_unchecked(ptr);
-                    self.trail.record_and_set(ptr, new_words[i]);
+                    self.trail
+                        .record_and_set(NonNull::from(&mut words_mut[i]), new_words[i]);
                 }
             }
         }
@@ -336,8 +339,8 @@ impl SearchContext {
         let new_count = new_cycles.len() as u64;
         if face.cycle_count != new_count {
             unsafe {
-                let ptr = NonNull::new_unchecked(&mut face.cycle_count);
-                self.trail.record_and_set(ptr, new_count);
+                self.trail
+                    .record_and_set(NonNull::from(&mut face.cycle_count), new_count);
             }
         }
     }

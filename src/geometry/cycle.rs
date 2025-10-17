@@ -249,8 +249,8 @@ impl Cycle {
             let color_curr = self.colors[i].value() as usize;
             let color_next = self.colors[next_i].value() as usize;
 
-            // Get cycles containing triple color_next → color_curr → color_prev (REVERSED!)
-            // C code: CycleSetTriples[cycle->curves[j]][cycle->curves[j - 1]][cycle->curves[j - 2]]
+            // Look up cycles containing the triple (colors[i+1], colors[i], colors[i-1])
+            // This is reversed relative to the natural forward sequence (prev, curr, next)
             let words = cycle_triples[color_next][color_curr][color_prev];
             self.opposite_direction.push(CycleSet::from_words(words));
         }

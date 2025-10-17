@@ -417,9 +417,6 @@ fn compute_cycles_omitting_one_color(cycles: &CyclesArray) -> [[u64; CYCLESET_LE
 ///
 /// **IMPORTANT**: Only populates upper triangle (i < j). The lower triangle is left
 /// as zeros and should never be accessed - that would be a bug in the search logic.
-///
-/// Matches C implementation in cycleset.c:initializeOmittingColorPairs() which also
-/// only populates the upper triangle.
 fn compute_cycles_omitting_color_pair(
     cycles: &CyclesArray,
 ) -> [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS] {
@@ -428,7 +425,7 @@ fn compute_cycles_omitting_color_pair(
     for cycle_id in 0..cycles.len() as u64 {
         let cycle = cycles.get(cycle_id);
 
-        // Only iterate upper triangle (i < j), matching C code behavior
+        // Only iterate upper triangle (i < j)
         for (i, omitting_i) in omitting.iter_mut().enumerate() {
             for (j, omitting_i_j) in omitting_i.iter_mut().enumerate().skip(i + 1) {
                 // Check if cycle contains the DIRECTED edge i→j

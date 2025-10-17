@@ -80,9 +80,6 @@ use crate::geometry::{Color, ColorSet, Vertex};
 /// memory overhead (2304 slots, 480 precomputed, 126 used per solution) enables
 /// dramatic algorithmic speedups through simple O(1) array indexing.
 ///
-/// See [`vertex.c::getOrInitializeVertex()`](https://github.com/jeremycarroll/venntriangles/blob/main/vertex.c)
-/// for the C implementation.
-///
 /// # Memory Layout
 ///
 /// - `vertices`: **Heap-allocated** via Box
@@ -344,7 +341,7 @@ impl VerticesMemo {
 
                     if let Some(vertex) = &mut vertices[outside_face][primary_idx][secondary_idx] {
                         // Set incoming edge for this slot
-                        vertex.incoming_edges[slot] = EdgeRef::new(face_id, edge_color_val);
+                        vertex.incoming_edges[slot] = EdgeRef::new(face_id, edge_color.value() as usize);
                     } else {
                         panic!(
                             "Vertex should exist at [{:?}][{}][{}] (slot {})",
