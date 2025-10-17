@@ -366,7 +366,9 @@ pub fn check_face_vertices(
             let encoded = EdgeDynamic::encode_to(Some(link));
             unsafe {
                 trail.record_and_set(
-                    NonNull::from(&mut state.faces.faces[face_id].edge_dynamic[color_a_idx].to_encoded),
+                    NonNull::from(
+                        &mut state.faces.faces[face_id].edge_dynamic[color_a_idx].to_encoded,
+                    ),
                     encoded,
                 );
             }

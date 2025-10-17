@@ -341,7 +341,8 @@ impl VerticesMemo {
 
                     if let Some(vertex) = &mut vertices[outside_face][primary_idx][secondary_idx] {
                         // Set incoming edge for this slot
-                        vertex.incoming_edges[slot] = EdgeRef::new(face_id, edge_color.value() as usize);
+                        vertex.incoming_edges[slot] =
+                            EdgeRef::new(face_id, edge_color.value() as usize);
                     } else {
                         panic!(
                             "Vertex should exist at [{:?}][{}][{}] (slot {})",
