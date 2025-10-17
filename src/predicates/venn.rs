@@ -7,6 +7,7 @@
 use crate::context::SearchContext;
 use crate::engine::{Predicate, PredicateResult};
 use crate::geometry::constants::NFACES;
+use crate::propagation;
 
 /// VennPredicate finds valid facial cycle assignments.
 ///
@@ -91,7 +92,11 @@ impl Predicate for VennPredicate {
         // Not trail-tracked, otherwise it would get unset before the next retry.
         ctx.state.faces.faces[face_id].set_current_cycle(Some(next_cycle));
 
-        // [PR #2] Constraint propagation will go here
+        // Constraint propagation
+        if let Err(_failure) = propagation::propagate_cycle_choice(ctx, face_id, next_cycle, 0) {
+            // Propagation failed - engine will backtrack
+            return PredicateResult::Failure;
+        }
 
         PredicateResult::SuccessSamePredicate
     }
