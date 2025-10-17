@@ -102,20 +102,22 @@ impl Default for CornerWalkState {
 /// # Trail Tracking
 ///
 /// All modifications to crossing counts must be trail-tracked for backtracking.
+/// Stored as u64 to work with the trail system, even though values are small.
 #[derive(Debug, Clone)]
 pub struct CrossingCounts {
     /// Crossing counts indexed by color pair (upper triangle only).
     ///
     /// Access via `get(i, j)` and `set(i, j, count)` which enforce i < j.
     /// Stored as [NCOLORS][NCOLORS] for simple indexing, lower triangle unused.
-    counts: [[u8; NCOLORS]; NCOLORS],
+    /// Uses u64 for trail compatibility.
+    counts: [[u64; NCOLORS]; NCOLORS],
 }
 
 impl CrossingCounts {
     /// Create a new crossing counts structure with all counts at zero.
     pub fn new() -> Self {
         Self {
-            counts: [[0u8; NCOLORS]; NCOLORS],
+            counts: [[0u64; NCOLORS]; NCOLORS],
         }
     }
 
@@ -125,7 +127,7 @@ impl CrossingCounts {
     ///
     /// Panics in debug builds if i >= j (must use upper triangle).
     #[inline]
-    pub fn get(&self, i: usize, j: usize) -> u8 {
+    pub fn get(&self, i: usize, j: usize) -> u64 {
         debug_assert!(
             i < j,
             "CrossingCounts only valid for i < j (upper triangle), got i={}, j={}",
@@ -145,14 +147,14 @@ impl CrossingCounts {
     ///
     /// Panics in debug builds if i >= j (must use upper triangle).
     #[inline]
-    pub fn get_mut_ptr(&mut self, i: usize, j: usize) -> *mut u8 {
+    pub fn get_mut_ptr(&mut self, i: usize, j: usize) -> *mut u64 {
         debug_assert!(
             i < j,
             "CrossingCounts only valid for i < j (upper triangle), got i={}, j={}",
             i,
             j
         );
-        &mut self.counts[i][j] as *mut u8
+        &mut self.counts[i][j] as *mut u64
     }
 
     /// Check if a crossing count exceeds the maximum allowed.
@@ -162,7 +164,7 @@ impl CrossingCounts {
     }
 
     /// Get all crossing counts for debugging.
-    pub fn all_counts(&self) -> Vec<((usize, usize), u8)> {
+    pub fn all_counts(&self) -> Vec<((usize, usize), u64)> {
         let mut result = Vec::new();
         for i in 0..NCOLORS {
             for j in (i + 1)..NCOLORS {

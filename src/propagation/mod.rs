@@ -40,7 +40,7 @@
 //! - Statistics (how deep cascades go)
 
 use crate::context::{DynamicState, MemoizedData};
-use crate::geometry::{CycleId, CycleSet, EdgeDynamic};
+use crate::geometry::{CycleId, CycleSet, EdgeDynamic, MAX_CROSSINGS_PER_PAIR};
 use crate::trail::Trail;
 use std::fmt;
 use std::ptr::NonNull;
@@ -66,6 +66,15 @@ pub enum PropagationFailure {
 
     /// Propagation depth exceeded (likely infinite recursion bug).
     DepthExceeded { depth: usize },
+
+    /// Crossing limit exceeded between a color pair (triangle constraint violation).
+    CrossingLimitExceeded {
+        color_i: usize,
+        color_j: usize,
+        count: usize,
+        max_allowed: usize,
+        depth: usize,
+    },
 }
 
 impl fmt::Display for PropagationFailure {
@@ -91,6 +100,19 @@ impl fmt::Display for PropagationFailure {
             }
             PropagationFailure::DepthExceeded { depth } => {
                 write!(f, "Propagation depth {} exceeded max", depth)
+            }
+            PropagationFailure::CrossingLimitExceeded {
+                color_i,
+                color_j,
+                count,
+                max_allowed,
+                depth,
+            } => {
+                write!(
+                    f,
+                    "Colors {} and {} cross {} times (max {}) (depth {})",
+                    color_i, color_j, count, max_allowed, depth
+                )
             }
         }
     }
@@ -134,6 +156,80 @@ fn set_face_possible_cycles(
     }
 }
 
+/// Update crossing counts for a cycle assignment.
+///
+/// For each consecutive pair of colors in the cycle, increment the crossing count
+/// between that color pair. This enforces the triangle constraint that each pair
+/// of colors can cross at most MAX_CROSSINGS_PER_PAIR (6) times.
+///
+/// # Algorithm
+///
+/// For each edge (color_i, color_j) in the cycle:
+/// 1. Normalize to upper triangle (ensure i < j)
+/// 2. Get mutable pointer to crossing_counts[i][j]
+/// 3. Increment via trail.record_and_set()
+/// 4. Check if count exceeds MAX_CROSSINGS_PER_PAIR
+/// 5. Return error if exceeded
+///
+/// # Arguments
+///
+/// * `memo` - Immutable MEMO data (contains cycle colors)
+/// * `state` - Mutable search state (contains crossing_counts)
+/// * `trail` - Trail for backtracking
+/// * `cycle_id` - The cycle being assigned
+/// * `depth` - Recursion depth for error reporting
+///
+/// # Returns
+///
+/// `Ok(())` if all crossing limits satisfied, `Err(PropagationFailure::CrossingLimitExceeded)` otherwise.
+fn update_crossing_counts(
+    memo: &MemoizedData,
+    state: &mut DynamicState,
+    trail: &mut Trail,
+    cycle_id: CycleId,
+    depth: usize,
+) -> Result<(), PropagationFailure> {
+    let cycle = memo.cycles.get(cycle_id);
+    let cycle_colors = cycle.colors();
+
+    // For each consecutive pair of colors in the cycle (including wrap-around)
+    for i in 0..cycle.len() {
+        let next_i = (i + 1) % cycle.len();
+        let color_a = cycle_colors[i].value() as usize;
+        let color_b = cycle_colors[next_i].value() as usize;
+
+        // Normalize to upper triangle (i < j)
+        let (color_i, color_j) = if color_a < color_b {
+            (color_a, color_b)
+        } else {
+            (color_b, color_a)
+        };
+
+        // Get current count
+        let current_count = state.crossing_counts.get(color_i, color_j);
+        let new_count = current_count + 1;
+
+        // Update via trail
+        unsafe {
+            let ptr = state.crossing_counts.get_mut_ptr(color_i, color_j);
+            trail.record_and_set(NonNull::new_unchecked(ptr), new_count);
+        }
+
+        // Check limit
+        if new_count as usize > MAX_CROSSINGS_PER_PAIR {
+            return Err(PropagationFailure::CrossingLimitExceeded {
+                color_i,
+                color_j,
+                count: new_count as usize,
+                max_allowed: MAX_CROSSINGS_PER_PAIR,
+                depth,
+            });
+        }
+    }
+
+    Ok(())
+}
+
 /// Propagate a cycle choice for a face through the constraint network.
 ///
 /// This is the main entry point called after assigning a cycle to a face.
@@ -142,9 +238,10 @@ fn set_face_possible_cycles(
 /// # Algorithm
 ///
 /// 1. Set face's possible_cycles to singleton {cycle_id}
-/// 2. Propagate edge adjacency constraints
-/// 3. Propagate non-adjacent face constraints
-/// 4. Propagate non-vertex-adjacent face constraints
+/// 2. Update crossing counts (triangle constraint)
+/// 3. Propagate edge adjacency constraints
+/// 4. Propagate non-adjacent face constraints
+/// 5. Propagate non-vertex-adjacent face constraints
 ///
 /// Each propagation step may trigger recursive propagation if faces reduce to singletons.
 ///
@@ -179,6 +276,9 @@ pub fn propagate_cycle_choice(
 
     // Update face's possible cycles (trail-tracked)
     set_face_possible_cycles(state, trail, face_id, singleton);
+
+    // Update crossing counts (triangle constraint)
+    update_crossing_counts(memo, state, trail, cycle_id, depth)?;
 
     // Check and configure vertices for this cycle (sets edge->to pointers)
     check_face_vertices(memo, state, trail, face_id, cycle_id, depth)?;
