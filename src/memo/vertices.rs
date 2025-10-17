@@ -233,22 +233,24 @@ impl VerticesMemo {
     ///
     /// # Algorithm
     ///
+    /// **Phase 1: Create vertex structures**
     /// For each face (0..NFACES):
     ///   For each color pair (edge_color, other_color) where edge_color ≠ other_color:
     ///     1. Determine incoming edge slot (0-3) based on edge orientation and face membership
     ///     2. Determine primary/secondary colors from slot
     ///     3. Compute outside_face = colors outside BOTH primary and secondary
-    ///     4. Get or create vertex at vertices[outside_face][primary][secondary]
-    ///     5. Record this edge in the vertex's incoming_edges array
+    ///     4. Create vertex at vertices[outside_face][primary][secondary] if it doesn't exist
+    ///
+    /// **Phase 2: Populate incoming_edges**
+    /// For each face (0..NFACES):
+    ///   For each color pair (edge_color, other_color) where edge_color ≠ other_color:
+    ///     1-3. Same as Phase 1 to locate the vertex
+    ///     4. Set vertex.incoming_edges[slot] = EdgeRef(face_id, edge_color)
     ///
     /// This generates exactly NPOINTS = 2^(NCOLORS-2) × NCOLORS × (NCOLORS-1) vertices.
-    ///
-    /// # Note
-    ///
-    /// The incoming_edges array is set to placeholder EdgeIds (0) since edges don't
-    /// exist yet. Phase 7 (VennPredicate) will create the full edge infrastructure
-    /// and properly connect vertices to edges.
     pub fn initialize() -> Self {
+        use crate::geometry::EdgeRef;
+
         let total_slots = NFACES * NCOLORS * NCOLORS;
         eprintln!(
             "[VerticesMemo] Allocating {} array slots ({} theoretical possible vertices)...",
@@ -259,11 +261,10 @@ impl VerticesMemo {
         let mut vertices = Box::new([[[None; NCOLORS]; NCOLORS]; NFACES]);
         let mut vertex_id_counter = 0;
 
-        eprintln!("[VerticesMemo] Computing vertex configurations...");
+        eprintln!("[VerticesMemo] Phase 1: Creating vertex structures...");
 
-        // Iterate through all (face, edge_color, other_color) combinations
+        // PHASE 1: Create all vertex structures with placeholder incoming_edges
         for face_id in 0..NFACES {
-            // Convert face ID to ColorSet (face ID is a bitmask of colors)
             let face_colors = ColorSet::from_bits(face_id as u64);
 
             for edge_color_val in 0..NCOLORS {
@@ -275,19 +276,17 @@ impl VerticesMemo {
                     }
                     let other_color = Color::new(other_color_val as u8);
 
-                    // Compute vertex parameters using helper functions
-                    let _slot = compute_incoming_edge_slot(edge_color, other_color, face_colors);
+                    // Compute vertex parameters
+                    let slot = compute_incoming_edge_slot(edge_color, other_color, face_colors);
                     let (primary, secondary) =
-                        determine_primary_secondary(_slot, edge_color, other_color);
+                        determine_primary_secondary(slot, edge_color, other_color);
                     let outside_face = compute_outside_face(face_colors, primary, secondary);
 
-                    // Get or create vertex at [outside_face][primary][secondary]
+                    // Create vertex if it doesn't exist
                     let primary_idx = primary.value() as usize;
                     let secondary_idx = secondary.value() as usize;
 
                     if vertices[outside_face][primary_idx][secondary_idx].is_none() {
-                        // Create new vertex
-                        use crate::geometry::EdgeRef;
                         let vertex = Vertex::new(
                             vertex_id_counter,
                             primary,
@@ -297,16 +296,12 @@ impl VerticesMemo {
                                 EdgeRef::new(0, 0),
                                 EdgeRef::new(0, 0),
                                 EdgeRef::new(0, 0),
-                            ], // Placeholder EdgeRefs - will be properly initialized in Phase 7
+                            ], // Placeholder EdgeRefs - will be set in Phase 2
                         );
 
                         vertices[outside_face][primary_idx][secondary_idx] = Some(vertex);
                         vertex_id_counter += 1;
                     }
-
-                    // Note: In the C code, we would also set incoming_edges[slot] here.
-                    // In Rust, we skip this for now since EdgeIds don't exist yet.
-                    // Phase 7 will properly connect vertices to edges.
                 }
             }
         }
@@ -318,7 +313,50 @@ impl VerticesMemo {
         );
 
         eprintln!(
-            "[VerticesMemo] Generated {} vertices (21% utilization of {} slots).",
+            "[VerticesMemo] Phase 1 complete: {} vertices created.",
+            vertex_id_counter
+        );
+
+        eprintln!("[VerticesMemo] Phase 2: Populating incoming_edges...");
+
+        // PHASE 2: Populate incoming_edges for all vertices
+        for face_id in 0..NFACES {
+            let face_colors = ColorSet::from_bits(face_id as u64);
+
+            for edge_color_val in 0..NCOLORS {
+                let edge_color = Color::new(edge_color_val as u8);
+
+                for other_color_val in 0..NCOLORS {
+                    if other_color_val == edge_color_val {
+                        continue;
+                    }
+                    let other_color = Color::new(other_color_val as u8);
+
+                    // Compute vertex parameters (same as Phase 1)
+                    let slot = compute_incoming_edge_slot(edge_color, other_color, face_colors);
+                    let (primary, secondary) =
+                        determine_primary_secondary(slot, edge_color, other_color);
+                    let outside_face = compute_outside_face(face_colors, primary, secondary);
+
+                    // Get mutable reference to vertex
+                    let primary_idx = primary.value() as usize;
+                    let secondary_idx = secondary.value() as usize;
+
+                    if let Some(vertex) = &mut vertices[outside_face][primary_idx][secondary_idx] {
+                        // Set incoming edge for this slot
+                        vertex.incoming_edges[slot] = EdgeRef::new(face_id, edge_color_val);
+                    } else {
+                        panic!(
+                            "Vertex should exist at [{:?}][{}][{}] (slot {})",
+                            outside_face, primary_idx, secondary_idx, slot
+                        );
+                    }
+                }
+            }
+        }
+
+        eprintln!(
+            "[VerticesMemo] Initialization complete: {} vertices with incoming_edges (21% utilization of {} slots).",
             vertex_id_counter, total_slots
         );
 
@@ -555,6 +593,116 @@ mod tests {
                 "Expected vertex ID {}, found {} at position {}",
                 i, id, i
             );
+        }
+    }
+
+    #[test]
+    fn test_incoming_edges_populated() {
+        let memo = VerticesMemo::initialize();
+
+        // Check that incoming_edges are not placeholders
+        let mut checked_count = 0;
+        for face in 0..NFACES {
+            for color_a in 0..NCOLORS {
+                for color_b in 0..NCOLORS {
+                    if let Some(vertex) = memo.get_vertex(face, color_a, color_b) {
+                        // Each incoming_edges slot should be populated with non-placeholder EdgeRef
+                        for (slot, edge_ref) in vertex.incoming_edges.iter().enumerate() {
+                            // EdgeRef should point to a valid face and color
+                            assert!(
+                                edge_ref.face_id < NFACES,
+                                "Vertex [{:?}][{}][{}] slot {} has invalid face_id {}",
+                                face,
+                                color_a,
+                                color_b,
+                                slot,
+                                edge_ref.face_id
+                            );
+                            assert!(
+                                edge_ref.color_idx < NCOLORS,
+                                "Vertex [{:?}][{}][{}] slot {} has invalid color_idx {}",
+                                face,
+                                color_a,
+                                color_b,
+                                slot,
+                                edge_ref.color_idx
+                            );
+
+                            // At least one incoming edge should not be EdgeRef::new(0, 0)
+                            // (to ensure we're not just seeing placeholders)
+                            if edge_ref.face_id != 0 || edge_ref.color_idx != 0 {
+                                checked_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // We should have found many non-placeholder EdgeRefs
+        // (Most vertices will have at least one edge not at (0, 0))
+        assert!(
+            checked_count > NPOINTS * 2,
+            "Expected many non-placeholder incoming_edges, found only {}",
+            checked_count
+        );
+    }
+
+    #[test]
+    fn test_incoming_edges_reference_correct_colors() {
+        let memo = VerticesMemo::initialize();
+
+        // For each vertex, verify that incoming_edges reference edges with
+        // colors that match the vertex's crossing colors
+        for face in 0..NFACES {
+            for color_a in 0..NCOLORS {
+                for color_b in 0..NCOLORS {
+                    if let Some(vertex) = memo.get_vertex(face, color_a, color_b) {
+                        let primary = vertex.primary;
+                        let secondary = vertex.secondary;
+
+                        // Each incoming edge should be of color primary or secondary
+                        for (slot, edge_ref) in vertex.incoming_edges.iter().enumerate() {
+                            let edge_color = Color::new(edge_ref.color_idx as u8);
+
+                            assert!(
+                                edge_color == primary || edge_color == secondary,
+                                "Vertex [{:?}][{}][{}] slot {}: edge has color {:?}, but vertex has colors {:?} and {:?}",
+                                face,
+                                color_a,
+                                color_b,
+                                slot,
+                                edge_color,
+                                primary,
+                                secondary
+                            );
+                        }
+
+                        // Slots 0, 1 should be primary color
+                        // Slots 2, 3 should be secondary color
+                        assert_eq!(
+                            Color::new(vertex.incoming_edges[0].color_idx as u8),
+                            primary,
+                            "Slot 0 should be primary color"
+                        );
+                        assert_eq!(
+                            Color::new(vertex.incoming_edges[1].color_idx as u8),
+                            primary,
+                            "Slot 1 should be primary color"
+                        );
+                        assert_eq!(
+                            Color::new(vertex.incoming_edges[2].color_idx as u8),
+                            secondary,
+                            "Slot 2 should be secondary color"
+                        );
+                        assert_eq!(
+                            Color::new(vertex.incoming_edges[3].color_idx as u8),
+                            secondary,
+                            "Slot 3 should be secondary color"
+                        );
+                    }
+                }
+            }
         }
     }
 }
