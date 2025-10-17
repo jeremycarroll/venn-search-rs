@@ -66,8 +66,11 @@ impl MemoizedData {
 
         let mut cycles = CyclesArray::generate();
         let cycles_memo = CyclesMemo::initialize(&mut cycles);
-        let faces = FacesMemo::initialize(&cycles);
+        let mut faces = FacesMemo::initialize(&cycles);
         let vertices = VerticesMemo::initialize();
+
+        // Phase 3: Link edges to vertices for corner detection
+        faces.populate_vertex_links(&vertices);
 
         eprintln!(
             "[MemoizedData] Initialization complete ({} cycles, {} faces, {} possible vertices)",
@@ -125,6 +128,18 @@ pub struct DynamicState {
     ///
     /// All modifications must be trail-tracked.
     pub crossing_counts: CrossingCounts,
+
+    /// Tracks which vertices have been processed for crossing counts.
+    ///
+    /// Array of u64 flags (0 = not processed, 1 = processed).
+    /// Size 512 to accommodate up to 480 possible vertices (see VerticesMemo).
+    ///
+    /// When a vertex is first encountered during facial cycle assignment,
+    /// we increment the crossing count for that vertex's color pair and
+    /// mark the vertex as processed to avoid double-counting.
+    ///
+    /// All modifications must be trail-tracked.
+    pub vertex_processed: Vec<u64>,
 }
 
 impl DynamicState {
@@ -134,6 +149,7 @@ impl DynamicState {
             current_face_degrees: [0; NCOLORS],
             faces: DynamicFaces::new(&memo.faces),
             crossing_counts: CrossingCounts::new(),
+            vertex_processed: vec![0u64; 512], // 512 slots for up to 480 vertices
         }
     }
 }

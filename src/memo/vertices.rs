@@ -121,7 +121,7 @@ pub struct VerticesMemo {
 ///
 /// True if the edge is clockwise, false otherwise.
 #[inline]
-fn is_edge_clockwise(edge_color: Color, face_colors: ColorSet) -> bool {
+pub fn is_edge_clockwise(edge_color: Color, face_colors: ColorSet) -> bool {
     face_colors.contains(edge_color)
 }
 
@@ -149,7 +149,7 @@ fn is_edge_clockwise(edge_color: Color, face_colors: ColorSet) -> bool {
 /// # Returns
 ///
 /// Slot index (0-3) for this edge in the vertex's incoming_edges array.
-fn compute_incoming_edge_slot(
+pub fn compute_incoming_edge_slot(
     edge_color: Color,
     other_color: Color,
     face_colors: ColorSet,
@@ -186,7 +186,7 @@ fn compute_incoming_edge_slot(
 /// # Returns
 ///
 /// Tuple of (primary_color, secondary_color).
-fn determine_primary_secondary(
+pub fn determine_primary_secondary(
     slot: usize,
     edge_color: Color,
     other_color: Color,
@@ -216,7 +216,7 @@ fn determine_primary_secondary(
 /// # Returns
 ///
 /// Face ID (bitmask) of colors outside both crossing curves.
-fn compute_outside_face(face_colors: ColorSet, primary: Color, secondary: Color) -> usize {
+pub fn compute_outside_face(face_colors: ColorSet, primary: Color, secondary: Color) -> usize {
     let mut outside = face_colors;
     outside.remove(primary);
     outside.remove(secondary);
