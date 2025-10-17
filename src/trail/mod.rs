@@ -156,6 +156,7 @@ impl Trail {
     /// # Safety
     ///
     /// Same safety requirements as `record_and_set`.
+    #[allow(dead_code)]
     pub(crate) unsafe fn maybe_record_and_set(
         &mut self,
         ptr: NonNull<u64>,

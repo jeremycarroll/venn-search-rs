@@ -124,6 +124,13 @@ impl CycleSet {
         &self.0
     }
 
+    /// Get a mutable reference to the underlying bitset words.
+    ///
+    /// This is primarily used by the trail system for efficient backtracking.
+    pub(crate) fn words_mut(&mut self) -> &mut [u64; CYCLESET_LENGTH] {
+        &mut self.0
+    }
+
     /// Iterate over all cycle IDs in the set.
     ///
     /// Cycle IDs are yielded in ascending order (0, 1, 2, ...).
