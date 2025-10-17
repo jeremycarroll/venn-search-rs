@@ -373,6 +373,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_max_depth_constant() {
         // Verify MAX_PROPAGATION_DEPTH is reasonable
         assert!(MAX_PROPAGATION_DEPTH >= 64); // At least NFACES for NCOLORS=6
