@@ -87,8 +87,15 @@ impl Predicate for VennPredicate {
 
             PredicateResult::Choices(cycle_count as usize)
         } else {
-            // All faces assigned - success!
-            // [PR #4] Add final validation here
+            // All faces assigned - run final validation checks
+
+            // 1. Validate face cycles (faces with M colors form single cycle of length C(NCOLORS, M))
+            if let Err(_failure) = propagation::validate_face_cycles(&ctx.memo, &ctx.state) {
+                return PredicateResult::Failure;
+            }
+
+            // [PR #4] TODO: Add S6 symmetry check here
+
             PredicateResult::Success
         }
     }

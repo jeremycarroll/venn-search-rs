@@ -48,6 +48,21 @@ pub struct DynamicFace {
     ///
     /// Matches DYNAMIC fields of C `struct edge`.
     pub edge_dynamic: [EdgeDynamic; NCOLORS],
+
+    /// Next face in the dual graph cycle (trail-tracked).
+    ///
+    /// Encoded as u64: 0 = unset, n+1 = face_id n
+    ///
+    /// Faces with M colors form a single cycle in the dual graph of length C(NCOLORS, M).
+    /// This pointer links to the next face in that cycle.
+    pub(crate) next_face_id_encoded: u64,
+
+    /// Previous face in the dual graph cycle (trail-tracked).
+    ///
+    /// Encoded as u64: 0 = unset, n+1 = face_id n
+    ///
+    /// This pointer links to the previous face in the dual graph cycle.
+    pub(crate) previous_face_id_encoded: u64,
 }
 
 impl DynamicFace {
@@ -59,6 +74,8 @@ impl DynamicFace {
             possible_cycles,
             cycle_count,
             edge_dynamic: [EdgeDynamic::new(); NCOLORS],
+            next_face_id_encoded: 0,     // unset
+            previous_face_id_encoded: 0, // unset
         }
     }
 
@@ -82,6 +99,26 @@ impl DynamicFace {
             None => 0,
             Some(id) => id + 1,
         };
+    }
+
+    /// Get next face in dual graph cycle (decodes from u64).
+    #[inline]
+    pub fn next_face(&self) -> Option<usize> {
+        if self.next_face_id_encoded == 0 {
+            None
+        } else {
+            Some((self.next_face_id_encoded - 1) as usize)
+        }
+    }
+
+    /// Get previous face in dual graph cycle (decodes from u64).
+    #[inline]
+    pub fn previous_face(&self) -> Option<usize> {
+        if self.previous_face_id_encoded == 0 {
+            None
+        } else {
+            Some((self.previous_face_id_encoded - 1) as usize)
+        }
     }
 }
 

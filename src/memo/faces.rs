@@ -480,11 +480,25 @@ fn apply_monotonicity_constraints(
     }
 
     // Handle outer face (0): Can only have full NCOLORS-cycles
+    // Forms a cycle of length 1 (points to itself)
     filter_cycles_by_length(&mut faces[0], cycles, NCOLORS);
+    for cycle_id in 0..NCYCLES {
+        if faces[0].possible_cycles.contains(cycle_id as u64) {
+            next_by_cycle[0][cycle_id] = Some(0); // Points to itself
+            previous_by_cycle[0][cycle_id] = Some(0);
+        }
+    }
 
     // Handle inner face (NFACES-1): Can only have full NCOLORS-cycles
+    // Forms a cycle of length 1 (points to itself)
     // The inner face will be assigned cycle (0,1,2,3,4,5) during search for symmetry breaking
     filter_cycles_by_length(&mut faces[NFACES - 1], cycles, NCOLORS);
+    for cycle_id in 0..NCYCLES {
+        if faces[NFACES - 1].possible_cycles.contains(cycle_id as u64) {
+            next_by_cycle[NFACES - 1][cycle_id] = Some(NFACES - 1); // Points to itself
+            previous_by_cycle[NFACES - 1][cycle_id] = Some(NFACES - 1);
+        }
+    }
 
     (next_by_cycle, previous_by_cycle)
 }
