@@ -6,7 +6,7 @@
 
 use crate::context::SearchContext;
 use crate::engine::{Predicate, PredicateResult};
-use crate::geometry::constants::NFACES;
+use crate::geometry::constants::{NCOLORS, NFACES};
 use crate::propagation;
 
 /// VennPredicate finds valid facial cycle assignments.
@@ -53,6 +53,25 @@ impl Default for VennPredicate {
 
 impl Predicate for VennPredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, round: usize) -> PredicateResult {
+        // For NCOLORS > 4, set up central face at round 0 if not already done
+        #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
+        if round == 0 {
+            let inner_face_id = NFACES - 1;
+            if ctx.state.faces.faces[inner_face_id].current_cycle().is_none() {
+                // Not yet set up (InnerFacePredicate not run or didn't set it up)
+                // Set up with no restrictions (all zeros)
+                let no_restrictions = [0u64; NCOLORS];
+                if let Err(_failure) = propagation::setup_central_face(
+                    &ctx.memo,
+                    &mut ctx.state,
+                    &mut ctx.trail,
+                    &no_restrictions,
+                ) {
+                    return PredicateResult::Failure;
+                }
+            }
+        }
+
         // Find next unassigned face with minimum cycle count
         let face_id = choose_next_face(ctx);
 

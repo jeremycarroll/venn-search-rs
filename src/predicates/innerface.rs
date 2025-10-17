@@ -8,6 +8,7 @@
 use crate::context::SearchContext;
 use crate::engine::{Predicate, PredicateResult};
 use crate::geometry::constants::{NCOLORS, TOTAL_CENTRAL_NEIGHBOR_DEGREE};
+use crate::propagation;
 use crate::symmetry::s6::{check_symmetry, SymmetryType};
 
 /// InnerFacePredicate finds valid degree signatures for the NCOLORS symmetric faces.
@@ -74,6 +75,25 @@ impl Predicate for InnerFacePredicate {
                 }
                 SymmetryType::Canonical | SymmetryType::Equivocal => {
                     // eprintln!("[InnerFace] ACCEPT: canonical/equivocal");
+
+                    // Only set up central face for NCOLORS > 4
+                    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
+                    {
+                        // Copy degrees array to avoid borrow checker issues
+                        let degrees_copy = *degrees;
+
+                        // Set up central face configuration before proceeding to VennPredicate
+                        if let Err(_failure) = propagation::setup_central_face(
+                            &ctx.memo,
+                            &mut ctx.state,
+                            &mut ctx.trail,
+                            &degrees_copy,
+                        ) {
+                            // Setup failed - constraints are unsatisfiable for this degree signature
+                            return PredicateResult::Failure;
+                        }
+                    }
+
                     PredicateResult::Success
                 }
             }
