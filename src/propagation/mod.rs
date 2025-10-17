@@ -39,9 +39,11 @@
 //! - Stack overflow prevention (depth ≤ NFACES = 64)
 //! - Statistics (how deep cascades go)
 
-use crate::context::SearchContext;
+use crate::context::{DynamicState, MemoizedData};
 use crate::geometry::{CycleId, CycleSet};
+use crate::trail::Trail;
 use std::fmt;
+use std::ptr::NonNull;
 
 /// Maximum propagation depth before we abort.
 ///
@@ -94,6 +96,47 @@ impl fmt::Display for PropagationFailure {
     }
 }
 
+/// Helper function to set a face's possible cycles with trail tracking.
+///
+/// Only trails words that actually change (optimization).
+/// Also updates the cached cycle_count.
+fn set_face_possible_cycles(
+    state: &mut DynamicState,
+    trail: &mut Trail,
+    face_id: usize,
+    new_cycles: CycleSet,
+) {
+    use crate::geometry::constants::CYCLESET_LENGTH;
+
+    let face = &mut state.faces.faces[face_id];
+
+    // Copy old words to avoid borrow checker issues
+    let old_words = *face.possible_cycles.words();
+    let new_words = *new_cycles.words();
+
+    // Trail only modified words
+    unsafe {
+        let words_mut = face.possible_cycles.words_mut();
+        for i in 0..CYCLESET_LENGTH {
+            if old_words[i] != new_words[i] {
+                // Get pointer to word i in the mutable words array
+                let ptr = &mut words_mut[i] as *mut u64;
+                let ptr = NonNull::new_unchecked(ptr);
+                trail.record_and_set(ptr, new_words[i]);
+            }
+        }
+    }
+
+    // Update cached cycle count (also trail-tracked)
+    let new_count = new_cycles.len() as u64;
+    if face.cycle_count != new_count {
+        unsafe {
+            let ptr = NonNull::new_unchecked(&mut face.cycle_count);
+            trail.record_and_set(ptr, new_count);
+        }
+    }
+}
+
 /// Propagate a cycle choice for a face through the constraint network.
 ///
 /// This is the main entry point called after assigning a cycle to a face.
@@ -110,7 +153,9 @@ impl fmt::Display for PropagationFailure {
 ///
 /// # Arguments
 ///
-/// * `ctx` - Search context (mutable for trail recording)
+/// * `memo` - Immutable MEMO data (cycles, faces, lookup tables)
+/// * `state` - Mutable search state
+/// * `trail` - Trail for backtracking
 /// * `face_id` - Face that was assigned a cycle
 /// * `cycle_id` - The cycle assigned to this face
 /// * `depth` - Recursion depth (0 for initial assignment)
@@ -119,7 +164,9 @@ impl fmt::Display for PropagationFailure {
 ///
 /// `Ok(())` if propagation succeeds, `Err(PropagationFailure)` if constraints fail.
 pub fn propagate_cycle_choice(
-    ctx: &mut SearchContext,
+    memo: &MemoizedData,
+    state: &mut DynamicState,
+    trail: &mut Trail,
     face_id: usize,
     cycle_id: CycleId,
     depth: usize,
@@ -132,12 +179,14 @@ pub fn propagate_cycle_choice(
     // Set face's possible_cycles to singleton {cycle_id}
     let mut singleton = CycleSet::empty();
     singleton.insert(cycle_id);
-    ctx.set_face_possible_cycles(face_id, singleton);
+
+    // Update face's possible cycles (trail-tracked)
+    set_face_possible_cycles(state, trail, face_id, singleton);
 
     // Propagate all constraint types
-    propagate_edge_adjacency(ctx, face_id, cycle_id, depth)?;
-    propagate_non_adjacent_faces(ctx, face_id, cycle_id, depth)?;
-    propagate_non_vertex_adjacent_faces(ctx, face_id, cycle_id, depth)?;
+    propagate_edge_adjacency(memo, state, trail, face_id, cycle_id, depth)?;
+    propagate_non_adjacent_faces(memo, state, trail, face_id, cycle_id, depth)?;
+    propagate_non_vertex_adjacent_faces(memo, state, trail, face_id, cycle_id, depth)?;
 
     Ok(())
 }
@@ -152,7 +201,9 @@ pub fn propagate_cycle_choice(
 ///
 /// # Arguments
 ///
-/// * `ctx` - Search context (mutable for trail recording)
+/// * `memo` - Immutable MEMO data
+/// * `state` - Mutable search state
+/// * `trail` - Trail for backtracking
 /// * `face_id` - Face to restrict
 /// * `allowed_cycles` - CycleSet of cycles that satisfy the constraint
 /// * `depth` - Recursion depth
@@ -164,13 +215,15 @@ pub fn propagate_cycle_choice(
 /// # Cascading Behavior
 ///
 /// If the intersection results in exactly 1 cycle, this function:
-/// 1. Calls `ctx.set_face_cycle(face_id, cycle_id)` to assign it
+/// 1. Assigns the forced cycle (trail-tracked)
 /// 2. Calls `propagate_cycle_choice()` recursively to propagate the new assignment
 ///
 /// This cascading is **critical** for search tractability - one assignment can
 /// trigger a chain reaction that assigns many other faces automatically.
 pub fn restrict_face_cycles(
-    ctx: &mut SearchContext,
+    memo: &MemoizedData,
+    state: &mut DynamicState,
+    trail: &mut Trail,
     face_id: usize,
     allowed_cycles: &CycleSet,
     depth: usize,
@@ -181,7 +234,7 @@ pub fn restrict_face_cycles(
     }
 
     // 1. Check if face is already assigned
-    let current_cycle = ctx.state.faces.faces[face_id].current_cycle();
+    let current_cycle = state.faces.faces[face_id].current_cycle();
     if let Some(assigned_cycle) = current_cycle {
         // Face already has a cycle - verify it's compatible
         if !allowed_cycles.contains(assigned_cycle) {
@@ -195,7 +248,7 @@ pub fn restrict_face_cycles(
     }
 
     // 2. Intersect current possible_cycles with allowed_cycles
-    let old_cycles = ctx.get_face_possible_cycles(face_id);
+    let old_cycles = state.faces.faces[face_id].possible_cycles;
     let new_cycles = old_cycles.intersection(allowed_cycles);
 
     // 3. Check for failure (empty result)
@@ -204,17 +257,23 @@ pub fn restrict_face_cycles(
     }
 
     // 4. Update cycles (trail-tracked)
-    ctx.set_face_possible_cycles(face_id, new_cycles);
+    if old_cycles != new_cycles {
+        set_face_possible_cycles(state, trail, face_id, new_cycles);
+    }
 
     // 5. KEY: If singleton, auto-assign and cascade
     if new_cycles.len() == 1 {
         let forced_cycle = new_cycles.iter().next().unwrap();
 
         // Assign the forced cycle (trail-tracked)
-        ctx.set_face_cycle(face_id, forced_cycle);
+        let encoded = forced_cycle + 1;
+        unsafe {
+            let ptr = NonNull::new_unchecked(&mut state.faces.faces[face_id].current_cycle_encoded);
+            trail.record_and_set(ptr, encoded);
+        }
 
         // RECURSIVE PROPAGATION - this is the cascade effect!
-        propagate_cycle_choice(ctx, face_id, forced_cycle, depth + 1)?;
+        propagate_cycle_choice(memo, state, trail, face_id, forced_cycle, depth + 1)?;
     }
 
     Ok(())
@@ -225,22 +284,24 @@ pub fn restrict_face_cycles(
 /// For each edge in the assigned cycle, propagate constraints to adjacent faces
 /// based on vertex and edge configuration.
 ///
-/// **TODO (PR #3)**: This requires vertex and edge tracking which is not yet
+/// **TODO (PR #11)**: This requires vertex and edge tracking which is not yet
 /// implemented. This function will:
 /// 1. For each edge in the cycle, get the vertex it connects to
 /// 2. Determine which faces are adjacent through that vertex
-/// 3. Use `cycle->sameDirection` and `cycle->oppositeDirection` from MEMO
+/// 3. Use `cycle_pairs` lookup from MEMO
 /// 4. Restrict adjacent faces to compatible cycles
 ///
-/// For now, this is a no-op. The non-adjacent and non-vertex-adjacent
-/// propagation provide sufficient constraint pruning for initial testing.
+/// For now, this is a no-op stub. Edge adjacency is REQUIRED for correct
+/// constraint propagation and will be implemented in PR #11.
 fn propagate_edge_adjacency(
-    _ctx: &mut SearchContext,
+    _memo: &MemoizedData,
+    _state: &mut DynamicState,
+    _trail: &mut Trail,
     _face_id: usize,
     _cycle_id: CycleId,
     _depth: usize,
 ) -> Result<(), PropagationFailure> {
-    // TODO (PR #3): Implement edge/vertex adjacency propagation
+    // TODO (PR #11): Implement edge/vertex adjacency propagation
     // This requires vertex configuration tracking and edge->to pointers
     // which are set up during vertex checking phase.
     Ok(())
@@ -253,7 +314,9 @@ fn propagate_edge_adjacency(
 ///
 /// Uses `cycles_omitting_one_color` from CyclesMemo.
 fn propagate_non_adjacent_faces(
-    ctx: &mut SearchContext,
+    memo: &MemoizedData,
+    state: &mut DynamicState,
+    trail: &mut Trail,
     face_id: usize,
     cycle_id: CycleId,
     depth: usize,
@@ -261,9 +324,9 @@ fn propagate_non_adjacent_faces(
     use crate::geometry::constants::NCOLORS;
     use crate::geometry::Color;
 
-    let cycle = ctx.memo.cycles.get(cycle_id);
+    let cycle = memo.cycles.get(cycle_id);
     let cycle_colorset = cycle.colorset();
-    let face = ctx.memo.faces.get_face(face_id);
+    let face = memo.faces.get_face(face_id);
     let face_colors = face.colors;
 
     // For each color not in the cycle
@@ -279,11 +342,18 @@ fn propagate_non_adjacent_faces(
         let adjacent_face_id = face_colors.bits() as usize ^ (1 << color_idx);
 
         // Get cycles omitting this color
-        let omitting_words = ctx.memo.cycles_memo.cycles_omitting_one_color[color_idx];
+        let omitting_words = memo.cycles_memo.cycles_omitting_one_color[color_idx];
         let omitting_cycleset = CycleSet::from_words(omitting_words);
 
         // Restrict adjacent face to these cycles
-        restrict_face_cycles(ctx, adjacent_face_id, &omitting_cycleset, depth)?;
+        restrict_face_cycles(
+            memo,
+            state,
+            trail,
+            adjacent_face_id,
+            &omitting_cycleset,
+            depth,
+        )?;
     }
 
     Ok(())
@@ -297,19 +367,21 @@ fn propagate_non_adjacent_faces(
 ///
 /// Uses `cycles_omitting_color_pair` (upper triangle only) from CyclesMemo.
 fn propagate_non_vertex_adjacent_faces(
-    ctx: &mut SearchContext,
+    memo: &MemoizedData,
+    state: &mut DynamicState,
+    trail: &mut Trail,
     face_id: usize,
     cycle_id: CycleId,
     depth: usize,
 ) -> Result<(), PropagationFailure> {
     use crate::geometry::constants::NCOLORS;
 
-    // Copy cycle data to avoid borrow issues
-    let cycle = ctx.memo.cycles.get(cycle_id);
+    // Read cycle data from immutable memo
+    let cycle = memo.cycles.get(cycle_id);
     let cycle_len = cycle.len();
-    let cycle_colors: Vec<u8> = cycle.colors().iter().map(|c| c.value()).collect();
+    let cycle_colors = cycle.colors(); // &[Color] - no allocation needed!
 
-    let face = ctx.memo.faces.get_face(face_id);
+    let face = memo.faces.get_face(face_id);
     let face_colors = face.colors;
 
     // Upper triangle only (i < j)
@@ -319,7 +391,9 @@ fn propagate_non_vertex_adjacent_faces(
             let mut has_edge_i_to_j = false;
             for edge_idx in 0..cycle_len {
                 let next_idx = (edge_idx + 1) % cycle_len;
-                if cycle_colors[edge_idx] == i as u8 && cycle_colors[next_idx] == j as u8 {
+                if cycle_colors[edge_idx].value() == i as u8
+                    && cycle_colors[next_idx].value() == j as u8
+                {
                     has_edge_i_to_j = true;
                     break;
                 }
@@ -336,11 +410,18 @@ fn propagate_non_vertex_adjacent_faces(
             let adjacent_face_id = face_colors.bits() as usize ^ xor_mask;
 
             // Get cycles omitting edge i→j (upper triangle)
-            let omitting_words = *ctx.memo.cycles_memo.get_cycles_omitting_color_pair(i, j);
+            let omitting_words = *memo.cycles_memo.get_cycles_omitting_color_pair(i, j);
             let omitting_cycleset = CycleSet::from_words(omitting_words);
 
             // Restrict adjacent face to these cycles
-            restrict_face_cycles(ctx, adjacent_face_id, &omitting_cycleset, depth)?;
+            restrict_face_cycles(
+                memo,
+                state,
+                trail,
+                adjacent_face_id,
+                &omitting_cycleset,
+                depth,
+            )?;
         }
     }
 

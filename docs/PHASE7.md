@@ -32,7 +32,7 @@ Test expectations from `c-reference/test/test_venn*.c`:
   - Choosing one face forces all 7 other faces (highly constrained)
 
 - **NCOLORS=4** (`test_venn4.c`): 24 total solutions across various degree signatures
-  - Example: signature [6,3,3,3,0,0] has 8 solutions
+  - Example: signature [6,3,3,3] has 8 solutions
 
 - **NCOLORS=5** (`test_venn5.c`): 152 solutions for degree signature [0,0,0,0,0]
   - Tests incremental solution building

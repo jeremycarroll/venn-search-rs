@@ -58,10 +58,7 @@ impl CycleSet {
         Self(words)
     }
 
-    /// Create a cycle set from raw word array.
-    ///
-    /// This is used by the propagation system to convert MEMO lookup table
-    /// results (which are raw u64 arrays) into CycleSets.
+    /// Create a cycle set from a word array.
     pub fn from_words(words: [u64; CYCLESET_LENGTH]) -> Self {
         Self(words)
     }
