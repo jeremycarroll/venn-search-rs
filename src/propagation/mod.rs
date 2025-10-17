@@ -277,8 +277,11 @@ pub fn propagate_cycle_choice(
     // Update face's possible cycles (trail-tracked)
     set_face_possible_cycles(state, trail, face_id, singleton);
 
-    // Update crossing counts (triangle constraint)
-    update_crossing_counts(memo, state, trail, cycle_id, depth)?;
+    // TODO(Phase 7.2): Re-enable corner detection crossing counts
+    // The current implementation overcounts - it counts edges in facial cycles
+    // rather than actual curve crossings. Need to walk around curves like
+    // Carroll 2000 algorithm describes.
+    // update_crossing_counts(memo, state, trail, cycle_id, depth)?;
 
     // Check and configure vertices for this cycle (sets edge->to pointers)
     check_face_vertices(memo, state, trail, face_id, cycle_id, depth)?;
