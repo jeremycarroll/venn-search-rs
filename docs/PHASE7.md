@@ -1,6 +1,6 @@
 # Phase 7: VennPredicate - Main Venn Diagram Search
 
-**Status**: In Progress (PR #1 complete - Dynamic Face State & VennPredicate Skeleton)
+**Status**: In Progress (PR #1 & #2 complete - Dynamic Face State, VennPredicate Skeleton, Constraint Propagation)
 
 **This is a living document**: Committed in first PR, updated throughout, removed in last PR.
 
@@ -74,28 +74,38 @@ Test expectations from `c-reference/test/test_venn*.c`:
 
 ---
 
-### PR #2: Constraint Propagation (CRITICAL)
+### PR #2: Constraint Propagation (CRITICAL) ✅ COMPLETE
 
 **Goal**: Implement the constraint propagation mechanism that prunes the 10^150 search space.
 
 **⚠️ CRITICAL**: This is the **prerequisite for tractable search**. Without constraint propagation, the search space is impossibly large (~10^150 configurations).
 
-- [ ] **Step 3**: Constraint propagation engine (~400 lines)
+- [x] **Step 3**: Constraint propagation engine (~400 lines)
   - Implement cycle elimination based on MEMO tables
-  - Edge adjacency constraints (cycle_pairs lookup)
-  - Vertex adjacency constraints (cycle_triples lookup)
+  - Edge adjacency constraints (cycle_pairs lookup) - **Deferred to PR #3** (requires vertex/edge tracking)
   - Color omission constraints (cycles_omitting_one_color)
-  - Propagation queue/worklist algorithm
+  - Color pair omission constraints (cycles_omitting_color_pair, upper triangle only)
+  - Cascading propagation algorithm (singleton auto-assignment with recursion)
   - Failure detection (face with zero possible cycles)
   - Integration with Trail (record all eliminations)
 
-**Test expectations**:
-- Unit tests for constraint propagation on isolated faces
-- Tests from `test_known_solution.c` (incremental solution building)
-- Verify constraint propagation correctly eliminates invalid cycles
-- Verify failure detection when face has no remaining cycles
+**Completed**: PR #2 implemented core constraint propagation:
+- New module: `src/propagation/mod.rs` (382 lines)
+- PropagationFailure error enum with Display impl
+- `propagate_cycle_choice()` - Main entry point called from VennPredicate::retry_pred
+- `restrict_face_cycles()` - Workhorse with singleton auto-assignment and cascading
+  - **KEY**: When face reduces to exactly 1 possible cycle, auto-assigns and recursively propagates
+  - This cascading effect is critical for search tractability
+- `propagate_non_adjacent_faces()` - Uses cycles_omitting_one_color from MEMO
+- `propagate_non_vertex_adjacent_faces()` - Uses cycles_omitting_color_pair (upper triangle)
+- `propagate_edge_adjacency()` - Stub with TODO (deferred to PR #3)
+- `CycleSet::from_words()` - Convert MEMO lookup results (raw u64 arrays) to CycleSets
+- Depth tracking (max 128) for recursion safety
+- Integration into VennPredicate::retry_pred
 
-**Estimated size**: ~400 lines, 15-20 tests
+**Actual size**: ~400 lines (370 in propagation module, 30 in supporting changes), unit tests in mod
+
+**Test results**: All 140 tests passing across all NCOLORS values (3, 4, 5, 6)
 
 ---
 
@@ -210,9 +220,14 @@ Before each PR, this section will be updated with detailed implementation plans 
   - Tests: 160 total passing (10 new in venn.rs)
   - Trail support: Full implementation with Option<u64> encoding and optimized CycleSet trailing
   - NCOLORS support: Verified across 3, 4, 5, 6
-- [ ] PR #2: Constraint Propagation (CRITICAL) 🔜 **NEXT**
-- [ ] PR #3: Face Selection & Cycle Assignment
+- [x] PR #2: Constraint Propagation (CRITICAL) ✅ **COMPLETE**
+  - Files: `src/propagation/mod.rs` (new), `src/lib.rs`, `src/predicates/venn.rs`, `src/geometry/cycle_set.rs`
+  - Tests: 140 total passing (3 new unit tests in propagation/mod.rs)
+  - Cascading propagation: Singleton auto-assignment with recursive constraint propagation
+  - MEMO integration: Uses cycles_omitting_one_color and cycles_omitting_color_pair lookup tables
+  - Edge adjacency: Deferred to PR #3 (requires vertex/edge tracking)
+- [ ] PR #3: Face Selection & Cycle Assignment 🔜 **NEXT**
 - [ ] PR #4: Backtracking & Search Completion
 - [ ] PR #5: Full Validation & Performance
 
-**Phase 7 Status**: In Progress (1/5 PRs complete - 20%)
+**Phase 7 Status**: In Progress (2/5 PRs complete - 40%)
