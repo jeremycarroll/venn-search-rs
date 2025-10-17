@@ -44,6 +44,12 @@ impl VennPredicate {
     }
 }
 
+impl Default for VennPredicate {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Predicate for VennPredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, round: usize) -> PredicateResult {
         // Find next unassigned face with minimum cycle count
@@ -138,18 +144,14 @@ fn choose_next_cycle(ctx: &SearchContext, face_id: usize, current: Option<u64>) 
         // in the CycleSet bitset. We can use the cursor (current_id) to jump directly
         // to the correct u64 word in the bitset (word_idx = current_id / 64), then
         // iterate only over the remaining bits in that word and subsequent words,
-        // rather than using skip_while which checks every bit from the start.
+        // rather than using find which checks every bit from the start.
         possible_cycles
             .iter()
-            .skip_while(|&id| id <= current_id)
-            .next()
+            .find(|&id| id > current_id)
             .expect("No more cycles available")
     } else {
         // First cycle
-        possible_cycles
-            .iter()
-            .next()
-            .expect("No cycles available")
+        possible_cycles.iter().next().expect("No cycles available")
     }
 }
 
@@ -211,9 +213,7 @@ mod tests {
         let first_cycle = choose_next_cycle(&ctx, face_id, None);
 
         // Should be in possible_cycles
-        assert!(ctx
-            .get_face_possible_cycles(face_id)
-            .contains(first_cycle));
+        assert!(ctx.get_face_possible_cycles(face_id).contains(first_cycle));
     }
 
     #[test]

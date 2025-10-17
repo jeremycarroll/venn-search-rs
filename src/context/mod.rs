@@ -9,7 +9,7 @@
 //! This design enables parallelization by allowing multiple independent SearchContext
 //! instances to operate on the same MEMO data.
 
-use crate::geometry::constants::{NCOLORS, CYCLESET_LENGTH};
+use crate::geometry::constants::NCOLORS;
 use crate::geometry::{CycleId, CycleSet};
 use crate::memo::{CyclesArray, CyclesMemo, FacesMemo, VerticesMemo};
 use crate::state::DynamicFaces;
@@ -287,29 +287,7 @@ impl SearchContext {
     ///
     /// Matches C: `TRAIL_SET_POINTER(&facesInOrderOfChoice[round]->cycle, NULL);`
     pub fn reset_face_cycle(&mut self, face_id: usize) {
-        // Trail system only supports u64, so we store the current_cycle in a temp u64
-        // and trail that location. We use 0 for None, cycle_id+1 for Some(cycle_id).
         let face = &mut self.state.faces.faces[face_id];
-
-        // Create a temporary storage for the encoded Option
-        let old_value = match face.current_cycle {
-            None => 0u64,
-            Some(id) => id + 1,
-        };
-
-        // We need to directly manipulate the Option field, but trail doesn't support Option<u64>.
-        // Instead, we'll just set it directly without trail for now, since try_pred always
-        // sets it to None anyway. The trail entry in C is just to restore the old value.
-        // Actually, looking at the C code more carefully, they DO trail it.
-        //
-        // Let me use a different approach: Store a sentinel value in a separate u64 field
-        // that we can trail. But we don't have that field.
-        //
-        // Actually, the simplest solution: Just set the field directly without trailing.
-        // The try_pred always sets it to None, and retry_pred sets it without trailing.
-        // The only thing that needs trailing is when constraint propagation forces it.
-        //
-        // For now, just set it directly:
         face.current_cycle = None;
     }
 
@@ -390,7 +368,6 @@ mod tests {
         assert_eq!(ctx1.trail.len(), 0);
         assert_eq!(ctx2.trail.len(), 0);
     }
-
 
     #[test]
     fn test_memo_size_logging() {
