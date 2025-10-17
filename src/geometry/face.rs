@@ -6,7 +6,8 @@
 //! defined by a set of colors (representing which curves bound it) and has
 //! a facial cycle describing the order of colors around its boundary.
 
-use crate::geometry::{Color, ColorSet, CycleId, CycleSet};
+use crate::geometry::constants::NCOLORS;
+use crate::geometry::{Color, ColorSet, CycleId, CycleSet, EdgeMemo};
 
 /// Unique identifier for a face.
 ///
@@ -29,6 +30,12 @@ pub type FaceId = usize;
 ///
 /// The search algorithm narrows down the possible cycles for each face
 /// until each face has exactly one cycle assigned.
+///
+/// # Edges
+///
+/// Each face has NCOLORS edges (one per color), stored in the edges array.
+/// `edges[i]` is the edge of color i for this face. Not all edges may be
+/// used - only those whose colors are in the face's colorset.
 #[derive(Debug, Clone)]
 pub struct Face {
     /// Unique identifier for this face (corresponds to its color set as a bitmask).
@@ -50,6 +57,19 @@ pub struct Face {
     /// Starts with all cycles matching this face's color set.
     /// Gets filtered during search based on constraints.
     pub possible_cycles: CycleSet,
+
+    /// MEMO: Edges of this face (one per color).
+    ///
+    /// `edges[i]` is the edge of color i for this face.
+    /// All NCOLORS edges are stored, even if some colors are not in the face.
+    /// This matches C `struct edge edges[NCOLORS]`.
+    pub edges: [EdgeMemo; NCOLORS],
+
+    /// MEMO: Adjacent faces by color.
+    ///
+    /// `adjacent_faces[i]` is the face adjacent through color i (computed via XOR).
+    /// Adjacent face = current face XOR (1 << i).
+    pub adjacent_faces: [FaceId; NCOLORS],
 }
 
 impl Face {
@@ -60,12 +80,22 @@ impl Face {
     /// * `id` - Unique identifier (typically the face's color set as a bitmask)
     /// * `colors` - Set of colors bounding this face
     /// * `possible_cycles` - Initial set of possible facial cycles
+    /// * `edges` - Precomputed edges for this face (one per color)
+    /// * `adjacent_faces` - Precomputed adjacent face IDs (one per color)
     ///
     /// # Note
     ///
     /// During initialization, all cycles with the same color set as the face
     /// are added to `possible_cycles`. The search algorithm then narrows this down.
-    pub fn new(id: FaceId, colors: ColorSet, possible_cycles: CycleSet) -> Self {
+    ///
+    /// The edges and adjacent_faces arrays are computed during MEMO initialization.
+    pub fn new(
+        id: FaceId,
+        colors: ColorSet,
+        possible_cycles: CycleSet,
+        edges: [EdgeMemo; NCOLORS],
+        adjacent_faces: [FaceId; NCOLORS],
+    ) -> Self {
         let cycle_count = possible_cycles.len();
 
         Self {
@@ -73,6 +103,8 @@ impl Face {
             colors,
             cycle_count,
             possible_cycles,
+            edges,
+            adjacent_faces,
         }
     }
 
@@ -113,6 +145,22 @@ impl Face {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::EdgeRef;
+
+    /// Helper to create a test face with dummy edges and adjacency.
+    fn create_test_face(id: FaceId, colors: ColorSet, possible_cycles: CycleSet) -> Face {
+        // Create dummy edges (placeholder data for tests)
+        let dummy_edge = EdgeMemo::new(Color::new(0), colors, EdgeRef::new(0, 0));
+        let edges = [dummy_edge; NCOLORS];
+
+        // Create dummy adjacent faces (face XOR (1 << i))
+        let mut adjacent_faces = [0; NCOLORS];
+        for (i, item) in adjacent_faces.iter_mut().enumerate().take(NCOLORS) {
+            *item = id ^ (1 << i);
+        }
+
+        Face::new(id, colors, possible_cycles, edges, adjacent_faces)
+    }
 
     #[test]
     fn test_face_creation() {
@@ -121,7 +169,7 @@ mod tests {
         possible.insert(0);
         possible.insert(1);
 
-        let face = Face::new(7, colors, possible);
+        let face = create_test_face(7, colors, possible);
 
         assert_eq!(face.id, 7);
         assert_eq!(face.colors, colors);
@@ -132,7 +180,7 @@ mod tests {
     #[test]
     fn test_num_colors() {
         let colors = ColorSet::from_colors(&[Color::new(0), Color::new(1), Color::new(2)]);
-        let face = Face::new(0, colors, CycleSet::empty());
+        let face = create_test_face(0, colors, CycleSet::empty());
 
         assert_eq!(face.num_colors(), 3);
     }
@@ -140,7 +188,7 @@ mod tests {
     #[test]
     fn test_has_color() {
         let colors = ColorSet::from_colors(&[Color::new(1), Color::new(2)]);
-        let face = Face::new(0, colors, CycleSet::empty());
+        let face = create_test_face(0, colors, CycleSet::empty());
 
         assert!(!face.has_color(Color::new(0)));
         assert!(face.has_color(Color::new(1)));
@@ -156,7 +204,7 @@ mod tests {
         let mut possible_multi = CycleSet::empty();
         possible_multi.insert(5);
         possible_multi.insert(10);
-        let face_multi = Face::new(0, colors, possible_multi);
+        let face_multi = create_test_face(0, colors, possible_multi);
 
         assert!(!face_multi.has_unique_cycle());
         assert_eq!(face_multi.unique_cycle(), None);
@@ -164,7 +212,7 @@ mod tests {
         // Face with unique cycle
         let mut possible_single = CycleSet::empty();
         possible_single.insert(7);
-        let face_single = Face::new(0, colors, possible_single);
+        let face_single = create_test_face(0, colors, possible_single);
 
         assert!(face_single.has_unique_cycle());
         assert_eq!(face_single.unique_cycle(), Some(7));
@@ -178,7 +226,7 @@ mod tests {
         possible.insert(3);
         possible.insert(7);
 
-        let face = Face::new(0, colors, possible);
+        let face = create_test_face(0, colors, possible);
 
         assert!(face.is_cycle_possible(3));
         assert!(!face.is_cycle_possible(5));
@@ -188,7 +236,7 @@ mod tests {
     #[test]
     fn test_empty_possible_cycles() {
         let colors = ColorSet::from_colors(&[Color::new(0), Color::new(1), Color::new(2)]);
-        let face = Face::new(0, colors, CycleSet::empty());
+        let face = create_test_face(0, colors, CycleSet::empty());
 
         assert_eq!(face.cycle_count, 0);
         assert!(!face.has_unique_cycle());

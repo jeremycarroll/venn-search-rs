@@ -19,7 +19,7 @@
 //! enforced during MEMO initialization by filtering out non-monotone cycles.
 
 use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
-use crate::geometry::{Color, ColorSet, CycleSet, Face, FaceId};
+use crate::geometry::{Color, ColorSet, CycleSet, EdgeMemo, EdgeRef, Face, FaceId};
 
 /// Type alias for face adjacency lookup tables.
 ///
@@ -100,7 +100,7 @@ impl FacesMemo {
     /// This computes:
     /// 1. Binomial coefficients for face degree validation
     /// 2. All NFACES faces with their color sets
-    /// 3. Face adjacency relationships
+    /// 3. Edges and adjacency relationships for each face
     /// 4. Monotonicity constraints (which cycles are valid for which faces)
     /// 5. Next/previous face lookups by cycle ID
     ///
@@ -111,10 +111,10 @@ impl FacesMemo {
         eprintln!("[FacesMemo] Computing binomial coefficients...");
         let face_degree_by_color_count = compute_binomial_coefficients();
 
-        eprintln!("[FacesMemo] Creating {} faces...", NFACES);
+        eprintln!("[FacesMemo] Creating {} faces with edges...", NFACES);
         let mut faces = Vec::with_capacity(NFACES);
         for face_id in 0..NFACES {
-            faces.push(create_face(face_id));
+            faces.push(create_face_with_edges(face_id));
         }
 
         eprintln!("[FacesMemo] Applying monotonicity constraints...");
@@ -159,7 +159,7 @@ fn compute_binomial_coefficients() -> [u64; NCOLORS + 1] {
     coefficients
 }
 
-/// Create a face with the given ID.
+/// Create a face with the given ID, including edges and adjacency.
 ///
 /// The face ID is interpreted as a bitmask of colors:
 /// - Bit i set → color i bounds this face
@@ -175,9 +175,10 @@ fn compute_binomial_coefficients() -> [u64; NCOLORS + 1] {
 /// A Face with:
 /// - ID set to face_id
 /// - Colors set from bitmask
+/// - Edges initialized (one per color, with reversed references)
+/// - Adjacent faces computed via XOR
 /// - Possible cycles initialized to all cycles with matching colors
-/// - Adjacency tables empty (filled by monotonicity constraints)
-fn create_face(face_id: FaceId) -> Face {
+fn create_face_with_edges(face_id: FaceId) -> Face {
     // Convert face ID bitmask to ColorSet
     let mut colors = ColorSet::empty();
     for i in 0..NCOLORS {
@@ -186,11 +187,30 @@ fn create_face(face_id: FaceId) -> Face {
         }
     }
 
+    // Compute adjacent faces (face XOR (1 << color))
+    let mut adjacent_faces = [0; NCOLORS];
+    for (i, item) in adjacent_faces.iter_mut().enumerate().take(NCOLORS) {
+        *item = face_id ^ (1 << i);
+    }
+
+    // Create edges for this face (one per color)
+    let mut edges = [EdgeMemo::new(Color::new(0), colors, EdgeRef::new(0, 0)); NCOLORS];
+
+    for color_idx in 0..NCOLORS {
+        let color = Color::new(color_idx as u8);
+
+        // Reversed edge is in the adjacent face (across this color)
+        let reversed_face_id = adjacent_faces[color_idx];
+        let reversed_edge_ref = EdgeRef::new(reversed_face_id, color_idx);
+
+        edges[color_idx] = EdgeMemo::new(color, colors, reversed_edge_ref);
+    }
+
     // Start with all possible cycles for this color count
     // (Will be filtered by monotonicity constraints)
     let possible_cycles = CycleSet::full();
 
-    Face::new(face_id, colors, possible_cycles)
+    Face::new(face_id, colors, possible_cycles, edges, adjacent_faces)
 }
 
 /// Check if a cycle is valid for a face.
@@ -441,25 +461,25 @@ mod tests {
     #[test]
     fn test_create_face_color_mapping() {
         // Face 0 = outer face (no colors)
-        let face0 = create_face(0);
+        let face0 = create_face_with_edges(0);
         assert_eq!(face0.id, 0);
         assert_eq!(face0.colors.len(), 0);
 
         // Face 1 = {color 0}
-        let face1 = create_face(1);
+        let face1 = create_face_with_edges(1);
         assert_eq!(face1.id, 1);
         assert_eq!(face1.colors.len(), 1);
         assert!(face1.colors.contains(Color::new(0)));
 
         // Face 3 = {color 0, color 1}
-        let face3 = create_face(3);
+        let face3 = create_face_with_edges(3);
         assert_eq!(face3.id, 3);
         assert_eq!(face3.colors.len(), 2);
         assert!(face3.colors.contains(Color::new(0)));
         assert!(face3.colors.contains(Color::new(1)));
 
         // Face NFACES-1 = inner face (all colors)
-        let face_inner = create_face(NFACES - 1);
+        let face_inner = create_face_with_edges(NFACES - 1);
         assert_eq!(face_inner.id, NFACES - 1);
         assert_eq!(face_inner.colors.len(), NCOLORS);
     }

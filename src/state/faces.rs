@@ -5,7 +5,8 @@
 //! This module provides mutable per-face state that changes during search
 //! and is tracked on the trail for backtracking.
 
-use crate::geometry::{CycleId, CycleSet};
+use crate::geometry::constants::NCOLORS;
+use crate::geometry::{CycleId, CycleSet, EdgeDynamic};
 use crate::memo::FacesMemo;
 
 /// Per-face dynamic state (mutable, trail-tracked).
@@ -36,6 +37,17 @@ pub struct DynamicFace {
     /// Count of possible cycles (trail-tracked, cached for performance).
     /// Updated whenever possible_cycles changes.
     pub cycle_count: u64,
+
+    /// DYNAMIC edge state for this face (one per color, trail-tracked).
+    ///
+    /// `edge_dynamic[i]` contains the runtime state for edge of color i on this face.
+    /// This is the DYNAMIC part that pairs with EdgeMemo in Face.edges[i].
+    ///
+    /// The `to` field in each EdgeDynamic is set during search by dynamicCheckFacePoints
+    /// and must be trail-tracked for backtracking.
+    ///
+    /// Matches DYNAMIC fields of C `struct edge`.
+    pub edge_dynamic: [EdgeDynamic; NCOLORS],
 }
 
 impl DynamicFace {
@@ -46,6 +58,7 @@ impl DynamicFace {
             current_cycle_encoded: 0, // None
             possible_cycles,
             cycle_count,
+            edge_dynamic: [EdgeDynamic::new(); NCOLORS],
         }
     }
 
