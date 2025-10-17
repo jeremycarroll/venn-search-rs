@@ -34,11 +34,11 @@ Test expectations from `c-reference/test/test_venn*.c`:
 - **NCOLORS=4** (`test_venn4.c`): 24 total solutions across various degree signatures
   - Example: signature [6,3,3,3,0,0] has 8 solutions
 
-- **NCOLORS=5** (`test_venn5.c`): 152 solutions for degree signature [0,0,0,0,0,0]
+- **NCOLORS=5** (`test_venn5.c`): 152 solutions for degree signature [0,0,0,0,0]
   - Tests incremental solution building
 
-- **NCOLORS=6** (`test_venn6.c`): 233 solutions for degree signature [5,5,5,4,4,4]
-  - Primary target configuration
+- **NCOLORS=6** (`test_venn6.c`): 233 solutions for degree signature [0,0,0,0,0,0]
+  - Primary target configuration (unconstrained inner face degrees)
   - The complete search goal
 
 **Test strategy**: Start with NCOLORS=3 (simplest, highly constrained), validate against known solutions, then scale up to N=4, N=5, and finally N=6.
@@ -131,8 +131,8 @@ Test expectations from `c-reference/test/test_venn*.c`:
 
 **Priority 2: Scale to NCOLORS=4-6**
 - [ ] Test NCOLORS=4 (expect 24 solutions across various signatures)
-- [ ] Test NCOLORS=5 (expect 152 solutions for signature [0,0,0,0,0,0])
-- [ ] Test NCOLORS=6 (expect 233 solutions for signature [5,5,5,4,4,4])
+- [ ] Test NCOLORS=5 (expect 152 solutions for signature [0,0,0,0,0])
+- [ ] Test NCOLORS=6 (expect 233 solutions for signature [0,0,0,0,0,0])
 
 **Optional: Edge Adjacency (if needed)**
 - [ ] Implement vertex/edge tracking data structures
@@ -144,8 +144,8 @@ Test expectations from `c-reference/test/test_venn*.c`:
 **Test expectations**:
 - NCOLORS=3: Find both 2 solutions
 - NCOLORS=4: Find all 24 solutions across various degree signatures
-- NCOLORS=5: Find all 152 solutions for signature [0,0,0,0,0,0]
-- NCOLORS=6: Find all 233 solutions for signature [5,5,5,4,4,4]
+- NCOLORS=5: Find all 152 solutions for signature [0,0,0,0,0]
+- NCOLORS=6: Find all 233 solutions for signature [0,0,0,0,0,0]
 
 **Estimated size**: ~200-300 lines of test code
 
