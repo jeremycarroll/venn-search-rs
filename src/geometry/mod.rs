@@ -26,6 +26,6 @@ pub use color_set::ColorSet;
 pub use constants::*;
 pub use cycle::{Cycle, CycleId};
 pub use cycle_set::CycleSet;
-pub use edge::{Edge, EdgeId};
+pub use edge::{CurveLink, EdgeDynamic, EdgeMemo, EdgeRef};
 pub use face::{Face, FaceId};
 pub use vertex::{Vertex, VertexId};

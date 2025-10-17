@@ -6,7 +6,7 @@
 //! Each vertex has four incoming edges (two from each curve) and maintains
 //! information about which curves cross and their orientation.
 
-use crate::geometry::{Color, ColorSet, EdgeId};
+use crate::geometry::{Color, ColorSet, EdgeRef};
 
 /// Unique identifier for a vertex.
 ///
@@ -48,8 +48,8 @@ pub struct Vertex {
     /// - `incoming_edges[2]`: Color B edge running into the vertex
     /// - `incoming_edges[3]`: Counterclockwise color B edge into the vertex
     ///
-    /// The outgoing edges are found by following the reversed edge IDs.
-    pub incoming_edges: [EdgeId; 4],
+    /// The outgoing edges are found by following the reversed edge references.
+    pub incoming_edges: [EdgeRef; 4],
 }
 
 impl Vertex {
@@ -60,7 +60,7 @@ impl Vertex {
     /// * `id` - Unique identifier for this vertex
     /// * `primary` - Primary color (crosses from inside secondary to outside)
     /// * `secondary` - Secondary color (crosses from outside primary to inside)
-    /// * `incoming_edges` - Array of 4 edge IDs entering this vertex
+    /// * `incoming_edges` - Array of 4 edge references entering this vertex
     ///
     /// # Note
     ///
@@ -70,7 +70,7 @@ impl Vertex {
         id: VertexId,
         primary: Color,
         secondary: Color,
-        incoming_edges: [EdgeId; 4],
+        incoming_edges: [EdgeRef; 4],
     ) -> Self {
         let mut colors = ColorSet::empty();
         colors.insert(primary);
@@ -106,7 +106,12 @@ mod tests {
     fn test_vertex_creation() {
         let primary = Color::new(0); // Color 'a'
         let secondary = Color::new(1); // Color 'b'
-        let incoming = [10, 11, 12, 13]; // Placeholder edge IDs
+        let incoming = [
+            EdgeRef::new(10, 0),
+            EdgeRef::new(11, 1),
+            EdgeRef::new(12, 2),
+            EdgeRef::new(13, 3),
+        ];
 
         let vertex = Vertex::new(0, primary, secondary, incoming);
 
@@ -121,7 +126,13 @@ mod tests {
     fn test_crossing_colors() {
         let primary = Color::new(2);
         let secondary = Color::new(4);
-        let vertex = Vertex::new(5, primary, secondary, [0, 1, 2, 3]);
+        let incoming = [
+            EdgeRef::new(0, 0),
+            EdgeRef::new(1, 1),
+            EdgeRef::new(2, 2),
+            EdgeRef::new(3, 3),
+        ];
+        let vertex = Vertex::new(5, primary, secondary, incoming);
 
         let (p, s) = vertex.crossing_colors();
         assert_eq!(p, primary);
@@ -132,7 +143,13 @@ mod tests {
     fn test_has_color() {
         let primary = Color::new(0);
         let secondary = Color::new(2);
-        let vertex = Vertex::new(0, primary, secondary, [0, 1, 2, 3]);
+        let incoming = [
+            EdgeRef::new(0, 0),
+            EdgeRef::new(1, 1),
+            EdgeRef::new(2, 2),
+            EdgeRef::new(3, 3),
+        ];
+        let vertex = Vertex::new(0, primary, secondary, incoming);
 
         assert!(vertex.has_color(Color::new(0)));
         assert!(!vertex.has_color(Color::new(1)));
@@ -144,7 +161,13 @@ mod tests {
     fn test_colors_bitset() {
         let primary = Color::new(1);
         let secondary = Color::new(3);
-        let vertex = Vertex::new(0, primary, secondary, [0, 1, 2, 3]);
+        let incoming = [
+            EdgeRef::new(0, 0),
+            EdgeRef::new(1, 1),
+            EdgeRef::new(2, 2),
+            EdgeRef::new(3, 3),
+        ];
+        let vertex = Vertex::new(0, primary, secondary, incoming);
 
         // ColorSet should contain exactly the two colors
         assert_eq!(vertex.colors.len(), 2);

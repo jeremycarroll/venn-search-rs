@@ -287,11 +287,17 @@ impl VerticesMemo {
 
                     if vertices[outside_face][primary_idx][secondary_idx].is_none() {
                         // Create new vertex
+                        use crate::geometry::EdgeRef;
                         let vertex = Vertex::new(
                             vertex_id_counter,
                             primary,
                             secondary,
-                            [0, 0, 0, 0], // Placeholder EdgeIds - will be set in Phase 7
+                            [
+                                EdgeRef::new(0, 0),
+                                EdgeRef::new(0, 0),
+                                EdgeRef::new(0, 0),
+                                EdgeRef::new(0, 0),
+                            ], // Placeholder EdgeRefs - will be properly initialized in Phase 7
                         );
 
                         vertices[outside_face][primary_idx][secondary_idx] = Some(vertex);
