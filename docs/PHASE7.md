@@ -134,12 +134,11 @@ Test expectations from `c-reference/test/test_venn*.c`:
 - [ ] Test NCOLORS=5 (expect 152 solutions for signature [0,0,0,0,0])
 - [ ] Test NCOLORS=6 (expect 233 solutions for signature [0,0,0,0,0,0])
 
-**Optional: Edge Adjacency (if needed)**
+**Priority 3: Edge Adjacency (REQUIRED)**
 - [ ] Implement vertex/edge tracking data structures
-- [ ] Implement `propagate_edge_adjacency()` using cycle_pairs lookup
-- [ ] Measure if edge adjacency significantly improves constraint pruning
+- [ ] Implement `propagate_edge_adjacency()` using cycle_pairs lookup from MEMO
 
-**Note**: Edge adjacency may not be needed if current propagation is sufficient. Test first, then decide!
+**Note**: Edge adjacency is **required** for correct constraint propagation. Non-adjacent and non-vertex-adjacent propagation alone are insufficient.
 
 **Test expectations**:
 - NCOLORS=3: Find both 2 solutions
