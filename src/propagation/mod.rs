@@ -40,7 +40,7 @@
 //! - Statistics (how deep cascades go)
 
 use crate::context::{DynamicState, MemoizedData};
-use crate::geometry::{CycleId, CycleSet, EdgeDynamic};
+use crate::geometry::{CycleId, CycleSet, EdgeDynamic, MAX_CROSSINGS_PER_PAIR};
 use crate::trail::Trail;
 use std::fmt;
 use std::ptr::NonNull;
@@ -66,6 +66,15 @@ pub enum PropagationFailure {
 
     /// Propagation depth exceeded (likely infinite recursion bug).
     DepthExceeded { depth: usize },
+
+    /// Crossing limit exceeded between a color pair (triangle constraint violation).
+    CrossingLimitExceeded {
+        color_i: usize,
+        color_j: usize,
+        count: usize,
+        max_allowed: usize,
+        depth: usize,
+    },
 }
 
 impl fmt::Display for PropagationFailure {
@@ -91,6 +100,19 @@ impl fmt::Display for PropagationFailure {
             }
             PropagationFailure::DepthExceeded { depth } => {
                 write!(f, "Propagation depth {} exceeded max", depth)
+            }
+            PropagationFailure::CrossingLimitExceeded {
+                color_i,
+                color_j,
+                count,
+                max_allowed,
+                depth,
+            } => {
+                write!(
+                    f,
+                    "Colors {} and {} cross {} times (max {}) (depth {})",
+                    color_i, color_j, count, max_allowed, depth
+                )
             }
         }
     }
@@ -142,9 +164,10 @@ fn set_face_possible_cycles(
 /// # Algorithm
 ///
 /// 1. Set face's possible_cycles to singleton {cycle_id}
-/// 2. Propagate edge adjacency constraints
-/// 3. Propagate non-adjacent face constraints
-/// 4. Propagate non-vertex-adjacent face constraints
+/// 2. Update crossing counts (triangle constraint)
+/// 3. Propagate edge adjacency constraints
+/// 4. Propagate non-adjacent face constraints
+/// 5. Propagate non-vertex-adjacent face constraints
 ///
 /// Each propagation step may trigger recursive propagation if faces reduce to singletons.
 ///
@@ -181,7 +204,30 @@ pub fn propagate_cycle_choice(
     set_face_possible_cycles(state, trail, face_id, singleton);
 
     // Check and configure vertices for this cycle (sets edge->to pointers)
+    // This also enforces corner detection (triangle constraint) by counting
+    // crossings at vertices and checking the MAX_CROSSINGS_PER_PAIR limit.
     check_face_vertices(memo, state, trail, face_id, cycle_id, depth)?;
+
+    // Set next/previous face pointers for dual graph cycles
+    // These pointers link faces with the same number of colors into cycles
+    if let Some(next_face) = memo.faces.next_face_by_cycle[face_id][cycle_id as usize] {
+        let next_encoded = (next_face + 1) as u64;
+        unsafe {
+            trail.record_and_set(
+                NonNull::from(&mut state.faces.faces[face_id].next_face_id_encoded),
+                next_encoded,
+            );
+        }
+    }
+    if let Some(prev_face) = memo.faces.previous_face_by_cycle[face_id][cycle_id as usize] {
+        let prev_encoded = (prev_face + 1) as u64;
+        unsafe {
+            trail.record_and_set(
+                NonNull::from(&mut state.faces.faces[face_id].previous_face_id_encoded),
+                prev_encoded,
+            );
+        }
+    }
 
     // Propagate all constraint types
     propagate_edge_adjacency(memo, state, trail, face_id, cycle_id, depth)?;
@@ -292,23 +338,23 @@ pub fn restrict_face_cycles(
 /// 1. Retrieves the precomputed vertex from the vertex array
 /// 2. Sets the edge->to pointer (trail-tracked) to connect to that vertex
 /// 3. Validates vertex configuration compatibility
+/// 4. **Corner Detection**: Counts crossings at vertices for triangle constraint
 ///
-/// # Algorithm
+/// # Corner Detection Algorithm
 ///
-/// For a cycle like (a, b, c):
-/// - Check vertex at edge a→b
-/// - Check vertex at edge b→c
-/// - Check vertex at edge c→a (wrap-around)
+/// Each vertex represents a crossing between two color curves. When we encounter
+/// a vertex for the first time (not already processed), we:
+/// 1. Increment the crossing count for that color pair
+/// 2. Mark the vertex as processed to avoid double-counting
+/// 3. Check if crossing count exceeds MAX_CROSSINGS_PER_PAIR (6 for triangles)
 ///
-/// For each edge pair (color_a, color_b):
-/// - Look up the vertex in the precomputed vertex array
-/// - Verify the vertex exists (should always be true for valid cycles)
-/// - Set edge_dynamic[color_a].to_encoded pointer to point to this vertex
+/// This enforces the triangle constraint during search, pruning the search space
+/// from ~30,000 configurations to the actual 152 (N=5) or 233 (N=6) solutions.
 ///
 /// # Arguments
 ///
 /// * `memo` - Immutable MEMO data (contains vertex array)
-/// * `state` - Mutable search state (contains edge_dynamic arrays)
+/// * `state` - Mutable search state (contains edge_dynamic arrays, crossing counts, vertex tracking)
 /// * `trail` - Trail for backtracking
 /// * `face_id` - Face that was assigned a cycle
 /// * `cycle_id` - The cycle assigned to this face
@@ -316,14 +362,15 @@ pub fn restrict_face_cycles(
 ///
 /// # Returns
 ///
-/// `Ok(())` if all vertices are valid, `Err(PropagationFailure)` if validation fails.
+/// `Ok(())` if all vertices are valid and crossing limits not exceeded,
+/// `Err(PropagationFailure::CrossingLimitExceeded)` if triangle constraint violated.
 pub fn check_face_vertices(
     memo: &MemoizedData,
     state: &mut DynamicState,
     trail: &mut Trail,
     face_id: usize,
     cycle_id: CycleId,
-    _depth: usize,
+    depth: usize,
 ) -> Result<(), PropagationFailure> {
     let cycle = memo.cycles.get(cycle_id);
     let cycle_colors = cycle.colors();
@@ -359,6 +406,7 @@ pub fn check_face_vertices(
         }
 
         // Get the vertex connection from possibly_to
+        // This was populated during MemoizedData initialization by FacesMemo::populate_vertex_links()
         let vertex_link = edge_memo.possibly_to[color_b_idx];
 
         if let Some(link) = vertex_link {
@@ -371,6 +419,46 @@ pub fn check_face_vertices(
                     ),
                     encoded,
                 );
+            }
+
+            // Corner detection: Count crossing at this vertex
+            let vertex_id = link.vertex_id;
+
+            // Check if vertex already processed
+            if vertex_id < state.vertex_processed.len() && state.vertex_processed[vertex_id] == 0 {
+                // First time seeing this vertex - count the crossing
+
+                // Normalize color pair to upper triangle (i < j)
+                let (color_i, color_j) = if color_a_idx < color_b_idx {
+                    (color_a_idx, color_b_idx)
+                } else {
+                    (color_b_idx, color_a_idx)
+                };
+
+                // Increment crossing count (trail-tracked)
+                let current_count = state.crossing_counts.get(color_i, color_j);
+                let new_count = current_count + 1;
+
+                unsafe {
+                    let ptr = state.crossing_counts.get_mut_ptr(color_i, color_j);
+                    trail.record_and_set(NonNull::new_unchecked(ptr), new_count);
+                }
+
+                // Check triangle constraint (max 6 crossings per pair)
+                if new_count as usize > MAX_CROSSINGS_PER_PAIR {
+                    return Err(PropagationFailure::CrossingLimitExceeded {
+                        color_i,
+                        color_j,
+                        count: new_count as usize,
+                        max_allowed: MAX_CROSSINGS_PER_PAIR,
+                        depth,
+                    });
+                }
+
+                // Mark vertex as processed (trail-tracked)
+                unsafe {
+                    trail.record_and_set(NonNull::from(&mut state.vertex_processed[vertex_id]), 1);
+                }
             }
         }
         // If vertex_link is None, that's OK - not all edges may have vertices
@@ -554,6 +642,272 @@ fn propagate_non_vertex_adjacent_faces(
                 &omitting_cycleset,
                 depth,
             )?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Helper function to restrict a face to only cycles of a specific length.
+///
+/// Builds a CycleSet of all cycles with the specified length, then restricts
+/// the face's possible_cycles to that set.
+///
+/// If length == 0, returns Ok(()) without restriction (used to skip faces).
+///
+/// # Arguments
+///
+/// * `memo` - Immutable MEMO data
+/// * `state` - Mutable search state
+/// * `trail` - Trail for backtracking
+/// * `face_id` - Face to restrict
+/// * `length` - Required cycle length (or 0 for no restriction)
+///
+/// # Returns
+///
+/// `Ok(())` if restriction succeeds, `Err(PropagationFailure)` if no cycles match.
+fn restrict_face_to_cycle_length(
+    memo: &MemoizedData,
+    state: &mut DynamicState,
+    trail: &mut Trail,
+    face_id: usize,
+    length: usize,
+) -> Result<(), PropagationFailure> {
+    use crate::geometry::constants::NCYCLES;
+
+    // Skip if length is 0 (no restriction)
+    if length == 0 {
+        return Ok(());
+    }
+
+    // Build CycleSet of all cycles with this length
+    let mut allowed_cycles = CycleSet::empty();
+    for cycle_id in 0..NCYCLES as u64 {
+        let cycle = memo.cycles.get(cycle_id);
+        if cycle.len() == length {
+            allowed_cycles.insert(cycle_id);
+        }
+    }
+
+    // Restrict the face to these cycles
+    restrict_face_cycles(memo, state, trail, face_id, &allowed_cycles, 0)
+}
+
+/// Set up the central face configuration for the search.
+///
+/// This function is called to constrain the search based on degree signatures
+/// from InnerFacePredicate (for N≥5) or command-line flags. It:
+///
+/// 1. For each color i, restricts the face with all colors except i to cycles
+///    of the specified length (if face_degrees[i] != 0)
+/// 2. Sets the inner face (all colors) to the canonical cycle
+/// 3. Propagates the constraints through the network
+///
+/// # Face Indexing
+///
+/// For NCOLORS=6, the faces are:
+/// - ~(1 << 0) = 0b111110 (face 62) → colors {1,2,3,4,5}
+/// - ~(1 << 1) = 0b111101 (face 61) → colors {0,2,3,4,5}
+/// - ~(1 << 2) = 0b111011 (face 59) → colors {0,1,3,4,5}
+/// - ~(1 << 3) = 0b110111 (face 55) → colors {0,1,2,4,5}
+/// - ~(1 << 4) = 0b101111 (face 47) → colors {0,1,2,3,5}
+/// - ~(1 << 5) = 0b011111 (face 31) → colors {0,1,2,3,4}
+///
+/// These are the "5-faces" that border the inner face (face 63 = all 6 colors).
+///
+/// # Arguments
+///
+/// * `memo` - Immutable MEMO data
+/// * `state` - Mutable search state
+/// * `trail` - Trail for backtracking
+/// * `face_degrees` - Array of cycle lengths for neighboring faces (0 = no restriction)
+///
+/// # Returns
+///
+/// `Ok(())` if setup succeeds, `Err(PropagationFailure)` if constraints fail.
+///
+/// # Example
+///
+/// For N=6 with face_degrees = [5,5,5,4,4,4]:
+/// - Face 62 (colors 1-5) restricted to 5-cycles
+/// - Face 61 (colors 0,2-5) restricted to 5-cycles
+/// - Face 59 (colors 0,1,3-5) restricted to 5-cycles
+/// - Face 55 (colors 0-2,4,5) restricted to 4-cycles
+/// - Face 47 (colors 0-3,5) restricted to 4-cycles
+/// - Face 31 (colors 0-4) restricted to 4-cycles
+/// - Face 63 (all colors) set to canonical cycle (a,b,c,d,e,f)
+pub fn setup_central_face(
+    memo: &MemoizedData,
+    state: &mut DynamicState,
+    trail: &mut Trail,
+    face_degrees: &[u64; crate::geometry::constants::NCOLORS],
+) -> Result<(), PropagationFailure> {
+    use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
+
+    // 1. Restrict neighboring faces to specified cycle lengths
+    for i in 0..NCOLORS {
+        let degree = face_degrees[i] as usize;
+
+        // Face with all colors except i
+        let face_id = (!( 1 << i)) & (NFACES - 1);
+
+        restrict_face_to_cycle_length(memo, state, trail, face_id, degree)?;
+    }
+
+    // 2. Set inner face to canonical cycle (last cycle in array)
+    let inner_face_id = NFACES - 1;
+    let canonical_cycle_id = (NCYCLES - 1) as u64;
+
+    // Set the cycle directly (trail-tracked)
+    let encoded = canonical_cycle_id + 1;
+    unsafe {
+        trail.record_and_set(
+            NonNull::from(&mut state.faces.faces[inner_face_id].current_cycle_encoded),
+            encoded,
+        );
+    }
+
+    // 3. Propagate this choice
+    propagate_cycle_choice(memo, state, trail, inner_face_id, canonical_cycle_id, 0)?;
+
+    Ok(())
+}
+
+/// Validate that faces form proper cycles in the dual graph.
+///
+/// Faces with M colors must form a single cycle in the dual graph
+/// of length C(NCOLORS, M) (binomial coefficient).
+///
+/// This function walks each cycle by following next_face pointers and
+/// verifies:
+/// 1. The cycle closes (returns to starting face)
+/// 2. The cycle has the expected length
+/// 3. All faces with M colors are in exactly one cycle
+///
+/// # Algorithm
+///
+/// For each color count M (0..=NCOLORS):
+/// 1. Find first unvisited face with M colors
+/// 2. Follow next_face pointers to traverse the cycle
+/// 3. Count cycle length
+/// 4. Verify cycle closes and has expected length C(NCOLORS, M)
+/// 5. Mark all visited faces
+/// 6. Repeat until all faces with M colors are visited
+///
+/// # Arguments
+///
+/// * `memo` - Immutable MEMO data (contains binomial coefficients)
+/// * `state` - Mutable search state (contains next_face pointers)
+///
+/// # Returns
+///
+/// `Ok(())` if all face cycles are valid, `Err(PropagationFailure)` otherwise.
+pub fn validate_face_cycles(
+    memo: &MemoizedData,
+    state: &DynamicState,
+) -> Result<(), PropagationFailure> {
+    use crate::geometry::constants::{NCOLORS, NFACES};
+
+    // Track which faces we've already visited
+    let mut visited = vec![false; NFACES];
+
+    // For each color count M (excluding outer and inner faces)
+    // Outer face (0 colors) and inner face (NCOLORS colors) are special cases
+    // with only one face each, so they don't form meaningful cycles
+    for color_count in 1..NCOLORS {
+        let expected_cycle_length = memo.faces.face_degree_by_color_count[color_count] as usize;
+
+        // Find all faces with this color count and verify they form a single cycle
+        let mut found_any_face = false;
+
+        for start_face_id in 0..NFACES {
+            // Skip if already visited
+            if visited[start_face_id] {
+                continue;
+            }
+
+            // Count colors in this face
+            let face_colors = memo.faces.get_face(start_face_id).colors;
+            if face_colors.len() != color_count {
+                continue; // Wrong color count
+            }
+
+            // Found a face with this color count - traverse the cycle
+            found_any_face = true;
+            let mut current_face_id = start_face_id;
+            let mut cycle_length = 0;
+            let max_iterations = NFACES + 1; // Prevent infinite loops
+
+            loop {
+                // Mark as visited
+                visited[current_face_id] = true;
+                cycle_length += 1;
+
+                // Safety check for infinite loops
+                if cycle_length > max_iterations {
+                    return Err(PropagationFailure::NoMatchingCycles {
+                        face_id: current_face_id,
+                        depth: 0,
+                    });
+                }
+
+                // Get next face
+                let next_face_opt = state.faces.faces[current_face_id].next_face();
+
+                match next_face_opt {
+                    None => {
+                        // Face has no next pointer - this is an error
+                        return Err(PropagationFailure::NoMatchingCycles {
+                            face_id: current_face_id,
+                            depth: 0,
+                        });
+                    }
+                    Some(next_face_id) => {
+                        // Check if we've closed the cycle
+                        if next_face_id == start_face_id {
+                            // Cycle closed - verify length
+                            if cycle_length != expected_cycle_length {
+                                return Err(PropagationFailure::NoMatchingCycles {
+                                    face_id: start_face_id,
+                                    depth: 0,
+                                });
+                            }
+                            break; // Cycle is valid
+                        }
+
+                        // Move to next face
+                        current_face_id = next_face_id;
+                    }
+                }
+            }
+
+            // After finding one cycle for this color count, verify there are no other
+            // unvisited faces with the same color count (should all be in one cycle)
+            for check_face_id in 0..NFACES {
+                if visited[check_face_id] {
+                    continue;
+                }
+                let check_face_colors = memo.faces.get_face(check_face_id).colors;
+                if check_face_colors.len() == color_count {
+                    // Found an unvisited face with same color count - invalid!
+                    return Err(PropagationFailure::NoMatchingCycles {
+                        face_id: check_face_id,
+                        depth: 0,
+                    });
+                }
+            }
+
+            // All faces with this color count are in one valid cycle
+            break;
+        }
+
+        // Verify we found at least one face with this color count
+        // (We're only checking 1..NCOLORS, so we should always find faces)
+        if !found_any_face {
+            return Err(PropagationFailure::NoMatchingCycles {
+                face_id: 0,
+                depth: 0,
+            });
         }
     }
 
