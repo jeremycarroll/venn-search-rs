@@ -4,6 +4,11 @@ This document maps the C reference implementation (v1.1-pco) to the Rust rewrite
 
 **Goal**: Exactly copy the mathematical logic from C, with only implementation details differing (memory safety, ownership, etc.).
 
+**Rust Commit**: [`b698afb`](https://github.com/jeremycarroll/venn-search-rs/commit/b698afb0ab866001a5a97e467c86301ae163ef79)
+**C Reference**: [v1.1-pco](https://github.com/roll/venntriangles/tree/v1.1-pco)
+
+**Note**: Line numbers will be added in next commit for easier comparison.
+
 ---
 
 ## 1. Trail System (Backtracking)
