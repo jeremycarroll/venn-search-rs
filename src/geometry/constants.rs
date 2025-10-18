@@ -182,9 +182,127 @@ const _: () = assert!(
 /// The trail system relies on u64 being exactly 64 bits.
 const _: () = assert!(std::mem::size_of::<u64>() == 8, "u64 must be 8 bytes");
 
+/// Compute SEQUENCE_ORDER at compile time.
+///
+/// This defines the canonical ordering of faces for S6 symmetry checking.
+/// Priority order (from C code initializeS6()):
+/// 1. Single-color faces (NCOLORS faces)
+/// 2. Face with colors {0, NCOLORS-1} (1 face)
+/// 3. Consecutive color pairs (NCOLORS-1 faces)
+/// 4. All remaining faces in ascending order
+///
+/// The formula `(NFACES - 1) & ~colors` converts a color bitmask to a face ID:
+/// - Face 0 = outer face (no colors)
+/// - Face NFACES-1 = inner face (all colors)
+/// - Face with colors C has ID = (all colors) XOR C = (NFACES-1) & ~C
+///
+/// For NCOLORS=6:
+/// - [62, 61, 59, 55, 47, 31] - single colors
+/// - [30] - {0, 5}
+/// - [60, 57, 51, 39, 15] - consecutive pairs
+/// - [0, 1, ..., 63] - remaining (skipping those above)
+const fn compute_sequence_order() -> [usize; NFACES] {
+    let mut order = [0usize; NFACES];
+    let mut done = [false; NFACES];
+    let mut ix = 0;
+
+    // Step 1: Single-color faces
+    let mut i = 0;
+    while i < NCOLORS {
+        let colors = 1usize << i;
+        let face_id = (NFACES - 1) & !colors;
+        order[ix] = face_id;
+        done[face_id] = true;
+        ix += 1;
+        i += 1;
+    }
+
+    // Step 2: Face with colors {0, NCOLORS-1}
+    let colors = (1usize << (NCOLORS - 1)) | 1usize;
+    let face_id = (NFACES - 1) & !colors;
+    order[ix] = face_id;
+    done[face_id] = true;
+    ix += 1;
+
+    // Step 3: Consecutive pairs
+    i = 0;
+    while i < NCOLORS - 1 {
+        let colors = (2usize | 1usize) << i;
+        let face_id = (NFACES - 1) & !colors;
+        order[ix] = face_id;
+        done[face_id] = true;
+        ix += 1;
+        i += 1;
+    }
+
+    // Step 4: Remaining faces in order
+    i = 0;
+    while i < NFACES {
+        if !done[i] {
+            order[ix] = i;
+            ix += 1;
+        }
+        i += 1;
+    }
+
+    order
+}
+
+/// Canonical ordering of faces for S6 symmetry checking.
+///
+/// This is the fixed order in which face cycle lengths are extracted
+/// when checking solution canonicality under dihedral symmetry.
+///
+/// See `compute_sequence_order()` for the algorithm.
+pub const SEQUENCE_ORDER: [usize; NFACES] = compute_sequence_order();
+
+/// Compute the inverse of SEQUENCE_ORDER at compile time.
+///
+/// If SEQUENCE_ORDER[i] = j, then INVERSE_SEQUENCE_ORDER[j] = i.
+/// This allows O(1) lookup of where a face appears in the canonical order.
+const fn compute_inverse_sequence_order() -> [usize; NFACES] {
+    let mut inverse = [0usize; NFACES];
+    let order = SEQUENCE_ORDER;
+
+    let mut i = 0;
+    while i < NFACES {
+        inverse[order[i]] = i;
+        i += 1;
+    }
+
+    inverse
+}
+
+/// Inverse mapping of SEQUENCE_ORDER.
+///
+/// For each face_id, gives its position in the canonical ordering.
+pub const INVERSE_SEQUENCE_ORDER: [usize; NFACES] = compute_inverse_sequence_order();
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_sequence_order_inverse() {
+        // Verify INVERSE_SEQUENCE_ORDER is correct inverse of SEQUENCE_ORDER
+        for (order_idx, &face_id) in SEQUENCE_ORDER.iter().enumerate() {
+            assert_eq!(
+                INVERSE_SEQUENCE_ORDER[face_id], order_idx,
+                "INVERSE_SEQUENCE_ORDER[{}] should be {}, got {}",
+                face_id, order_idx, INVERSE_SEQUENCE_ORDER[face_id]
+            );
+        }
+
+        // Verify all face IDs appear exactly once in SEQUENCE_ORDER
+        let mut seen = vec![false; NFACES];
+        for &face_id in SEQUENCE_ORDER.iter() {
+            assert!(!seen[face_id], "Face {} appears multiple times in SEQUENCE_ORDER", face_id);
+            seen[face_id] = true;
+        }
+        for (face_id, &was_seen) in seen.iter().enumerate() {
+            assert!(was_seen, "Face {} missing from SEQUENCE_ORDER", face_id);
+        }
+    }
 
     #[test]
     fn test_factorial() {
