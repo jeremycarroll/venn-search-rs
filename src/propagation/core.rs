@@ -17,7 +17,12 @@ use super::color_removal::remove_completed_color_from_search;
 use super::errors::PropagationFailure;
 use super::non_adjacency::{propagate_non_adjacent_faces, propagate_non_vertex_adjacent_faces};
 use super::vertices::check_face_vertices;
-use super::MAX_PROPAGATION_DEPTH;
+
+/// Maximum propagation depth before we abort.
+///
+/// In practice, depth never exceeds NFACES (64 for NCOLORS=6),
+/// but we set a higher limit to catch infinite recursion bugs.
+const MAX_PROPAGATION_DEPTH: usize = 128;
 
 /// Helper function to set a face's possible cycles with trail tracking.
 ///
