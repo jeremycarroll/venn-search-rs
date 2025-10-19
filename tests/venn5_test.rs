@@ -13,6 +13,8 @@ use venn_search::engine::EngineBuilder;
 use venn_search::predicates::{
     FailPredicate, InitializePredicate, VennPredicate,
 };
+use venn_search::geometry::constants::NFACES;
+use venn_search::symmetry::s6::{check_solution_canonicality, SymmetryType};
 
 #[derive(Debug)]
 pub struct FixedInnerFacePredicate([u64; 5]);
@@ -35,7 +37,53 @@ impl Predicate for FixedInnerFacePredicate {
     }
 }
 
-pub struct SolutionCountingPredicate {}
+/// Print and save the current solution state for debugging.
+fn print_solution(ctx: &SearchContext, solution_number: u64) {
+    use std::fs::File;
+    use std::io::Write;
+
+    // Check canonicality
+    let symmetry = check_solution_canonicality(&ctx.state, &ctx.memo);
+    let symmetry_str = match symmetry {
+        SymmetryType::Canonical => "CANONICAL",
+        SymmetryType::Equivocal => "EQUIVOCAL",
+        SymmetryType::NonCanonical => "NON-CANONICAL",
+    };
+
+    eprintln!("\n=== Solution #{} ({}) ===", solution_number, symmetry_str);
+
+    // Create output file
+    let filename = format!("solution-{:02}.txt", solution_number);
+    let mut file = File::create(&filename).expect("Failed to create solution file");
+
+    writeln!(file, "Solution #{} ({})", solution_number, symmetry_str).unwrap();
+    writeln!(file, "Face degrees: [5, 5, 4, 3, 3]\n").unwrap();
+
+    // Print and save face cycle assignments
+    for face_id in 0..NFACES {
+        let face = &ctx.state.faces.faces[face_id];
+        let face_memo = ctx.memo.faces.get_face(face_id);
+
+        if let Some(cycle_id) = face.current_cycle() {
+            let cycle = ctx.memo.cycles.get(cycle_id);
+            let line = format!(
+                "Face {:2} ({:06b}): cycle {:2} = {}",
+                face_id,
+                face_memo.colors.bits(),
+                cycle_id,
+                cycle
+            );
+            eprintln!("{}", line);
+            writeln!(file, "{}", line).unwrap();
+        } else {
+            let line = format!("Face {:2} ({:06b}): UNASSIGNED", face_id, face_memo.colors.bits());
+            eprintln!("{}", line);
+            writeln!(file, "{}", line).unwrap();
+        }
+    }
+
+    eprintln!("Saved to {}", filename);
+}
 
 // Runs a program: initialize, set the degrees as given, venn, count solutions
 // by whether they are canonical or equivocal, and checks they match the expected.
@@ -47,6 +95,16 @@ fn run_test(
 ) {
     let mut ctx = SearchContext::new();
 
+    // Build a custom predicate that prints each solution before counting it
+    struct PrintSolutionPredicate;
+    impl Predicate for PrintSolutionPredicate {
+        fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
+            let count = ctx.statistics.get(Counters::VennSolutions);
+            print_solution(ctx, count + 1);
+            PredicateResult::Success
+        }
+    }
+
     let engine = EngineBuilder::new()
         .add(Box::new(InitializePredicate))
         .add(Box::new(FixedInnerFacePredicate(neighbor_degrees)))
@@ -55,6 +113,7 @@ fn run_test(
             None,
         ))
         .add(Box::new(VennPredicate::new()))
+        .add(Box::new(PrintSolutionPredicate))
         .add(Statistics::counting_predicate(
             Counters::VennSolutions,
             None,
