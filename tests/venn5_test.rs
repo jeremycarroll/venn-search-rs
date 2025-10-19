@@ -2,7 +2,7 @@
 
 #![cfg(feature = "ncolors_5")]
 
-/* We have some detailed test data for the N=5 case, which is big enoygh to be complicated,
+/* We have some detailed test data for the N=5 case, which is big enough to be complicated,
   but is easier to debug than the N=6 case.
 */
 use state::statistics::{Counters, Statistics};
@@ -82,4 +82,19 @@ fn test_55433() {
 #[test]
 fn test_33333() {
     run_test([3, 3, 3, 3, 3], false, 0, 0);
+}
+
+#[test]
+fn test_44444() {
+    run_test([4, 4, 4, 4, 4], true, 0, 2);
+}
+
+#[test]
+fn test_55343() {
+    run_test([5, 5, 3, 4, 3], false, 0, 0);
+}
+
+#[test]
+fn test_54443() {
+    run_test([5, 4, 4, 4, 3], true, 4, 0);
 }
