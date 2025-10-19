@@ -74,22 +74,23 @@ impl Predicate for InnerFacePredicate {
                     PredicateResult::Failure
                 }
                 SymmetryType::Canonical | SymmetryType::Equivocal => {
-                    // eprintln!("[InnerFace] ACCEPT: canonical/equivocal");
+                    eprintln!("[InnerFace] ACCEPT: canonical/equivocal");
 
                     // Only set up central face for NCOLORS > 4
                     #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
                     {
                         // Copy degrees array to avoid borrow checker issues
                         let degrees_copy = *degrees;
-
+                        eprintln!("[InnerFace] setting up");
                         // Set up central face configuration before proceeding to VennPredicate
-                        if let Err(_failure) = propagation::setup_central_face(
+                        if let Err(failure) = propagation::setup_central_face(
                             &ctx.memo,
                             &mut ctx.state,
                             &mut ctx.trail,
                             &degrees_copy,
                         ) {
                             // Setup failed - constraints are unsatisfiable for this degree signature
+                            eprintln!("[InnerFace] setting up {}",failure);
                             return PredicateResult::Failure;
                         }
                     }
