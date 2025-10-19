@@ -625,26 +625,73 @@ fn count_corners_on_curve(
 
         if let Some(link) = edge_to {
             // Get the vertex from MEMO data by its ID
-            if let Some(vertex) = memo.vertices.get_vertex_by_id(link.vertex_id) {
-                // Determine the other color at this vertex (not our curve's color)
-                let other_color = if vertex.primary.value() as usize == color_idx {
-                    vertex.secondary
-                } else {
-                    vertex.primary
-                };
+            let vertex = match memo.vertices.get_vertex_by_id(link.vertex_id) {
+                Some(v) => v,
+                None => {
+                    eprintln!("[DEBUG]     Vertex {} not found", link.vertex_id);
+                    break;
+                }
+            };
 
-                // Process this vertex for corner detection
-                corner_state.process_vertex(other_color, link.vertex_id);
-                vertices_visited += 1;
+            // Determine the other color at this vertex and which color we're traversing
+            let (other_color, is_primary) = if vertex.primary.value() as usize == color_idx {
+                (vertex.secondary, true)
+            } else if vertex.secondary.value() as usize == color_idx {
+                (vertex.primary, false)
+            } else {
+                eprintln!("[DEBUG]     Vertex {} doesn't have our color {}", link.vertex_id, color_idx);
+                break;
+            };
+
+            // Process this vertex for corner detection
+            corner_state.process_vertex(other_color, link.vertex_id);
+            vertices_visited += 1;
+
+            // Find the exit edge: we entered on one slot, exit on the opposite slot
+            // Primary color: slots 0,1 (enter on one, exit on other)
+            // Secondary color: slots 2,3 (enter on one, exit on other)
+            // We need to find which slot we're exiting from
+            let mut next_edge_ref = None;
+            if is_primary {
+                // Check both primary slots (0 and 1)
+                for slot in [0, 1] {
+                    let edge_ref = vertex.incoming_edges[slot];
+                    if edge_ref.face_id != current_face_id || edge_ref.color_idx != current_color {
+                        next_edge_ref = Some(edge_ref);
+                        break;
+                    }
+                }
+            } else {
+                // Check both secondary slots (2 and 3)
+                for slot in [2, 3] {
+                    let edge_ref = vertex.incoming_edges[slot];
+                    if edge_ref.face_id != current_face_id || edge_ref.color_idx != current_color {
+                        next_edge_ref = Some(edge_ref);
+                        break;
+                    }
+                }
             }
 
-            // Follow to next edge via the CurveLink
-            let next_edge = link.next;
+            let next_edge = match next_edge_ref {
+                Some(e) => e,
+                None => {
+                    eprintln!("[DEBUG]     Could not find exit edge at vertex {}", link.vertex_id);
+                    break;
+                }
+            };
+
             let next_face_id = next_edge.face_id;
             let next_color_idx = next_edge.color_idx;
 
-            // Check if we've completed the loop
-            if next_face_id == start_face_id && next_color_idx == color_idx {
+            // Sanity check: we should still be on the same curve color
+            if next_color_idx != color_idx {
+                eprintln!("[DEBUG]     ERROR: Color changed from {} to {} (should stay constant)",
+                         color_idx, next_color_idx);
+                break;
+            }
+
+            // Check if we've completed the loop (back to starting face)
+            if next_face_id == start_face_id {
                 eprintln!("[DEBUG]     Completed full traversal, {} vertices visited", vertices_visited);
                 break; // Completed traversal
             }
