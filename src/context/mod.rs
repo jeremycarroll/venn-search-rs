@@ -140,6 +140,31 @@ pub struct DynamicState {
     ///
     /// All modifications must be trail-tracked.
     pub vertex_processed: Vec<u64>,
+
+    /// Tracks the number of edges assigned for each color and direction.
+    ///
+    /// Index [0][color] = clockwise edges (face contains the color)
+    /// Index [1][color] = counterclockwise edges (face doesn't contain the color)
+    ///
+    /// Used to detect disconnected curves during corner checking.
+    /// When we traverse a curve, we only follow one direction (all clockwise or all counterclockwise).
+    ///
+    /// All modifications must be trail-tracked.
+    pub edge_color_counts: [[u64; NCOLORS]; 2],
+
+    /// Tracks which colors have been checked for disconnection.
+    ///
+    /// Once a color's curve forms a complete closed loop and passes the
+    /// disconnection check, we mark it here to avoid checking again.
+    ///
+    /// All modifications must be trail-tracked.
+    pub colors_checked: [u64; NCOLORS],
+
+    /// Temporary accumulator for colors that completed during current propagation.
+    ///
+    /// Reset before each top-level propagate_cycle_choice, then checked after.
+    /// NOT trail-tracked (temporary per-call state).
+    pub colors_completed_this_call: u64,
 }
 
 impl DynamicState {
@@ -150,6 +175,9 @@ impl DynamicState {
             faces: DynamicFaces::new(&memo.faces),
             crossing_counts: CrossingCounts::new(),
             vertex_processed: vec![0u64; 512], // 512 slots for up to 480 vertices
+            edge_color_counts: [[0; NCOLORS]; 2],
+            colors_checked: [0; NCOLORS],
+            colors_completed_this_call: 0,
         }
     }
 }

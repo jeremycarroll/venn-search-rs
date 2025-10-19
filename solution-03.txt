@@ -1,35 +1,31 @@
 Solution #3 (CANONICAL)
 Face degrees: [5, 5, 4, 3, 3]
 
-Face  0 (000000): cycle 52 = (aecdb)
-Face  1 (000001): cycle 48 = (abde)
-Face  2 (000010): cycle 70 = (abdec)
-Face  3 (000011): cycle 62 = (acedb)
-Face  4 (000100): cycle 40 = (adce)
-Face  5 (000101): cycle 20 = (aed)
-Face  6 (000110): cycle 42 = (aced)
-Face  7 (000111): cycle 38 = (adec)
-Face  8 (001000): cycle 29 = (bdce)
-Face  9 (001001): cycle 16 = (bed)
-Face 10 (001010): cycle 16 = (bed)
-Face 11 (001011): cycle 18 = (bde)
-Face 12 (001100): cycle 34 = (aecd)
-Face 13 (001101): cycle 23 = (ade)
-Face 14 (001110): cycle 23 = (ade)
-Face 15 (001111): cycle 20 = (aed)
-Face 16 (010000): cycle 24 = (ace)
-Face 17 (010001): cycle 32 = (aedc)
-Face 18 (010010): cycle 14 = (ced)
-Face 19 (010011): cycle 15 = (cde)
-Face 20 (010100): cycle 21 = (aec)
-Face 21 (010101): cycle 44 = (acde)
-Face 22 (010110): cycle 15 = (cde)
-Face 23 (010111): cycle 14 = (ced)
-Face 24 (011000): cycle 17 = (bec)
-Face 25 (011001): cycle 31 = (bcde)
-Face 26 (011010): cycle 31 = (bcde)
-Face 27 (011011): cycle 26 = (bedc)
-Face 28 (011100): cycle 49 = (abce)
-Face 29 (011101): cycle 50 = (aedcb)
+Face  0 (000000): cycle 51 = (aedbc)
+Face  1 (000001): cycle 67 = (acbde)
+Face  2 (000010): cycle 28 = (bdec)
+Face  3 (000011): cycle 30 = (bced)
+Face  4 (000100): cycle 11 = (acbd)
+Face  5 (000101): cycle  9 = (adbc)
+Face  6 (000110): cycle 30 = (bcedF
+Face  7 (000111): cycle 28 = (bde
+FaFace  8 (001000): cycle 29 = (bdce
+FFace  9 (001001): cycle 16 = (bed
+FFFace 10 (001010): cycle 16 = (be
+FFFace 11 (001011): cycle 18 = (bdeFFFace 12 (001100): cycle 21 = (aecFaFace 13 (001101): cycle 24 = (ac
+FaFace 14 (001110): cycle 23 = (ade
+FFace 15 (001111): cycle 20 = (aed)
+Face 16 (010000): cycle 19 = (bce)
+FFace 17 (010001): cycle 32 = (aed
+FaFace 18 (010010): cycle 14 = (ced
+FFace 19 (010011): cycle 15 = (cde)FFace 20 (010100): cycle 17 = (bec
+FFace 21 (010101): cycle  6 = (acd)
+Face 22 (010110): cycle 31 = (bcde
+FFace 23 (010111): cycle 26 = (bed
+FaFace 24 (011000): cycle 17 = (becFFFace 25 (011001): cycle 19 = (bce
+FFace 26 (011010): cycle 31 = (bcde
+FFace 27 (011011): cycle 26 = (bedc
+FFace 28 (011100): cycle 13 = (abcd
+FFace 29 (011101): cycle  8 = (adcb)
 Face 30 (011110): cycle 50 = (aedcb)
 Face 31 (011111): cycle 73 = (abcde)

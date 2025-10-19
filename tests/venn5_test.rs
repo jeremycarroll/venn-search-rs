@@ -157,3 +157,9 @@ fn test_55343() {
 fn test_54443() {
     run_test([5, 4, 4, 4, 3], true, 4, 0);
 }
+
+
+#[test]
+fn test_54434() {
+    run_test([5, 4, 4, 3, 4], true, 5, 0);
+}
