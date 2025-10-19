@@ -44,6 +44,7 @@ use crate::geometry::{CycleId, CycleSet, EdgeDynamic, MAX_CROSSINGS_PER_PAIR};
 use crate::trail::Trail;
 use std::fmt;
 use std::ptr::NonNull;
+use strum_macros::EnumCount as EnumCountMacro;
 
 /// Maximum propagation depth before we abort.
 ///
@@ -52,7 +53,7 @@ use std::ptr::NonNull;
 const MAX_PROPAGATION_DEPTH: usize = 128;
 
 /// Errors that can occur during constraint propagation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, EnumCountMacro)]
 pub enum PropagationFailure {
     /// Face has no remaining possible cycles after constraint propagation.
     NoMatchingCycles { face_id: usize, depth: usize },
@@ -749,7 +750,7 @@ pub fn setup_central_face(
         let degree = face_degrees[i] as usize;
 
         // Face with all colors except i
-        let face_id = (!( 1 << i)) & (NFACES - 1);
+        let face_id = (!(1 << i)) & (NFACES - 1);
 
         restrict_face_to_cycle_length(memo, state, trail, face_id, degree)?;
     }
