@@ -493,10 +493,7 @@ pub fn check_face_vertices(
 
     // Corner checking (only for NCOLORS > 4)
     #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
-    {
-        eprintln!("[DEBUG] Corner check for face {} cycle {}", face_id, cycle_id);
-        check_corners_for_cycle(memo, state, face_id, cycle_id, depth)?;
-    }
+    check_corners_for_cycle(memo, state, face_id, cycle_id, depth)?;
 
     Ok(())
 }
@@ -551,24 +548,15 @@ fn check_corners_for_cycle(
         if let Some(start_link) = edge_to {
             // Walk around the curve and count corners
             // Returns None if curve is incomplete, Some(count) if complete
-            match count_corners_on_curve(memo, state, central_face_id, color_idx, start_link)? {
-                Some(corner_count) => {
-                    eprintln!("[DEBUG]   Color {}: {} corners (complete)", color_idx, corner_count);
-
-                    // Check if exceeds triangle limit
-                    if corner_count > MAX_CORNERS {
-                        eprintln!("[DEBUG]   TOO MANY CORNERS! Color {} has {}, max {}",
-                                 color_idx, corner_count, MAX_CORNERS);
-                        return Err(PropagationFailure::TooManyCorners {
-                            color: color_idx,
-                            corner_count,
-                            max_allowed: MAX_CORNERS,
-                            depth,
-                        });
-                    }
-                }
-                None => {
-                    eprintln!("[DEBUG]   Color {}: incomplete curve", color_idx);
+            if let Some(corner_count) = count_corners_on_curve(memo, state, central_face_id, color_idx, start_link)? {
+                // Check if exceeds triangle limit
+                if corner_count > MAX_CORNERS {
+                    return Err(PropagationFailure::TooManyCorners {
+                        color: color_idx,
+                        corner_count,
+                        max_allowed: MAX_CORNERS,
+                        depth,
+                    });
                 }
             }
         }
@@ -630,8 +618,6 @@ fn count_corners_on_curve(
         iterations += 1;
         if iterations > MAX_ITERATIONS {
             // Safety bail-out - shouldn't happen in valid diagrams
-            eprintln!("[DEBUG]     MAX_ITERATIONS reached, {} vertices visited (treating as incomplete)",
-                     vertices_visited);
             return Ok(None); // Treat infinite loop as incomplete
         }
 
@@ -642,10 +628,7 @@ fn count_corners_on_curve(
             // Get the vertex from MEMO data by its ID
             let vertex = match memo.vertices.get_vertex_by_id(link.vertex_id) {
                 Some(v) => v,
-                None => {
-                    eprintln!("[DEBUG]     Vertex {} not found (incomplete)", link.vertex_id);
-                    return Ok(None); // Incomplete curve
-                }
+                None => return Ok(None), // Incomplete curve
             };
 
             // Determine the other color at this vertex and which color we're traversing
@@ -654,8 +637,6 @@ fn count_corners_on_curve(
             } else if vertex.secondary.value() as usize == color_idx {
                 (vertex.primary, false)
             } else {
-                eprintln!("[DEBUG]     Vertex {} doesn't have our color {} (incomplete)",
-                         link.vertex_id, color_idx);
                 return Ok(None); // Incomplete curve
             };
 
@@ -673,28 +654,20 @@ fn count_corners_on_curve(
             let mut next_edge_ref = None;
             if is_primary {
                 // Check both primary slots (0 and 1)
-                eprintln!("[DEBUG]       Checking primary slots [0,1] at vertex {}:", link.vertex_id);
                 for slot in [0, 1] {
                     let edge_ref = vertex.incoming_edges[slot];
-                    eprintln!("[DEBUG]         Slot {}: face={}, color={} (current: face={}, color={})",
-                             slot, edge_ref.face_id, edge_ref.color_idx, current_face_id, current_color);
                     // Exit edge: same color, different face
                     if edge_ref.color_idx == current_color && edge_ref.face_id != current_face_id {
-                        eprintln!("[DEBUG]         -> SELECTED as exit edge");
                         next_edge_ref = Some(edge_ref);
                         break;
                     }
                 }
             } else {
                 // Check both secondary slots (2 and 3)
-                eprintln!("[DEBUG]       Checking secondary slots [2,3] at vertex {}:", link.vertex_id);
                 for slot in [2, 3] {
                     let edge_ref = vertex.incoming_edges[slot];
-                    eprintln!("[DEBUG]         Slot {}: face={}, color={} (current: face={}, color={})",
-                             slot, edge_ref.face_id, edge_ref.color_idx, current_face_id, current_color);
                     // Exit edge: same color, different face
                     if edge_ref.color_idx == current_color && edge_ref.face_id != current_face_id {
-                        eprintln!("[DEBUG]         -> SELECTED as exit edge");
                         next_edge_ref = Some(edge_ref);
                         break;
                     }
@@ -703,11 +676,7 @@ fn count_corners_on_curve(
 
             let next_edge = match next_edge_ref {
                 Some(e) => e,
-                None => {
-                    eprintln!("[DEBUG]     Could not find exit edge at vertex {} (incomplete)",
-                             link.vertex_id);
-                    return Ok(None); // Incomplete curve
-                }
+                None => return Ok(None), // Incomplete curve
             };
 
             let next_face_id = next_edge.face_id;
@@ -715,25 +684,18 @@ fn count_corners_on_curve(
 
             // Sanity check: we should still be on the same curve color
             if next_color_idx != color_idx {
-                eprintln!("[DEBUG]     ERROR: Color changed from {} to {} (should stay constant)",
-                         color_idx, next_color_idx);
                 return Ok(None); // Treat as incomplete
             }
 
             // Check if we've completed the loop (back to starting face)
             if next_face_id == start_face_id {
-                let count = corner_state.corner_count();
-                eprintln!("[DEBUG]     Completed full traversal, {} vertices visited, {} corners",
-                         vertices_visited, count);
-                return Ok(Some(count)); // Complete curve!
+                return Ok(Some(corner_state.corner_count())); // Complete curve!
             }
 
             current_face_id = next_face_id;
             current_color = next_color_idx;
         } else {
             // Edge not connected - curve incomplete, can't check corners yet
-            eprintln!("[DEBUG]     Traversal stopped early at iteration {}, {} vertices visited (edge not connected)",
-                     iterations, vertices_visited);
             return Ok(None); // Incomplete curve
         }
     }
