@@ -159,16 +159,6 @@ impl Predicate for SuspendPredicate {
         PredicateResult::Suspend
     }
 
-    fn retry_pred(
-        &mut self,
-        _ctx: &mut SearchContext,
-        _round: usize,
-        _choice: usize,
-    ) -> PredicateResult {
-        // Suspend predicate never retries
-        PredicateResult::Failure
-    }
-
     fn name(&self) -> &str {
         "Suspend"
     }
@@ -210,16 +200,6 @@ impl Predicate for MultiRoundPredicate {
             // Shouldn't happen, but fail if called past rounds
             PredicateResult::Failure
         }
-    }
-
-    fn retry_pred(
-        &mut self,
-        _ctx: &mut SearchContext,
-        _round: usize,
-        _choice: usize,
-    ) -> PredicateResult {
-        // This predicate doesn't use choices
-        PredicateResult::Failure
     }
 
     fn name(&self) -> &str {
@@ -271,25 +251,37 @@ mod tests {
     }
 
     #[test]
-    fn test_suspend_predicate() {
+    fn test_suspend_predicate_try() {
         let mut ctx = SearchContext::new();
         let mut pred = SuspendPredicate;
 
         // Should suspend immediately
         assert_eq!(pred.try_pred(&mut ctx, 0), PredicateResult::Suspend);
-
-        // Retry should fail
-        assert_eq!(pred.retry_pred(&mut ctx, 0, 0), PredicateResult::Failure);
     }
 
     #[test]
-    fn test_fail_predicate() {
+    #[should_panic]
+    fn test_suspend_predicate_retry() {
+        let mut ctx = SearchContext::new();
+        let mut pred = SuspendPredicate;
+        pred.retry_pred(&mut ctx, 0, 0);
+    }
+
+    #[test]
+    fn test_fail_predicate_try() {
         let mut ctx = SearchContext::new();
         let mut pred = AlwaysFailPredicate; // Re-exported from FailPredicate
 
         // Should always fail
         assert_eq!(pred.try_pred(&mut ctx, 0), PredicateResult::Failure);
-        assert_eq!(pred.retry_pred(&mut ctx, 0, 0), PredicateResult::Failure);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fail_predicate_retry() {
+        let mut ctx = SearchContext::new();
+        let mut pred = AlwaysFailPredicate; // Re-exported from FailPredicate
+        pred.retry_pred(&mut ctx, 0, 0);
     }
 
     #[test]

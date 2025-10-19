@@ -181,7 +181,7 @@ pub fn check_solution_canonicality(
     state: &crate::context::DynamicState,
     memo: &crate::context::MemoizedData,
 ) -> SymmetryType {
-    use crate::geometry::constants::{NCOLORS, NFACES, INVERSE_SEQUENCE_ORDER, SEQUENCE_ORDER};
+    use crate::geometry::constants::{INVERSE_SEQUENCE_ORDER, NCOLORS, NFACES, SEQUENCE_ORDER};
 
     // Get the appropriate dihedral group
     #[cfg(feature = "ncolors_3")]
@@ -244,8 +244,15 @@ pub fn check_solution_canonicality(
             // Debug: Print first few transformations on first call
             unsafe {
                 if DEBUG_FIRST && perm_idx < 2 && order_idx < 3 {
-                    eprintln!("[S6] perm[{}]: face {} → face {} (order {} → {}), degree={}",
-                        perm_idx, face_id, permuted_face_id, order_idx, permuted_order_idx, degrees[order_idx]);
+                    eprintln!(
+                        "[S6] perm[{}]: face {} → face {} (order {} → {}), degree={}",
+                        perm_idx,
+                        face_id,
+                        permuted_face_id,
+                        order_idx,
+                        permuted_order_idx,
+                        degrees[order_idx]
+                    );
                 }
             }
         }
@@ -291,7 +298,10 @@ pub fn check_solution_canonicality(
             } else {
                 "Canonical"
             };
-            eprintln!("[S6] Solution #{}: {} (max_count={})", CALL_COUNT, result_type, max_count);
+            eprintln!(
+                "[S6] Solution #{}: {} (max_count={})",
+                CALL_COUNT, result_type, max_count
+            );
         }
     }
 

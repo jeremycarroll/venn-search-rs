@@ -63,15 +63,6 @@ impl Predicate for FailPredicate {
         PredicateResult::Failure
     }
 
-    fn retry_pred(
-        &mut self,
-        _ctx: &mut SearchContext,
-        _round: usize,
-        _choice: usize,
-    ) -> PredicateResult {
-        PredicateResult::Failure
-    }
-
     fn name(&self) -> &str {
         "Fail"
     }

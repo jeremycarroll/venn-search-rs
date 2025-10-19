@@ -40,7 +40,7 @@
 //! - Statistics (how deep cascades go)
 
 use crate::context::{DynamicState, MemoizedData};
-use crate::geometry::{CycleId, CycleSet, EdgeDynamic, MAX_CROSSINGS_PER_PAIR};
+use crate::geometry::{Color, CornerWalkState, CycleId, CycleSet, EdgeDynamic, MAX_CROSSINGS_PER_PAIR};
 use crate::trail::Trail;
 use std::fmt;
 use std::ptr::NonNull;
@@ -51,6 +51,10 @@ use strum_macros::EnumCount as EnumCountMacro;
 /// In practice, depth never exceeds NFACES (64 for NCOLORS=6),
 /// but we set a higher limit to catch infinite recursion bugs.
 const MAX_PROPAGATION_DEPTH: usize = 128;
+
+/// Maximum corners allowed per curve for triangle diagrams.
+/// Triangles have 3 corners, so each curve can have at most 3 corners.
+const MAX_CORNERS: usize = 3;
 
 /// Errors that can occur during constraint propagation.
 #[derive(Debug, Clone, PartialEq, Eq, EnumCountMacro)]
@@ -73,6 +77,15 @@ pub enum PropagationFailure {
         color_i: usize,
         color_j: usize,
         count: usize,
+        max_allowed: usize,
+        depth: usize,
+    },
+
+    /// Too many corners detected on a curve (triangle constraint violation).
+    /// Triangles have at most 3 corners per curve.
+    TooManyCorners {
+        color: usize,
+        corner_count: usize,
         max_allowed: usize,
         depth: usize,
     },
@@ -113,6 +126,18 @@ impl fmt::Display for PropagationFailure {
                     f,
                     "Colors {} and {} cross {} times (max {}) (depth {})",
                     color_i, color_j, count, max_allowed, depth
+                )
+            }
+            PropagationFailure::TooManyCorners {
+                color,
+                corner_count,
+                max_allowed,
+                depth,
+            } => {
+                write!(
+                    f,
+                    "Color {} requires {} corners (max {} for triangles) (depth {})",
+                    color, corner_count, max_allowed, depth
                 )
             }
         }
@@ -466,7 +491,174 @@ pub fn check_face_vertices(
         // assigned yet (this is the DYNAMIC phase)
     }
 
+    // Corner checking (only for NCOLORS > 4)
+    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
+    {
+        eprintln!("[DEBUG] Corner check for face {} cycle {}", face_id, cycle_id);
+        check_corners_for_cycle(memo, state, face_id, cycle_id, depth)?;
+    }
+
     Ok(())
+}
+
+/// Check corner constraints for all colors in a cycle.
+///
+/// For Venn diagrams drawable with triangles, each curve can have at most 3 corners.
+/// This function walks around each color's curve and counts corners using the
+/// Carroll 2000 corner detection algorithm.
+///
+/// Only active for NCOLORS > 4 (N=3,4 don't need corner checking).
+///
+/// # Arguments
+///
+/// * `memo` - Immutable MEMO data
+/// * `state` - Mutable search state with edge connections
+/// * `face_id` - Face that was assigned a cycle
+/// * `cycle_id` - The cycle assigned to this face
+/// * `depth` - Recursion depth for error messages
+///
+/// # Returns
+///
+/// `Ok(())` if all curves have ≤ MAX_CORNERS corners,
+/// `Err(PropagationFailure::TooManyCorners)` if a curve requires > 3 corners.
+#[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
+fn check_corners_for_cycle(
+    memo: &MemoizedData,
+    state: &DynamicState,
+    face_id: usize,
+    cycle_id: CycleId,
+    depth: usize,
+) -> Result<(), PropagationFailure> {
+    let cycle = memo.cycles.get(cycle_id);
+    let cycle_colors = cycle.colors();
+
+    // Check each color in the cycle
+    for i in 0..cycle.len() {
+        let color = cycle_colors[i];
+        let color_idx = color.value() as usize;
+
+        // Get the edge for this color
+        let face_dynamic = &state.faces.faces[face_id];
+        let edge_to = face_dynamic.edge_dynamic[color_idx].get_to();
+
+        // Only check if edge has a connection set up
+        if let Some(start_link) = edge_to {
+            // Walk around the curve and count corners
+            let corner_count = count_corners_on_curve(memo, state, face_id, color_idx, start_link)?;
+
+            eprintln!("[DEBUG]   Color {}: {} corners", color_idx, corner_count);
+
+            // Check if exceeds triangle limit
+            if corner_count > MAX_CORNERS {
+                eprintln!("[DEBUG]   TOO MANY CORNERS! Color {} has {}, max {}",
+                         color_idx, corner_count, MAX_CORNERS);
+                return Err(PropagationFailure::TooManyCorners {
+                    color: color_idx,
+                    corner_count,
+                    max_allowed: MAX_CORNERS,
+                    depth,
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Count corners on a curve by traversing edges.
+///
+/// Implements the Carroll 2000 corner detection algorithm by walking around
+/// a curve and tracking which other curves are inside vs outside.
+///
+/// # Arguments
+///
+/// * `memo` - MEMO data with vertex information
+/// * `state` - Search state with edge connections
+/// * `start_face_id` - Starting face for the traversal
+/// * `color_idx` - Index of the color whose curve we're checking
+/// * `start_link` - Starting edge connection
+///
+/// # Returns
+///
+/// Number of corners detected on this curve, or error if traversal fails.
+#[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
+fn count_corners_on_curve(
+    memo: &MemoizedData,
+    state: &DynamicState,
+    start_face_id: usize,
+    color_idx: usize,
+    start_link: crate::geometry::CurveLink,
+) -> Result<usize, PropagationFailure> {
+    use crate::geometry::constants::NCOLORS;
+
+    let mut corner_state = CornerWalkState::new();
+
+    // Initialize with colors we're OUTSIDE of at the starting face
+    // A face's colorset contains curves we're INSIDE, so we need the complement
+    let start_face_memo = memo.faces.get_face(start_face_id);
+    let start_face_colorset = start_face_memo.colors;
+    for c in 0..NCOLORS {
+        let color = Color::new(c as u8);
+        // Add to 'out' if NOT in face colorset and NOT the curve we're traversing
+        if !start_face_colorset.contains(color) && c != color_idx {
+            corner_state.out.insert(color);
+        }
+    }
+
+    let mut current_face_id = start_face_id;
+    let mut current_color = color_idx;
+    let mut iterations = 0;
+    const MAX_ITERATIONS: usize = 1000; // Prevent infinite loops
+    let mut vertices_visited = 0;
+
+    // Walk around the curve following edge->to->next links
+    loop {
+        iterations += 1;
+        if iterations > MAX_ITERATIONS {
+            // Safety bail-out - shouldn't happen in valid diagrams
+            eprintln!("[DEBUG]     MAX_ITERATIONS reached, {} vertices visited", vertices_visited);
+            return Ok(corner_state.corner_count());
+        }
+
+        let face_dynamic = &state.faces.faces[current_face_id];
+        let edge_to = face_dynamic.edge_dynamic[current_color].get_to();
+
+        if let Some(link) = edge_to {
+            // Get the vertex from MEMO data by its ID
+            if let Some(vertex) = memo.vertices.get_vertex_by_id(link.vertex_id) {
+                // Determine the other color at this vertex (not our curve's color)
+                let other_color = if vertex.primary.value() as usize == color_idx {
+                    vertex.secondary
+                } else {
+                    vertex.primary
+                };
+
+                // Process this vertex for corner detection
+                corner_state.process_vertex(other_color, link.vertex_id);
+                vertices_visited += 1;
+            }
+
+            // Follow to next edge via the CurveLink
+            let next_edge = link.next;
+            let next_face_id = next_edge.face_id;
+            let next_color_idx = next_edge.color_idx;
+
+            // Check if we've completed the loop
+            if next_face_id == start_face_id && next_color_idx == color_idx {
+                eprintln!("[DEBUG]     Completed full traversal, {} vertices visited", vertices_visited);
+                break; // Completed traversal
+            }
+
+            current_face_id = next_face_id;
+            current_color = next_color_idx;
+        } else {
+            // Edge not connected - curve incomplete, can't check corners yet
+            eprintln!("[DEBUG]     Traversal stopped early at iteration {}, {} vertices visited (edge not connected)", iterations, vertices_visited);
+            break;
+        }
+    }
+
+    Ok(corner_state.corner_count())
 }
 
 /// Propagate edge adjacency constraints.

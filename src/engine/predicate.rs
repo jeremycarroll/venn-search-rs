@@ -164,12 +164,17 @@ pub trait Predicate {
     /// Note: retry_pred cannot return Choices or Suspend (we're already in choice mode).
     ///
     /// The trail has already been rewound to the state before this choice was tried.
+    #[allow(unused)]
     fn retry_pred(
         &mut self,
         ctx: &mut SearchContext,
         round: usize,
         choice: usize,
-    ) -> PredicateResult;
+    ) -> PredicateResult {
+        // By default, we do not allow retry. Predicates that return Choices
+        // must implement this.
+        panic!("{}::retry_pred should never be called", self.name());
+    }
 
     /// Optional: Get a name for this predicate (for debugging).
     ///

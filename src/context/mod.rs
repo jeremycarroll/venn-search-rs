@@ -12,7 +12,7 @@
 use crate::geometry::constants::NCOLORS;
 use crate::geometry::{CrossingCounts, CycleId, CycleSet};
 use crate::memo::{CyclesArray, CyclesMemo, FacesMemo, VerticesMemo};
-use crate::state::DynamicFaces;
+use crate::state::{DynamicFaces, Statistics};
 use crate::trail::Trail;
 use std::ptr::NonNull;
 
@@ -201,6 +201,8 @@ pub struct SearchContext {
     pub trail: Trail,
     /// Mutable search state (Tier 2)
     pub state: DynamicState,
+
+    pub statistics: Statistics,
 }
 
 impl SearchContext {
@@ -212,6 +214,7 @@ impl SearchContext {
             memo,
             trail: Trail::new(),
             state,
+            statistics: Statistics::new(),
         }
     }
 
@@ -224,6 +227,7 @@ impl SearchContext {
             memo,
             trail: Trail::new(),
             state,
+            statistics: Statistics::new(),
         }
     }
 

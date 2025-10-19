@@ -9,13 +9,13 @@
 //! tracks how many assignments are "forced" by propagation vs "guessed".
 
 #[cfg(feature = "ncolors_6")]
+use std::cell::RefCell;
+#[cfg(feature = "ncolors_6")]
 use venn_search::context::SearchContext;
 #[cfg(feature = "ncolors_6")]
 use venn_search::geometry::{Color, ColorSet};
 #[cfg(feature = "ncolors_6")]
 use venn_search::propagation;
-#[cfg(feature = "ncolors_6")]
-use std::cell::RefCell;
 
 /// Known solution data from Carroll 2000.
 /// Format: (face_colors_str, cycle_colors_str)
@@ -216,11 +216,16 @@ fn test_known_solution_in_order() {
     }
 
     eprintln!("\n=== Results ===");
-    eprintln!("Total faces in known solution: {}", KNOWN_SOLUTION_DATA.len());
+    eprintln!(
+        "Total faces in known solution: {}",
+        KNOWN_SOLUTION_DATA.len()
+    );
     eprintln!("Manual assignments made: {}", assignments_made);
     eprintln!("Forced by propagation: {}", forced_by_propagation);
-    eprintln!("Propagation effectiveness: {:.1}%",
-        100.0 * forced_by_propagation as f64 / KNOWN_SOLUTION_DATA.len() as f64);
+    eprintln!(
+        "Propagation effectiveness: {:.1}%",
+        100.0 * forced_by_propagation as f64 / KNOWN_SOLUTION_DATA.len() as f64
+    );
 
     // Verify all 64 faces are assigned
     use venn_search::geometry::constants::NFACES;

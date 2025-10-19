@@ -106,6 +106,10 @@ pub struct VerticesMemo {
     ///
     /// **Heap-allocated** via Box - 3D array is too large for stack (147 KB).
     pub vertices: Box<[[[Option<Vertex>; NCOLORS]; NCOLORS]; NFACES]>,
+
+    /// Flat lookup by vertex ID for corner checking.
+    /// vertices_by_id[id] gives the vertex with that ID.
+    pub vertices_by_id: Vec<Vertex>,
 }
 
 /// Check if an edge is clockwise around its face.
@@ -358,10 +362,23 @@ impl VerticesMemo {
             vertex_id_counter, total_slots
         );
 
-        Self { vertices }
+        // Build flat lookup by vertex ID
+        let mut vertices_by_id = vec![];
+        for face in 0..NFACES {
+            for primary_idx in 0..NCOLORS {
+                for secondary_idx in 0..NCOLORS {
+                    if let Some(vertex) = &vertices[face][primary_idx][secondary_idx] {
+                        vertices_by_id.push(*vertex);
+                    }
+                }
+            }
+        }
+        vertices_by_id.sort_by_key(|v| v.id);
+
+        Self { vertices, vertices_by_id }
     }
 
-    /// Get a vertex configuration.
+    /// Get a vertex configuration by 3D array indexing.
     ///
     /// # Arguments
     ///
@@ -375,6 +392,20 @@ impl VerticesMemo {
     #[inline]
     pub fn get_vertex(&self, face_id: usize, color_a: usize, color_b: usize) -> Option<&Vertex> {
         self.vertices[face_id][color_a][color_b].as_ref()
+    }
+
+    /// Get a vertex by its unique ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `vertex_id` - The unique vertex ID (0..NPOINTS-1)
+    ///
+    /// # Returns
+    ///
+    /// The vertex with this ID, or None if ID is out of bounds.
+    #[inline]
+    pub fn get_vertex_by_id(&self, vertex_id: usize) -> Option<&Vertex> {
+        self.vertices_by_id.get(vertex_id)
     }
 }
 

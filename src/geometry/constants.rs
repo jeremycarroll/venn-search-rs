@@ -296,7 +296,11 @@ mod tests {
         // Verify all face IDs appear exactly once in SEQUENCE_ORDER
         let mut seen = vec![false; NFACES];
         for &face_id in SEQUENCE_ORDER.iter() {
-            assert!(!seen[face_id], "Face {} appears multiple times in SEQUENCE_ORDER", face_id);
+            assert!(
+                !seen[face_id],
+                "Face {} appears multiple times in SEQUENCE_ORDER",
+                face_id
+            );
             seen[face_id] = true;
         }
         for (face_id, &was_seen) in seen.iter().enumerate() {

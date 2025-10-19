@@ -476,15 +476,6 @@ mod tests {
         fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
             PredicateResult::Success
         }
-
-        fn retry_pred(
-            &mut self,
-            _ctx: &mut SearchContext,
-            _round: usize,
-            _choice: usize,
-        ) -> PredicateResult {
-            PredicateResult::Failure // No retry
-        }
     }
 
     /// Test predicate that always fails.
@@ -492,15 +483,6 @@ mod tests {
 
     impl Predicate for AlwaysFail {
         fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-            PredicateResult::Failure
-        }
-
-        fn retry_pred(
-            &mut self,
-            _ctx: &mut SearchContext,
-            _round: usize,
-            _choice: usize,
-        ) -> PredicateResult {
             PredicateResult::Failure
         }
     }
@@ -511,15 +493,6 @@ mod tests {
     impl Predicate for Suspend {
         fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
             PredicateResult::Suspend
-        }
-
-        fn retry_pred(
-            &mut self,
-            _ctx: &mut SearchContext,
-            _round: usize,
-            _choice: usize,
-        ) -> PredicateResult {
-            PredicateResult::Failure
         }
     }
 

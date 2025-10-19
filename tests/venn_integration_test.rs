@@ -5,107 +5,38 @@
 //! These tests verify that the VennPredicate correctly finds all valid Venn diagrams
 //! for different NCOLORS values, matching the expected solution counts from the C reference.
 
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 use std::cell::RefCell;
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 use std::rc::Rc;
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 use venn_search::context::SearchContext;
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 use venn_search::predicates::{
     FailPredicate, InitializePredicate, InnerFacePredicate, VennPredicate,
 };
 
 /// Simple counter predicate that increments on each solution.
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 #[derive(Clone)]
 struct CounterPredicate {
     count: Rc<RefCell<usize>>,
 }
 
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 impl CounterPredicate {
     fn new(count: Rc<RefCell<usize>>) -> Self {
         Self { count }
     }
 }
 
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 impl Predicate for CounterPredicate {
     fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
         *self.count.borrow_mut() += 1;
         eprintln!("Found solution {}", *self.count.borrow());
         PredicateResult::Success
     }
-
-    fn retry_pred(
-        &mut self,
-        _ctx: &mut SearchContext,
-        _round: usize,
-        _choice: usize,
-    ) -> PredicateResult {
-        PredicateResult::Failure
-    }
 }
 
 /// Validation predicate that checks solution structure correctness.
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 #[derive(Clone)]
 struct ValidationPredicate;
 
-#[cfg(any(
-    feature = "ncolors_3",
-    feature = "ncolors_4",
-    feature = "ncolors_5",
-    feature = "ncolors_6"
-))]
 impl Predicate for ValidationPredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
         use venn_search::geometry::constants::{NCOLORS, NFACES};
@@ -156,15 +87,6 @@ impl Predicate for ValidationPredicate {
             NFACES
         );
         PredicateResult::Success
-    }
-
-    fn retry_pred(
-        &mut self,
-        _ctx: &mut SearchContext,
-        _round: usize,
-        _choice: usize,
-    ) -> PredicateResult {
-        PredicateResult::Failure
     }
 }
 
@@ -298,7 +220,7 @@ fn test_venn_search_ncolors_5() {
 }
 
 #[test]
-#[cfg(feature = "ncolors_6")]
+#[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5")))]
 fn test_venn_search_ncolors_6() {
     eprintln!("\n=== Testing VennPredicate for NCOLORS=6 ===");
     eprintln!("Expected: 233 solutions");
