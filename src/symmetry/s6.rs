@@ -131,6 +131,7 @@ fn colorset_permute(face_id: usize, permutation: &[u8; NCOLORS]) -> usize {
 /// # Panics
 ///
 /// Panics if any face is unassigned (all faces must have cycles before validation).
+#[allow(dead_code)]
 fn get_face_degrees_in_canonical_order(
     state: &crate::context::DynamicState,
 ) -> [u8; crate::geometry::constants::NFACES] {
@@ -177,6 +178,7 @@ fn get_face_degrees_in_canonical_order(
 /// # Returns
 ///
 /// SymmetryType indicating whether to accept (Canonical/Equivocal) or reject (NonCanonical).
+#[allow(static_mut_refs)]
 pub fn check_solution_canonicality(
     state: &crate::context::DynamicState,
     memo: &crate::context::MemoizedData,

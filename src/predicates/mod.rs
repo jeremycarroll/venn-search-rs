@@ -16,6 +16,7 @@
 pub mod initialize;
 pub mod innerface;
 pub mod test;
+pub mod advanced_test;
 pub mod venn;
 
 // Re-export main predicates for convenience

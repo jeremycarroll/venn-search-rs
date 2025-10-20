@@ -184,3 +184,53 @@ pub trait Predicate: Debug {
         std::any::type_name::<Self>()
     }
 }
+
+pub trait OpenClose {
+    fn open(&mut self, ctx:&mut SearchContext) -> bool;
+    fn close(&mut self, ctx:&mut SearchContext);
+}
+
+#[derive(Debug)]
+pub struct OpenClosePredicate<T:OpenClose> {
+    open_close:T,
+    name: String,
+}
+
+impl <T:OpenClose> OpenClosePredicate<T> {
+    pub fn new(name:&str, open_close:T) -> Self {
+      OpenClosePredicate { open_close, name:String::from(name)}
+  }
+}
+
+impl <T:OpenClose+Debug> Predicate for OpenClosePredicate<T> {
+    fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
+        if self.open_close.open(ctx) {
+            PredicateResult::Choices(2)
+        } else {
+            PredicateResult::Failure
+        }
+    }
+
+    fn retry_pred(
+        &mut self,
+        ctx: &mut SearchContext,
+        _round: usize,
+        choice: usize,
+    ) -> PredicateResult {
+        // Map choice to integer value
+        match choice {
+            0 => PredicateResult::Success,
+            1 => {
+                self.open_close.close(ctx);
+                PredicateResult::Failure
+            },
+            _ => panic!("Unreachable"),
+        }
+    }
+
+    fn name(&self) -> &str {
+       self.name.as_str()
+    }
+}
+
+

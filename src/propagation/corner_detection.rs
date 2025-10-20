@@ -34,7 +34,7 @@
 //! Called for each edge when a facial cycle is assigned to a face.
 
 use crate::context::{DynamicState, MemoizedData};
-use crate::geometry::{constants::NFACES, Color, ColorSet};
+use crate::geometry::{constants::NFACES, ColorSet};
 use crate::trail::Trail;
 
 use super::errors::PropagationFailure;
@@ -122,6 +122,7 @@ fn find_corners_by_traversal(
     memo: &MemoizedData,
     state: &DynamicState,
 ) -> Result<(), PropagationFailure> {
+
     // Get starting edge info
     let start_face_colors = memo.faces.get_face(start_face_id).colors;
 
@@ -129,7 +130,10 @@ fn find_corners_by_traversal(
     let not_my_color_bits = !(1u64 << start_color_idx);
 
     // C: outside = ~start->colors
-    let mut outside = ColorSet::from_bits(!start_face_colors.bits());
+    // IMPORTANT: Mask to only valid color bits (0..NCOLORS)
+    use crate::geometry::constants::NCOLORS;
+    let all_colors_mask = (1u64 << NCOLORS) - 1;
+    let mut outside = ColorSet::from_bits((!start_face_colors.bits()) & all_colors_mask);
 
     // C: passed = 0
     let mut passed = ColorSet::empty();
@@ -165,7 +169,9 @@ fn find_corners_by_traversal(
         let edge_to = state.faces.faces[current_face_id].edge_dynamic[current_color_idx].get_to();
 
         match edge_to {
-            None => break, // current->to == NULL
+            None => {
+                break; // current->to == NULL
+            }
             Some(link) => {
                 // Get vertex - C: p->vertex
                 if let Some(vertex) = memo.vertices.get_vertex_by_id(link.vertex_id) {
@@ -179,6 +185,8 @@ fn find_corners_by_traversal(
                         &mut outside,
                         &mut passed,
                     ) {
+                        counter += 1;
+
                         // C: if (counter >= MAX_CORNERS) return failureTooManyCorners(depth);
                         if counter >= MAX_CORNERS {
                             return Err(PropagationFailure::TooManyCorners {
@@ -188,8 +196,6 @@ fn find_corners_by_traversal(
                                 depth,
                             });
                         }
-                        // C: cornersReturn[counter++] = current;
-                        counter += 1;
                     }
                 }
 
@@ -251,7 +257,7 @@ pub fn vertex_corner_check(
     #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
     {
         // C: EDGE start = ...
-        let mut start_face_id = face_id;
+        let start_face_id = face_id;
         let start_color_idx = color_idx;
 
         // C: if (start->reversed->to != NULL) start = vertexGetCentralEdge(start->color);
@@ -261,14 +267,94 @@ pub fn vertex_corner_check(
             .get_to()
             .is_some();
 
-        if reversed_has_to {
-            // Get central edge - C: vertexGetCentralEdge(start->color)
-            // Central/inner face is NFACES - 1, edge of color start_color_idx
-            start_face_id = NFACES - 1;
-            // color_idx stays the same
-        }
+        // If curve is complete (reversed edge connected) and we're NOT on the central face,
+        // start from the central face instead to traverse the complete curve
+        let final_start_face = if reversed_has_to && face_id != NFACES - 1 {
+            NFACES - 1 // Central/inner face
+        } else {
+            start_face_id
+        };
 
         // C: return findCornersByTraversal(start, depth, ignore);
-        find_corners_by_traversal(start_face_id, start_color_idx, depth, memo, state)
+        find_corners_by_traversal(final_start_face, start_color_idx, depth, memo, state)
     }
+}
+
+/// Count corners for a complete curve (for testing/validation).
+///
+/// This function is similar to `find_corners_by_traversal` but returns the actual
+/// corner count instead of a Result. It should only be called on complete curves.
+///
+/// # Arguments
+///
+/// * `memo` - Immutable MEMO data
+/// * `state` - Search state with edge connections
+/// * `start_face_id` - Face containing the starting edge (typically central face)
+/// * `start_color_idx` - Color index of the curve to count
+///
+/// # Returns
+///
+/// The number of corners found on the curve.
+pub fn count_corners_for_complete_curve(
+    memo: &MemoizedData,
+    state: &DynamicState,
+    start_face_id: usize,
+    start_color_idx: usize,
+) -> usize {
+    // Get starting edge info
+    let start_face_colors = memo.faces.get_face(start_face_id).colors;
+
+    // C: COLORSET notMyColor = ~(1u << start->color)
+    let not_my_color_bits = !(1u64 << start_color_idx);
+
+    // C: outside = ~start->colors
+    // IMPORTANT: Mask to only valid color bits (0..NCOLORS)
+    use crate::geometry::constants::NCOLORS;
+    let all_colors_mask = (1u64 << NCOLORS) - 1;
+    let mut outside = ColorSet::from_bits((!start_face_colors.bits()) & all_colors_mask);
+
+    // C: passed = 0
+    let mut passed = ColorSet::empty();
+
+    let mut counter = 0;
+    let mut current_face_id = start_face_id;
+    let mut current_color_idx = start_color_idx;
+
+    // Walk the curve
+    loop {
+        // Get edge->to
+        let edge_to = state.faces.faces[current_face_id].edge_dynamic[current_color_idx].get_to();
+
+        match edge_to {
+            None => {
+                break; // current->to == NULL
+            }
+            Some(link) => {
+                // Get vertex and check for corner
+                if let Some(vertex) = memo.vertices.get_vertex_by_id(link.vertex_id) {
+                    let vertex_colors_masked =
+                        ColorSet::from_bits(vertex.colors.bits() & not_my_color_bits);
+
+                    if detect_corner_and_update_crossing_sets(
+                        vertex_colors_masked,
+                        &mut outside,
+                        &mut passed,
+                    ) {
+                        counter += 1;
+                    }
+                }
+
+                // Move to next edge
+                current_face_id = link.next.face_id;
+                current_color_idx = link.next.color_idx;
+
+                // Check if we're back at start (loop complete)
+                if current_face_id == start_face_id && current_color_idx == start_color_idx {
+                    break;
+                }
+            }
+        }
+    }
+
+    counter
 }

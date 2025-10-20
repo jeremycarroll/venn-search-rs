@@ -9,6 +9,9 @@
 //! This design enables parallelization by allowing multiple independent SearchContext
 //! instances to operate on the same MEMO data.
 
+use std::fs::File;
+use std::io::BufWriter;
+use std::mem::size_of;
 use crate::geometry::constants::NCOLORS;
 use crate::geometry::{CrossingCounts, CycleId, CycleSet};
 use crate::memo::{CyclesArray, CyclesMemo, FacesMemo, VerticesMemo};
@@ -165,6 +168,10 @@ pub struct DynamicState {
     /// Reset before each top-level propagate_cycle_choice, then checked after.
     /// NOT trail-tracked (temporary per-call state).
     pub colors_completed_this_call: u64,
+
+    /// Current default output within backtracking context - can only have one.
+    /// Replace with a vector, and a trailed index to provide better functionality.
+    pub output: Option<Box<BufWriter<File>>>,
 }
 
 impl DynamicState {
@@ -178,6 +185,7 @@ impl DynamicState {
             edge_color_counts: [[0; NCOLORS]; 2],
             colors_checked: [0; NCOLORS],
             colors_completed_this_call: 0,
+            output: None,
         }
     }
 }
@@ -223,11 +231,11 @@ impl DynamicState {
 /// ```
 #[derive(Debug)]
 pub struct SearchContext {
-    /// Immutable precomputed data (Tier 1)
+    /// Immutable precomputed data
     pub memo: MemoizedData,
-    /// Trail for O(1) backtracking (Tier 2)
+    /// Trail for O(1) backtracking
     pub trail: Trail,
-    /// Mutable search state (Tier 2)
+    /// Mutable search state
     pub state: DynamicState,
 
     pub statistics: Statistics,
@@ -264,7 +272,7 @@ impl SearchContext {
     /// This does NOT include heap-allocated data. For full size estimation,
     /// see `estimate_memo_heap_size()`.
     pub fn memo_size_bytes() -> usize {
-        std::mem::size_of::<MemoizedData>()
+        size_of::<MemoizedData>()
     }
 
     /// Estimate the total heap size of MEMO data.
@@ -275,7 +283,6 @@ impl SearchContext {
     /// - Vertex Box allocation
     /// - Any other heap-allocated MEMO structures
     pub fn estimate_memo_heap_size(&self) -> usize {
-        use std::mem::size_of;
 
         let mut total = 0;
 

@@ -199,9 +199,17 @@ impl FacesMemo {
                     if let Some(vertex) =
                         vertices.get_vertex(outside_face, primary_idx, secondary_idx)
                     {
-                        // Create CurveLink to this vertex
-                        let edge_ref = EdgeRef::new(face_id, edge_color_idx);
-                        let link = CurveLink::new(edge_ref, vertex.id);
+                        // Compute the next edge: the adjacent face across both colors
+                        // When traversing a curve of edge_color, we stay on edge_color across the vertex
+                        let edge_color_bit = 1u64 << edge_color_idx;
+                        let next_color_bit = 1u64 << next_color_idx;
+                        let xor_mask = edge_color_bit | next_color_bit;
+                        let next_face_id = (face_colors.bits() ^ xor_mask) as usize;
+
+                        // The next edge is on the adjacent face with the SAME color (edge_color)
+                        // When traversing edge_color's curve, we continue on edge_color after crossing the vertex
+                        let next_edge_ref = EdgeRef::new(next_face_id, edge_color_idx);
+                        let link = CurveLink::new(next_edge_ref, vertex.id);
 
                         // Set possibly_to for this edge
                         self.faces[face_id].edges[edge_color_idx]

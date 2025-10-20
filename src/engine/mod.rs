@@ -68,7 +68,7 @@
 
 pub mod predicate;
 
-pub use predicate::{Predicate, PredicateResult, TerminalPredicate};
+pub use predicate::{Predicate, PredicateResult, TerminalPredicate, OpenClosePredicate};
 
 use crate::context::SearchContext;
 

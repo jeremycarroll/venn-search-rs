@@ -8,11 +8,13 @@
 use state::statistics::{Counters, Statistics};
 use venn_search::context::SearchContext;
 use venn_search::{propagation, state, Predicate, PredicateResult};
+use std::fmt::Write;
 
-use venn_search::engine::EngineBuilder;
+use venn_search::engine::{EngineBuilder, OpenClosePredicate};
 use venn_search::predicates::{
-    FailPredicate, InitializePredicate, VennPredicate,
+    FailPredicate, InitializePredicate, VennPredicate
 };
+use venn_search::predicates::advanced_test::{OpenCloseFile, PrintHeaderPredicate, PrintFacesPredicate, PrintFaceCyclesPredicate, PrintEdgeCyclesPredicate};
 use venn_search::geometry::constants::NFACES;
 use venn_search::symmetry::s6::{check_solution_canonicality, SymmetryType};
 
@@ -30,61 +32,13 @@ impl Predicate for FixedInnerFacePredicate {
             );
             return PredicateResult::Failure;
         }
+        ctx.state.current_face_degrees = self.0.clone();
         PredicateResult::Success
     }
     fn name(&self) -> &str {
         "InnerFace"
     }
 }
-
-/// Print and save the current solution state for debugging.
-fn print_solution(ctx: &SearchContext, solution_number: u64) {
-    use std::fs::File;
-    use std::io::Write;
-
-    // Check canonicality
-    let symmetry = check_solution_canonicality(&ctx.state, &ctx.memo);
-    let symmetry_str = match symmetry {
-        SymmetryType::Canonical => "CANONICAL",
-        SymmetryType::Equivocal => "EQUIVOCAL",
-        SymmetryType::NonCanonical => "NON-CANONICAL",
-    };
-
-    eprintln!("\n=== Solution #{} ({}) ===", solution_number, symmetry_str);
-
-    // Create output file
-    let filename = format!("solution-{:02}.txt", solution_number);
-    let mut file = File::create(&filename).expect("Failed to create solution file");
-
-    writeln!(file, "Solution #{} ({})", solution_number, symmetry_str).unwrap();
-    writeln!(file, "Face degrees: [5, 5, 4, 3, 3]\n").unwrap();
-
-    // Print and save face cycle assignments
-    for face_id in 0..NFACES {
-        let face = &ctx.state.faces.faces[face_id];
-        let face_memo = ctx.memo.faces.get_face(face_id);
-
-        if let Some(cycle_id) = face.current_cycle() {
-            let cycle = ctx.memo.cycles.get(cycle_id);
-            let line = format!(
-                "Face {:2} ({:06b}): cycle {:2} = {}",
-                face_id,
-                face_memo.colors.bits(),
-                cycle_id,
-                cycle
-            );
-            eprintln!("{}", line);
-            writeln!(file, "{}", line).unwrap();
-        } else {
-            let line = format!("Face {:2} ({:06b}): UNASSIGNED", face_id, face_memo.colors.bits());
-            eprintln!("{}", line);
-            writeln!(file, "{}", line).unwrap();
-        }
-    }
-
-    eprintln!("Saved to {}", filename);
-}
-
 // Runs a program: initialize, set the degrees as given, venn, count solutions
 // by whether they are canonical or equivocal, and checks they match the expected.
 fn run_test(
@@ -95,17 +49,6 @@ fn run_test(
 ) {
     let mut ctx = SearchContext::new();
 
-    // Build a custom predicate that prints each solution before counting it
-
-    #[derive(Debug)]
-    struct PrintSolutionPredicate;
-    impl Predicate for PrintSolutionPredicate {
-        fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-            let count = ctx.statistics.get(Counters::VennSolutions);
-            print_solution(ctx, count + 1);
-            PredicateResult::Success
-        }
-    }
 
     let engine = EngineBuilder::new()
         .add(Box::new(InitializePredicate))
@@ -115,11 +58,15 @@ fn run_test(
             None,
         ))
         .add(Box::new(VennPredicate::new()))
-        .add(Box::new(PrintSolutionPredicate))
         .add(Statistics::counting_predicate(
             Counters::VennSolutions,
             None,
         ))
+        .add(Box::new(OpenClosePredicate::new("open file", OpenCloseFile::new(String::from("solution")))))
+        .add(Box::new(PrintHeaderPredicate {}))
+        .add(Box::new(PrintFacesPredicate {}))
+        .add(Box::new(PrintFaceCyclesPredicate {}))
+        .add(Box::new(PrintEdgeCyclesPredicate{}))
         .terminal(Box::new(FailPredicate))
         .build();
 
@@ -137,9 +84,10 @@ fn run_test(
 
 #[test]
 fn test_55433() {
-    // TEMPORARY: Expecting 7 instead of 6 because disconnected curve check is disabled
-    // during setup_central_face. Will be fixed when VennPredicate is implemented.
-    run_test([5, 5, 4, 3, 3], true, 7, 0);
+    // TEMPORARY: Getting 7 instead of 6. The 7th has a quadrilateral in it, and is not being
+    // detected because the edge topology is not being saved correctly, and hence corner detection
+    // is not working.
+    run_test([5, 5, 4, 3, 3], true, 6, 0);
 }
 
 #[test]

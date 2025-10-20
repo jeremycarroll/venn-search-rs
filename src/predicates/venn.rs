@@ -74,19 +74,6 @@ impl Predicate for VennPredicate {
                 }
             }
 
-            // S6 symmetry check - check canonicality BEFORE starting search
-            // This prunes non-canonical branches early, mirroring C code behavior
-            // use crate::symmetry::s6::{check_solution_canonicality, SymmetryType};
-            //
-            // match check_solution_canonicality(&ctx.state, &ctx.memo) {
-            //     SymmetryType::Canonical | SymmetryType::Equivocal => {
-            //         // Accept - this is a potentially valid canonical starting point
-            //     }
-            //     SymmetryType::NonCanonical => {
-            //         // Reject - this configuration is non-canonical, prune this branch
-            //         return PredicateResult::Failure;
-            //     }
-            // }
         }
 
         // Find next unassigned face with minimum cycle count
@@ -110,9 +97,6 @@ impl Predicate for VennPredicate {
             if let Err(_failure) = propagation::validate_face_cycles(&ctx.memo, &ctx.state) {
                 return PredicateResult::Failure;
             }
-
-            // S6 check happens at round 0 (before search starts), not here at the end
-            // This matches the C code structure and prunes branches early
 
             PredicateResult::Success
         }
