@@ -1,0 +1,58 @@
+## Canonical Solution 1 - inner face degrees: [5, 5, 4, 3, 3]
+
+Face  0 (00000): cycle 50 = (aedcb) [next=00000, prev=00000]
+Face  1 (00001): cycle 71 = (abdce) [next=00010, prev=10000]
+Face  2 (00010): cycle  1 = (abc) [next=00100, prev=00001]
+Face  3 (00011): cycle 62 = (acedb) [next=00110, prev=01001]
+Face  4 (00100): cycle  3 = (bcd) [next=01000, prev=00010]
+Face  5 (00101): cycle 15 = (cde) [next=01001, prev=10001]
+Face  6 (00110): cycle 11 = (acbd) [next=01100, prev=00011]
+Face  7 (00111): cycle 38 = (adec) [next=01110, prev=10011]
+Face  8 (01000): cycle 31 = (bcde) [next=10000, prev=00100]
+Face  9 (01001): cycle 27 = (becd) [next=00011, prev=00101]
+Face 10 (01010): cycle 17 = (bec) [next=11000, prev=01100]
+Face 11 (01011): cycle 18 = (bde) [next=10011, prev=11001]
+Face 12 (01100): cycle  2 = (bdc) [next=01010, prev=00110]
+Face 13 (01101): cycle 14 = (ced) [next=11001, prev=10101]
+Face 14 (01110): cycle 61 = (adbce) [next=11010, prev=00111]
+Face 15 (01111): cycle 20 = (aed) [next=11110, prev=10111]
+Face 16 (10000): cycle 67 = (acbde) [next=00001, prev=01000]
+Face 17 (10001): cycle 21 = (aec) [next=00101, prev=10100]
+Face 18 (10010): cycle  3 = (bcd) [next=10100, prev=11000]
+Face 19 (10011): cycle 15 = (cde) [next=00111, prev=01011]
+Face 20 (10100): cycle  9 = (adbc) [next=10001, prev=10010]
+Face 21 (10101): cycle 42 = (aced) [next=01101, prev=11100]
+Face 22 (10110): cycle  2 = (bdc) [next=11100, prev=11010]
+Face 23 (10111): cycle 14 = (ced) [next=01111, prev=11011]
+Face 24 (11000): cycle 16 = (bed) [next=10010, prev=01010]
+Face 25 (11001): cycle 19 = (bce) [next=01011, prev=01101]
+Face 26 (11010): cycle 29 = (bdce) [next=10110, prev=01110]
+Face 27 (11011): cycle 26 = (bedc) [next=10111, prev=11101]
+Face 28 (11100): cycle  7 = (abd) [next=10101, prev=10110]
+Face 29 (11101): cycle 56 = (adecb) [next=11011, prev=11110]
+Face 30 (11110): cycle 52 = (aecdb) [next=11101, prev=01111]
+Face 31 (11111): cycle 73 = (abcde) [next=11111, prev=11111]
+
+--- Face Cycles by Color Count ---
+00000, 
+i.e. 1 faces
+00001, 00010, 00100, 01000, 10000, 
+i.e. 5 faces
+00011, 00110, 01100, 01010, 11000, 10010, 10100, 10001, 00101, 01001, 
+i.e. 10 faces
+00111, 01110, 11010, 10110, 11100, 10101, 01101, 11001, 01011, 10011, 
+i.e. 10 faces
+01111, 11110, 11101, 11011, 10111, 
+i.e. 5 faces
+11111, 
+i.e. 1 faces
+
+--- Edge Cycles (Curves) by Color ---
+Color a: 11111, 11101, 10101, 10001, 00001, 00011, 00111, 01111,  [8 steps]
+Color b: 11111, 11011, 01011, 00011, 00010, 00110, 01110, 01010, 11010, 10010, 10110, 11110,  [12 steps]
+Color c: 11111, 10111, 00111, 00110, 00100, 01100, 01110, 11110, 10110, 10100, 10101, 00101, 01101, 11101,  [14 steps]
+Color d: 11111, 01111, 01110, 01100, 01000, 11000, 11010, 11110, 11100, 11101, 01101, 01001, 01011, 11011,  [14 steps]
+Color e: 11111, 11110, 11010, 11000, 10000, 10001, 10101, 11101, 11001, 11011, 10011, 10111,  [12 steps]
+
+
+Grand total: 60 edges

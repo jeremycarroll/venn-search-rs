@@ -66,7 +66,7 @@ fn run_test(
         .add(Box::new(PrintHeaderPredicate {}))
         .add(Box::new(PrintFacesPredicate {}))
         .add(Box::new(PrintFaceCyclesPredicate {}))
-        .add(Box::new(PrintEdgeCyclesPredicate{}))
+        .add(Box::new(PrintEdgeCyclesPredicate::new(None)))
         .terminal(Box::new(FailPredicate))
         .build();
 

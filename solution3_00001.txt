@@ -1,0 +1,26 @@
+Face  0 (000): cycle  1 = (abc) [next=000, prev=000]
+Face  1 (001): cycle  0 = (acb) [next=100, prev=010]
+Face  2 (010): cycle  0 = (acb) [next=001, prev=100]
+Face  3 (011): cycle  1 = (abc) [next=101, prev=110]
+Face  4 (100): cycle  0 = (acb) [next=010, prev=001]
+Face  5 (101): cycle  1 = (abc) [next=110, prev=011]
+Face  6 (110): cycle  1 = (abc) [next=011, prev=101]
+Face  7 (111): cycle  0 = (acb) [next=111, prev=111]
+
+--- Face Cycles by Color Count ---
+000, 
+i.e. 1 faces
+001, 100, 010, 
+i.e. 3 faces
+011, 101, 110, 
+i.e. 3 faces
+111, 
+i.e. 1 faces
+
+--- Edge Cycles (Curves) by Color ---
+Color a: 111, 011, 001, 101,  [4 steps]
+Color b: 111, 110, 010, 011,  [4 steps]
+Color c: 111, 101, 100, 110,  [4 steps]
+
+
+Grand total: 12 edges

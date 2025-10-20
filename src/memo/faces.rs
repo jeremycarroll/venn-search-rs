@@ -199,16 +199,31 @@ impl FacesMemo {
                     if let Some(vertex) =
                         vertices.get_vertex(outside_face, primary_idx, secondary_idx)
                     {
-                        // Compute the next edge: the adjacent face across both colors
-                        // When traversing a curve of edge_color, we stay on edge_color across the vertex
-                        let edge_color_bit = 1u64 << edge_color_idx;
-                        let next_color_bit = 1u64 << next_color_idx;
-                        let xor_mask = edge_color_bit | next_color_bit;
-                        let next_face_id = (face_colors.bits() ^ xor_mask) as usize;
+                        // C: initializeEdgeLink(edge1, edge2, edge3)
+                        //    edge1->possiblyTo[other].next = edge2->reversed
+                        //
+                        // We need to find the partner edge at this vertex (same color, different slot)
+                        // and link to its reversed edge.
 
-                        // The next edge is on the adjacent face with the SAME color (edge_color)
-                        // When traversing edge_color's curve, we continue on edge_color after crossing the vertex
-                        let next_edge_ref = EdgeRef::new(next_face_id, edge_color_idx);
+                        // Find partner slot (0<->1, 2<->3)
+                        let partner_slot = match slot {
+                            0 => 1,
+                            1 => 0,
+                            2 => 3,
+                            3 => 2,
+                            _ => unreachable!(),
+                        };
+
+                        // Get the partner edge from vertex->incomingEdges
+                        let partner_edge = vertex.incoming_edges[partner_slot];
+                        let partner_face_id = partner_edge.face_id;
+                        let partner_color_idx = partner_edge.color_idx;
+
+                        // The reversed edge is on the adjacent face (across the color)
+                        // C: edge->reversed is (adjacent_face, same_color)
+                        let reversed_face_id = partner_face_id ^ (1 << partner_color_idx);
+                        let next_edge_ref = EdgeRef::new(reversed_face_id, partner_color_idx);
+
                         let link = CurveLink::new(next_edge_ref, vertex.id);
 
                         // Set possibly_to for this edge
