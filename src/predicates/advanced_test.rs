@@ -143,7 +143,15 @@ impl Predicate for PrintFaceCyclesPredicate {
 }
 
 #[derive(Debug)]
-pub struct PrintEdgeCyclesPredicate;
+pub struct PrintEdgeCyclesPredicate {
+   validate_length:fn(&usize)->bool,
+}
+
+impl PrintEdgeCyclesPredicate {
+    pub fn new(validate:Option<fn(&usize)->bool>)->Self {
+        Self{validate_length:validate.unwrap_or(|_|true)}
+    }
+}
 
 impl Predicate for PrintEdgeCyclesPredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
@@ -181,7 +189,8 @@ impl Predicate for PrintEdgeCyclesPredicate {
                     break;
                 }
             }
-            let _ = writeln!(writer, " [{} steps]", edge_count);
+            let _ = writeln!(writer, " [{} steps]", &edge_count);
+            assert!((&self.validate_length)(&edge_count));
         }
         let _ = writeln!(writer, "\n\nGrand total: {} edges", total_edges);
 
