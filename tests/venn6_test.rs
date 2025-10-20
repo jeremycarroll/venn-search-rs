@@ -13,7 +13,6 @@ use venn_search::{propagation, state, Predicate, PredicateResult};
 
 use venn_search::engine::predicate::OpenClose;
 use venn_search::engine::{EngineBuilder, OpenClosePredicate};
-use venn_search::geometry::{Color, NCOLORS, NFACES};
 use venn_search::predicates::advanced_test::OpenCloseFile;
 use venn_search::predicates::{
     FailPredicate, InitializePredicate, InnerFacePredicate, VennPredicate,
@@ -61,7 +60,7 @@ impl Predicate for FixedInnerFacePredicate {
             );
             return PredicateResult::Failure;
         }
-        ctx.state.current_face_degrees = self.0.clone();
+        ctx.state.current_face_degrees = self.0;
         PredicateResult::Success
     }
     fn name(&self) -> &str {

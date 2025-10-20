@@ -35,6 +35,7 @@ impl Predicate for CounterPredicate {
 
 /// Validation predicate that checks solution structure correctness.
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 struct ValidationPredicate;
 
 impl Predicate for ValidationPredicate {

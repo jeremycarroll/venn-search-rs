@@ -294,7 +294,7 @@ mod tests {
         }
 
         // Verify all face IDs appear exactly once in SEQUENCE_ORDER
-        let mut seen = vec![false; NFACES];
+        let mut seen = [false; NFACES];
         for &face_id in SEQUENCE_ORDER.iter() {
             assert!(
                 !seen[face_id],

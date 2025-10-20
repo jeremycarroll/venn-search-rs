@@ -45,7 +45,7 @@ pub fn validate_face_cycles(
     use crate::geometry::constants::{NCOLORS, NFACES};
 
     // Track which faces we've already visited
-    let mut visited = vec![false; NFACES];
+    let mut visited = [false; NFACES];
 
     // For each color count M (excluding outer and inner faces)
     // Outer face (0 colors) and inner face (NCOLORS colors) are special cases

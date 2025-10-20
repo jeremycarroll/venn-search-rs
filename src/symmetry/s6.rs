@@ -292,7 +292,7 @@ pub fn check_solution_canonicality(
     unsafe {
         static mut CALL_COUNT: usize = 0;
         CALL_COUNT += 1;
-        if CALL_COUNT <= 5 || CALL_COUNT % 1000 == 0 {
+        if CALL_COUNT <= 5 || CALL_COUNT.is_multiple_of(1000) {
             let result_type = if degrees != max_perm {
                 "NonCanonical"
             } else if max_count > 1 {

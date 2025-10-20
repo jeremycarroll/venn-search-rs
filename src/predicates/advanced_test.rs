@@ -26,7 +26,7 @@ impl OpenCloseFile {
     pub fn new(prefix: String) -> Self {
         OpenCloseFile {
             old: None,
-            prefix: prefix,
+            prefix,
             counter: 0,
         }
     }
@@ -38,7 +38,8 @@ impl OpenClose for OpenCloseFile {
         }
         let filename = format!("{}_{:05}.txt", self.prefix, self.counter);
         let buffered_writer = BufWriter::new(
-            File::create(&filename).expect(format!("Cannot open file: {}", filename).as_str()),
+            File::create(&filename)
+                .unwrap_or_else(|_| panic!("Cannot open file: {}", filename)),
         );
         self.old = ctx.state.output.replace(Box::new(buffered_writer));
         self.counter += 1;
@@ -229,7 +230,7 @@ impl Predicate for PrintEdgeCyclesPredicate {
                 }
             }
             let _ = writeln!(writer, " [{} steps]", &edge_count);
-            assert!((&self.validate_length)(&edge_count));
+            assert!((self.validate_length)(&edge_count));
         }
         let _ = writeln!(writer, "\n\nGrand total: {} edges", total_edges);
 

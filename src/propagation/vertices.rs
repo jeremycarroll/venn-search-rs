@@ -207,11 +207,9 @@ pub(super) fn check_face_vertices(
 
             // Corner detection check
             // C: vertex.c:180-191 vertexCornerCheck
-            if let Err(failure) = super::corner_detection::vertex_corner_check(
+            super::corner_detection::vertex_corner_check(
                 memo, state, trail, face_id, color_idx, depth,
-            ) {
-                return Err(failure);
-            }
+            )?
 
             // TODO: Disconnected curve check
             // C: vertex.c:192-201 edgeCurveChecks

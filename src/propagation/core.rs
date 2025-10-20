@@ -159,8 +159,8 @@ pub fn propagate_cycle_choice(
     // For now, this means we find 7 solutions instead of 6 for test_55433 (one invalid with
     // disconnected curve).
     //
-    // Uncomment this code when implementing VennPredicate:
-    if true && depth == 0 && state.colors_completed_this_call != 0 {
+    // Check for completed colors at top-level propagation (depth == 0)
+    if depth == 0 && state.colors_completed_this_call != 0 {
         use crate::geometry::constants::NCOLORS;
         for color_idx in 0..NCOLORS {
             if (state.colors_completed_this_call & (1 << color_idx)) != 0 {

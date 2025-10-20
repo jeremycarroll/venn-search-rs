@@ -58,6 +58,7 @@ impl CornerWalkState {
     /// If other_color is in Out:
     /// - Remove other_color from Out
     /// - If other_color is in Passed: clear Passed and add vertex to results
+    ///
     /// Otherwise:
     /// - Add other_color to both Out and Passed
     pub fn process_vertex(&mut self, other_color: Color, vertex_id: usize) {
