@@ -40,10 +40,12 @@ fn test_initialize_and_innerface_together() {
 ///
 /// This mimics the C test's `foundSolution` predicate.
 #[derive(Debug)]
+#[allow(dead_code)] // Used in tests with specific feature flags
 struct CounterPredicate {
     counter: &'static AtomicUsize,
 }
 
+#[allow(dead_code)] // Used in tests with specific feature flags
 impl CounterPredicate {
     fn new(counter: &'static AtomicUsize) -> Self {
         Self { counter }

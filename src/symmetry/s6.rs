@@ -217,7 +217,8 @@ pub fn check_solution_canonicality(
     unsafe {
         if FIRST_CALL {
             eprintln!("[S6] First call to check_solution_canonicality");
-            eprintln!("[S6] Degrees: {:?}", &degrees[..10]);
+            let print_len = NFACES.min(10);
+            eprintln!("[S6] Degrees: {:?}", &degrees[..print_len]);
             FIRST_CALL = false;
         }
     }
@@ -262,10 +263,12 @@ pub fn check_solution_canonicality(
 
         unsafe {
             if DEBUG_FIRST && perm_idx == 0 {
-                eprintln!("[S6] Identity permutation: {:?}", &permuted[..10]);
+                let print_len = NFACES.min(10);
+                eprintln!("[S6] Identity permutation: {:?}", &permuted[..print_len]);
             }
             if DEBUG_FIRST && perm_idx == 1 {
-                eprintln!("[S6] Second permutation: {:?}", &permuted[..10]);
+                let print_len = NFACES.min(10);
+                eprintln!("[S6] Second permutation: {:?}", &permuted[..print_len]);
                 eprintln!("[S6] Comparison: {:?}", permuted.cmp(&degrees));
                 DEBUG_FIRST = false;
             }
