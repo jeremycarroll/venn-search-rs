@@ -12,6 +12,7 @@
 //! use venn_search::engine::{Predicate, PredicateResult};
 //! use venn_search::context::SearchContext;
 //!
+//! #[derive(Debug)]
 //! struct SimplePredicate;
 //!
 //! impl Predicate for SimplePredicate {
@@ -101,6 +102,7 @@ pub trait TerminalPredicate: Predicate {}
 /// use venn_search::engine::{Predicate, PredicateResult};
 /// use venn_search::context::SearchContext;
 ///
+/// #[derive(Debug)]
 /// struct ChoicePredicate {
 ///     options: Vec<i32>,
 /// }

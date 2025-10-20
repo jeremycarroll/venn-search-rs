@@ -28,7 +28,9 @@
 //! use venn_search::engine::{EngineBuilder, Predicate, PredicateResult, TerminalPredicate};
 //! use venn_search::context::SearchContext;
 //!
+//! #[derive(Debug)]
 //! struct SimplePredicate;
+//! #[derive(Debug)]
 //! struct SuspendPredicate;
 //!
 //! impl Predicate for SimplePredicate {
@@ -160,6 +162,7 @@ impl SearchEngine {
     /// # use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
     /// # use venn_search::context::SearchContext;
     /// # use venn_search::predicates::test::SuspendPredicate;
+    /// # #[derive(Debug)]
     /// # struct MyPredicate;
     /// # impl Predicate for MyPredicate {
     /// #     fn try_pred(&mut self, _: &mut SearchContext, _: usize) -> PredicateResult {
