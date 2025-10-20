@@ -7,9 +7,12 @@
 
 use std::io::Write;
 
-use state::statistics::{Counters, Statistics};
+mod common;
+
+use common::FixedInnerFacePredicate;
 use venn_search::context::SearchContext;
-use venn_search::{propagation, state, Predicate, PredicateResult};
+use venn_search::state::statistics::{Counters, Statistics};
+use venn_search::{Predicate, PredicateResult};
 
 use venn_search::engine::predicate::OpenClose;
 use venn_search::engine::{EngineBuilder, OpenClosePredicate};
@@ -43,28 +46,6 @@ impl OpenClose for PrintSolutionCountPerInnerFace {
             ctx.statistics.get(VennSolutions) - self.on_enter
         )
         .unwrap();
-    }
-}
-
-#[derive(Debug)]
-pub struct FixedInnerFacePredicate([u64; 6]);
-
-impl Predicate for FixedInnerFacePredicate {
-    fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        if let Err(failure) =
-            propagation::setup_central_face(&ctx.memo, &mut ctx.state, &mut ctx.trail, &self.0)
-        {
-            eprintln!(
-                "Could not set face degree to {:?}, with {}",
-                &self.0, &failure
-            );
-            return PredicateResult::Failure;
-        }
-        ctx.state.current_face_degrees = self.0;
-        PredicateResult::Success
-    }
-    fn name(&self) -> &str {
-        "InnerFace"
     }
 }
 

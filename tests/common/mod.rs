@@ -3,6 +3,7 @@
 //! Common test utilities shared across integration tests.
 
 use venn_search::context::SearchContext;
+use venn_search::geometry::constants::NCOLORS;
 use venn_search::{propagation, Predicate, PredicateResult};
 
 /// A predicate that fixes the inner face to a specific degree sequence.
@@ -10,9 +11,9 @@ use venn_search::{propagation, Predicate, PredicateResult};
 /// This is used in tests to search for Venn diagrams with a known
 /// degree sequence, bypassing the InnerFacePredicate enumeration.
 #[derive(Debug)]
-pub struct FixedInnerFacePredicate<const N: usize>(pub [u64; N]);
+pub struct FixedInnerFacePredicate(pub [u64; NCOLORS]);
 
-impl<const N: usize> Predicate for FixedInnerFacePredicate<N> {
+impl Predicate for FixedInnerFacePredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
         if let Err(failure) =
             propagation::setup_central_face(&ctx.memo, &mut ctx.state, &mut ctx.trail, &self.0)
