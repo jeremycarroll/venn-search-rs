@@ -90,8 +90,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-build-target-
 
-      - name: Run clippy
+      - name: Run clippy (default NCOLORS=6)
         run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run clippy (NCOLORS=5)
+        run: cargo clippy --all-targets --features ncolors_5 -- -D warnings
 
   format:
     name: Format Check

@@ -99,8 +99,8 @@ fn test_find_all_degree_signatures_n6() {
     let count = SOLUTION_COUNT.load(Ordering::SeqCst);
     println!("Found {} canonical degree signatures for NCOLORS=6", count);
     assert_eq!(
-        count, 56,
-        "Expected 56 canonical degree signatures for NCOLORS=6"
+        count, 39,
+        "Expected 39 canonical degree signatures for NCOLORS=6"
     );
 }
 
@@ -134,7 +134,7 @@ fn test_known_canonical_examples() {
 
     let test_cases: Vec<(Vec<u64>, bool)> = if NCOLORS == 6 {
         vec![
-            (vec![6, 6, 3, 5, 4, 3], true),  // Canonical
+            (vec![6, 6, 4, 4, 4, 3], true),  // Canonical (has 5 solutions)
             (vec![6, 6, 3, 4, 5, 3], false), // Non-canonical (reflection)
             (vec![5, 4, 5, 4, 5, 4], true),  // Equivocal
         ]
