@@ -187,11 +187,12 @@ fn find_corners_by_traversal(
                     ) {
                         counter += 1;
 
-                        // C: if (counter >= MAX_CORNERS) return failureTooManyCorners(depth);
-                        if counter >= MAX_CORNERS {
+                        // C checks BEFORE incrementing: if (counter >= MAX_CORNERS) fail
+                        // We increment FIRST, so we check counter > MAX_CORNERS
+                        if counter > MAX_CORNERS {
                             return Err(PropagationFailure::TooManyCorners {
                                 color: start_color_idx,
-                                corner_count: counter + 1,
+                                corner_count: counter,
                                 max_allowed: MAX_CORNERS,
                                 depth,
                             });

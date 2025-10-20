@@ -194,7 +194,7 @@ impl Predicate for PrintEdgeCyclesPredicate {
         }
         let _ = writeln!(writer, "\n\nGrand total: {} edges", total_edges);
 
-        assert_eq!(total_edges, NFACES * 2 - 4); // From Euler's formula, with F = NFACES, E = 2V
+        assert_eq!(total_edges, NFACES * 2 - 4); // From Euler's formula, with F = NFACES, E = 2VIn
         PredicateResult::Success
     }
 }
