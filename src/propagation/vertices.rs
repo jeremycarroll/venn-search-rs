@@ -130,7 +130,8 @@ pub(super) fn check_face_vertices(
                     let edge_color_idx = edge_ref.color_idx;
 
                     // Set edge->to if not already set (C: dynamicProcessIncomingEdge)
-                    let existing_to = state.faces.faces[edge_face_id].edge_dynamic[edge_color_idx].get_to();
+                    let existing_to =
+                        state.faces.faces[edge_face_id].edge_dynamic[edge_color_idx].get_to();
                     if existing_to.is_none() {
                         // Find which color this edge connects to at this vertex
                         let edge_color = crate::geometry::Color::new(edge_color_idx as u8);
@@ -142,11 +143,18 @@ pub(super) fn check_face_vertices(
                         let other_color_idx = other_color.value() as usize;
 
                         // Get the link to the other color
-                        if let Some(link_to_set) = memo.faces.get_face(edge_face_id).edges[edge_color_idx].possibly_to[other_color_idx] {
+                        if let Some(link_to_set) = memo.faces.get_face(edge_face_id).edges
+                            [edge_color_idx]
+                            .possibly_to[other_color_idx]
+                        {
                             let encoded = EdgeDynamic::encode_to(Some(link_to_set));
                             unsafe {
                                 trail.record_and_set(
-                                    NonNull::from(&mut state.faces.faces[edge_face_id].edge_dynamic[edge_color_idx].to_encoded),
+                                    NonNull::from(
+                                        &mut state.faces.faces[edge_face_id].edge_dynamic
+                                            [edge_color_idx]
+                                            .to_encoded,
+                                    ),
                                     encoded,
                                 );
                             }
@@ -156,7 +164,11 @@ pub(super) fn check_face_vertices(
                     // Increment edge count (C: dynamicCountEdge)
                     let edge_face_colors = memo.faces.get_face(edge_face_id).colors;
                     let edge_color = crate::geometry::Color::new(edge_color_idx as u8);
-                    let direction = if edge_face_colors.contains(edge_color) { 0 } else { 1 };
+                    let direction = if edge_face_colors.contains(edge_color) {
+                        0
+                    } else {
+                        1
+                    };
                     let current_count = state.edge_color_counts[direction][edge_color_idx];
                     unsafe {
                         trail.record_and_set(
@@ -195,9 +207,9 @@ pub(super) fn check_face_vertices(
 
             // Corner detection check
             // C: vertex.c:180-191 vertexCornerCheck
-            if let Err(failure) =
-                super::corner_detection::vertex_corner_check(memo, state, trail, face_id, color_idx, depth)
-            {
+            if let Err(failure) = super::corner_detection::vertex_corner_check(
+                memo, state, trail, face_id, color_idx, depth,
+            ) {
                 return Err(failure);
             }
 

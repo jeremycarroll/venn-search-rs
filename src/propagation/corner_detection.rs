@@ -122,7 +122,6 @@ fn find_corners_by_traversal(
     memo: &MemoizedData,
     state: &DynamicState,
 ) -> Result<(), PropagationFailure> {
-
     // Get starting edge info
     let start_face_colors = memo.faces.get_face(start_face_id).colors;
 
@@ -148,16 +147,14 @@ fn find_corners_by_traversal(
     #[cfg(debug_assertions)]
     {
         let adjacent_face_id = memo.faces.get_face(start_face_id).adjacent_faces[start_color_idx];
-        let reversed_has_to =
-            state.faces.faces[adjacent_face_id].edge_dynamic[start_color_idx]
-                .get_to()
-                .is_some();
+        let reversed_has_to = state.faces.faces[adjacent_face_id].edge_dynamic[start_color_idx]
+            .get_to()
+            .is_some();
         if reversed_has_to {
             let expected_central_face = (NFACES - 1) & not_my_color_bits as usize;
             let actual_face_masked = start_face_colors.bits() & not_my_color_bits;
             debug_assert_eq!(
-                actual_face_masked,
-                expected_central_face as u64,
+                actual_face_masked, expected_central_face as u64,
                 "If reversed edge has 'to', face must be central"
             );
         }

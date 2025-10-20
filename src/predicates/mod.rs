@@ -13,10 +13,10 @@
 //! - `venn`: VennPredicate for main Venn diagram search
 //! - Built-in predicates: `FailPredicate`, `SuspendPredicate`
 
+pub mod advanced_test;
 pub mod initialize;
 pub mod innerface;
 pub mod test;
-pub mod advanced_test;
 pub mod venn;
 
 // Re-export main predicates for convenience

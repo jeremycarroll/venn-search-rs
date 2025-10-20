@@ -9,14 +9,14 @@
 //! This design enables parallelization by allowing multiple independent SearchContext
 //! instances to operate on the same MEMO data.
 
-use std::fs::File;
-use std::io::BufWriter;
-use std::mem::size_of;
 use crate::geometry::constants::NCOLORS;
 use crate::geometry::{CrossingCounts, CycleId, CycleSet};
 use crate::memo::{CyclesArray, CyclesMemo, FacesMemo, VerticesMemo};
 use crate::state::{DynamicFaces, Statistics};
 use crate::trail::Trail;
+use std::fs::File;
+use std::io::BufWriter;
+use std::mem::size_of;
 use std::ptr::NonNull;
 
 /// Immutable precomputed data (Tier 1: MEMO).
@@ -283,7 +283,6 @@ impl SearchContext {
     /// - Vertex Box allocation
     /// - Any other heap-allocated MEMO structures
     pub fn estimate_memo_heap_size(&self) -> usize {
-
         let mut total = 0;
 
         // Cycles Vec: capacity * size_of<Cycle>

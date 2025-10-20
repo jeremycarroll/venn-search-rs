@@ -64,13 +64,14 @@ pub(super) fn remove_completed_color_from_search(
 
         // Restrict this face to cycles omitting the completed color
         // If this fails, the face needs this color → disconnected curve
-        restrict_face_cycles(memo, state, trail, face_id, &omitting_cycleset, 0)
-            .map_err(|_| PropagationFailure::DisconnectedCurve {
+        restrict_face_cycles(memo, state, trail, face_id, &omitting_cycleset, 0).map_err(|_| {
+            PropagationFailure::DisconnectedCurve {
                 color: color_idx,
                 edges_visited: 0, // Not applicable here
                 total_edges: 0,   // Not applicable here
                 depth: 0,
-            })?;
+            }
+        })?;
     }
 
     Ok(())

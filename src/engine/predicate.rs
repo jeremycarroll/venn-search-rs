@@ -34,8 +34,8 @@
 //! }
 //! ```
 
-use std::fmt::Debug;
 use crate::context::SearchContext;
+use std::fmt::Debug;
 
 /// Result of attempting a predicate.
 ///
@@ -186,23 +186,26 @@ pub trait Predicate: Debug {
 }
 
 pub trait OpenClose {
-    fn open(&mut self, ctx:&mut SearchContext) -> bool;
-    fn close(&mut self, ctx:&mut SearchContext);
+    fn open(&mut self, ctx: &mut SearchContext) -> bool;
+    fn close(&mut self, ctx: &mut SearchContext);
 }
 
 #[derive(Debug)]
-pub struct OpenClosePredicate<T:OpenClose> {
-    open_close:T,
+pub struct OpenClosePredicate<T: OpenClose> {
+    open_close: T,
     name: String,
 }
 
-impl <T:OpenClose> OpenClosePredicate<T> {
-    pub fn new(name:&str, open_close:T) -> Self {
-      OpenClosePredicate { open_close, name:String::from(name)}
-  }
+impl<T: OpenClose> OpenClosePredicate<T> {
+    pub fn new(name: &str, open_close: T) -> Self {
+        OpenClosePredicate {
+            open_close,
+            name: String::from(name),
+        }
+    }
 }
 
-impl <T:OpenClose+Debug> Predicate for OpenClosePredicate<T> {
+impl<T: OpenClose + Debug> Predicate for OpenClosePredicate<T> {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
         if self.open_close.open(ctx) {
             PredicateResult::Choices(2)
@@ -223,14 +226,12 @@ impl <T:OpenClose+Debug> Predicate for OpenClosePredicate<T> {
             1 => {
                 self.open_close.close(ctx);
                 PredicateResult::Failure
-            },
+            }
             _ => panic!("Unreachable"),
         }
     }
 
     fn name(&self) -> &str {
-       self.name.as_str()
+        self.name.as_str()
     }
 }
-
-

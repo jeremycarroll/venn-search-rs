@@ -74,7 +74,6 @@ impl Predicate for VennPredicate {
                     return PredicateResult::Failure;
                 }
             }
-
         }
 
         // Find next unassigned face with minimum cycle count

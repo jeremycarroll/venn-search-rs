@@ -15,9 +15,9 @@
 //! - Engine then calls `retry_pred(round, choice)` for choice in 0..n
 //! - Searches succeed via side effects, then Suspend or Fail to terminate
 
-use std::fmt::Debug;
 use crate::context::SearchContext;
 use crate::engine::{Predicate, PredicateResult, TerminalPredicate};
+use std::fmt::Debug;
 
 /// Predicate that tries integers in a range using the Choices model.
 ///

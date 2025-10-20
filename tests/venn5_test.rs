@@ -11,11 +11,11 @@ use common::FixedInnerFacePredicate;
 use state::statistics::{Counters, Statistics};
 use venn_search::context::SearchContext;
 use venn_search::engine::{EngineBuilder, OpenClosePredicate};
-use venn_search::predicates::{FailPredicate, InitializePredicate, VennPredicate};
 use venn_search::predicates::advanced_test::{
     OpenCloseFile, PrintEdgeCyclesPredicate, PrintFaceCyclesPredicate, PrintFacesPredicate,
     PrintHeaderPredicate,
 };
+use venn_search::predicates::{FailPredicate, InitializePredicate, VennPredicate};
 // Runs a program: initialize, set the degrees as given, venn, count solutions
 // by whether they are canonical or equivocal, and checks they match the expected.
 fn run_test(
@@ -25,7 +25,6 @@ fn run_test(
     expected_equivocal: u64,
 ) {
     let mut ctx = SearchContext::new();
-
 
     let engine = EngineBuilder::new()
         .add(Box::new(InitializePredicate))
@@ -39,7 +38,10 @@ fn run_test(
             Counters::VennSolutions,
             None,
         ))
-        .add(Box::new(OpenClosePredicate::new("open file", OpenCloseFile::new(String::from("solution")))))
+        .add(Box::new(OpenClosePredicate::new(
+            "open file",
+            OpenCloseFile::new(String::from("solution")),
+        )))
         .add(Box::new(PrintHeaderPredicate {}))
         .add(Box::new(PrintFacesPredicate {}))
         .add(Box::new(PrintFaceCyclesPredicate {}))
@@ -86,7 +88,6 @@ fn test_55343() {
 fn test_54443() {
     run_test([5, 4, 4, 4, 3], true, 4, 0);
 }
-
 
 #[test]
 fn test_54434() {

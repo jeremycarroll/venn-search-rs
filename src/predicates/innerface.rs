@@ -90,7 +90,7 @@ impl Predicate for InnerFacePredicate {
                             &degrees_copy,
                         ) {
                             // Setup failed - constraints are unsatisfiable for this degree signature
-                            eprintln!("[InnerFace] setting up {}",failure);
+                            eprintln!("[InnerFace] setting up {}", failure);
                             return PredicateResult::Failure;
                         }
                     }

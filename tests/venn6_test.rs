@@ -11,32 +11,41 @@ use state::statistics::{Counters, Statistics};
 use venn_search::context::SearchContext;
 use venn_search::{propagation, state, Predicate, PredicateResult};
 
-use venn_search::engine::{EngineBuilder, OpenClosePredicate};
 use venn_search::engine::predicate::OpenClose;
+use venn_search::engine::{EngineBuilder, OpenClosePredicate};
 use venn_search::geometry::{Color, NCOLORS, NFACES};
-use venn_search::predicates::{FailPredicate, InitializePredicate, InnerFacePredicate, VennPredicate};
 use venn_search::predicates::advanced_test::OpenCloseFile;
+use venn_search::predicates::{
+    FailPredicate, InitializePredicate, InnerFacePredicate, VennPredicate,
+};
 use venn_search::state::statistics::Counters::VennSolutions;
 
 #[derive(Debug)]
 pub struct PrintSolutionCountPerInnerFace {
-    on_enter:u64,
+    on_enter: u64,
 }
-
 
 impl OpenClose for PrintSolutionCountPerInnerFace {
     fn open(&mut self, ctx: &mut SearchContext) -> bool {
-       self.on_enter = ctx.statistics.get(VennSolutions);
+        self.on_enter = ctx.statistics.get(VennSolutions);
         true
     }
 
     fn close(&mut self, ctx: &mut SearchContext) {
-        let writer = ctx.state.output.as_deref_mut().expect("Must open file to save solution");
-        writeln!(writer,"{:?} has {} solutions.",ctx.state.current_face_degrees, ctx.statistics.get(VennSolutions)-self.on_enter).unwrap();
+        let writer = ctx
+            .state
+            .output
+            .as_deref_mut()
+            .expect("Must open file to save solution");
+        writeln!(
+            writer,
+            "{:?} has {} solutions.",
+            ctx.state.current_face_degrees,
+            ctx.statistics.get(VennSolutions) - self.on_enter
+        )
+        .unwrap();
     }
 }
-
-
 
 #[derive(Debug)]
 pub struct FixedInnerFacePredicate([u64; 6]);
@@ -113,21 +122,25 @@ fn test_655443() {
     run_test([6, 5, 5, 4, 4, 3], true, 6, 0);
 }
 
-
 #[test]
 fn test_all() {
-
     let mut ctx = SearchContext::new();
 
     let engine = EngineBuilder::new()
         .add(Box::new(InitializePredicate))
-        .add(Box::new(OpenClosePredicate::new("open file", OpenCloseFile::new(String::from("counts")))))
+        .add(Box::new(OpenClosePredicate::new(
+            "open file",
+            OpenCloseFile::new(String::from("counts")),
+        )))
         .add(Box::new(InnerFacePredicate))
         .add(Statistics::counting_predicate(
             Counters::InnerFaceSolutions,
             None,
         ))
-        .add(Box::new(OpenClosePredicate::new("open file", PrintSolutionCountPerInnerFace {on_enter:0})))
+        .add(Box::new(OpenClosePredicate::new(
+            "open file",
+            PrintSolutionCountPerInnerFace { on_enter: 0 },
+        )))
         .add(Box::new(VennPredicate::new()))
         .add(Statistics::counting_predicate(
             Counters::VennSolutions,
@@ -138,12 +151,6 @@ fn test_all() {
 
     engine.search(&mut ctx);
 
-    assert_eq!(
-        ctx.statistics.get(Counters::VennSolutions),
-        233
-    );
-    assert_eq!(
-        ctx.statistics.get(Counters::InnerFaceSolutions),
-        39
-    );
+    assert_eq!(ctx.statistics.get(Counters::VennSolutions), 233);
+    assert_eq!(ctx.statistics.get(Counters::InnerFaceSolutions), 39);
 }

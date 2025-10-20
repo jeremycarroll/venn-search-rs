@@ -375,7 +375,10 @@ impl VerticesMemo {
         }
         vertices_by_id.sort_by_key(|v| v.id);
 
-        Self { vertices, vertices_by_id }
+        Self {
+            vertices,
+            vertices_by_id,
+        }
     }
 
     /// Get a vertex configuration by 3D array indexing.
