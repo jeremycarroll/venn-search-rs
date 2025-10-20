@@ -12,7 +12,6 @@ mod common;
 use common::FixedInnerFacePredicate;
 use venn_search::context::SearchContext;
 use venn_search::state::statistics::{Counters, Statistics};
-use venn_search::{Predicate, PredicateResult};
 
 use venn_search::engine::predicate::OpenClose;
 use venn_search::engine::{EngineBuilder, OpenClosePredicate};

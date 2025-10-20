@@ -202,6 +202,7 @@ pub(super) fn check_face_vertices(
     use crate::geometry::constants::NFACES;
 
     if face_id != NFACES - 1 {
+        #[allow(clippy::needless_range_loop)] // i used to index cycle_colors
         for i in 0..cycle.len() {
             let color_idx = cycle_colors[i].value() as usize;
 

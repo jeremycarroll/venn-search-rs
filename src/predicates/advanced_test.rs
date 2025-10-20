@@ -38,8 +38,7 @@ impl OpenClose for OpenCloseFile {
         }
         let filename = format!("{}_{:05}.txt", self.prefix, self.counter);
         let buffered_writer = BufWriter::new(
-            File::create(&filename)
-                .unwrap_or_else(|_| panic!("Cannot open file: {}", filename)),
+            File::create(&filename).unwrap_or_else(|_| panic!("Cannot open file: {}", filename)),
         );
         self.old = ctx.state.output.replace(Box::new(buffered_writer));
         self.counter += 1;

@@ -9,13 +9,13 @@ mod common;
 
 use common::FixedInnerFacePredicate;
 use venn_search::context::SearchContext;
-use venn_search::state::statistics::{Counters, Statistics};
 use venn_search::engine::{EngineBuilder, OpenClosePredicate};
 use venn_search::predicates::advanced_test::{
     OpenCloseFile, PrintEdgeCyclesPredicate, PrintFaceCyclesPredicate, PrintFacesPredicate,
     PrintHeaderPredicate,
 };
 use venn_search::predicates::{FailPredicate, InitializePredicate, VennPredicate};
+use venn_search::state::statistics::{Counters, Statistics};
 // Runs a program: initialize, set the degrees as given, venn, count solutions
 // by whether they are canonical or equivocal, and checks they match the expected.
 fn run_test(

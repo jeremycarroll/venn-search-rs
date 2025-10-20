@@ -111,6 +111,7 @@ pub fn setup_central_face(
     use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
 
     // 1. Restrict neighboring faces to specified cycle lengths
+    #[allow(clippy::needless_range_loop)] // i used for bit manipulation
     for i in 0..NCOLORS {
         let degree = face_degrees[i] as usize;
 

@@ -107,6 +107,7 @@ pub fn check_symmetry(degrees: &[u8; NCOLORS]) -> SymmetryType {
 fn colorset_permute(face_id: usize, permutation: &[u8; NCOLORS]) -> usize {
     use crate::geometry::constants::NCOLORS;
     let mut result = 0;
+    #[allow(clippy::needless_range_loop)] // color_idx used to index permutation
     for color_idx in 0..NCOLORS {
         if (face_id & (1 << color_idx)) != 0 {
             result |= 1 << permutation[color_idx];

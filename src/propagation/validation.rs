@@ -119,6 +119,7 @@ pub fn validate_face_cycles(
 
             // After finding one cycle for this color count, verify there are no other
             // unvisited faces with the same color count (should all be in one cycle)
+            #[allow(clippy::needless_range_loop)] // check_face_id used to index visited
             for check_face_id in 0..NFACES {
                 if visited[check_face_id] {
                     continue;
