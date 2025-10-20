@@ -1,6 +1,6 @@
 [package]
 name = "venn-search"
-version = "0.1.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["Jeremy J. Carroll"]
 description = "Search for monotone simple 6-Venn diagrams drawable with six triangles"
