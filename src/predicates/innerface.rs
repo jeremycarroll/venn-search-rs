@@ -204,8 +204,9 @@ mod tests {
         let mut ctx = SearchContext::new();
         let mut pred = InnerFacePredicate;
 
-        // Set a known canonical sequence for NCOLORS=6: [6,6,3,5,4,3]
-        let degrees = [6u64, 6, 3, 5, 4, 3];
+        // Set a known valid canonical sequence for NCOLORS=6: [6,6,4,4,4,3]
+        // This sequence has 5 solutions according to counts_00000.txt
+        let degrees = [6u64, 6, 4, 4, 4, 3];
         for (i, &degree) in degrees.iter().enumerate() {
             ctx.set_face_degree(i, degree);
         }
