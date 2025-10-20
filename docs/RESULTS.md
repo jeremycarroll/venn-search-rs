@@ -1,4 +1,4 @@
- I thin# Venn Triangle Results
+# Venn Triangle Results
 
 This document summarizes the results of the Venn triangle enumeration.
 
