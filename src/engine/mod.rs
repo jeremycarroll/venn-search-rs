@@ -221,7 +221,7 @@ impl SearchEngine {
                     let pred_idx = entry.predicate_index;
                     let round = entry.round;
                     self.try_count += 1;
-                    eprintln!("Call: {:?} round {}", self.predicates[pred_idx], round);
+                    // eprintln!("Call: {:?} round {}", self.predicates[pred_idx], round);
                     self.predicates[pred_idx].try_pred(ctx, round)
                 };
 

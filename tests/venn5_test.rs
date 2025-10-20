@@ -5,40 +5,17 @@
 /* We have some detailed test data for the N=5 case, which is big enough to be complicated,
   but is easier to debug than the N=6 case.
 */
+mod common;
+
+use common::FixedInnerFacePredicate;
 use state::statistics::{Counters, Statistics};
 use venn_search::context::SearchContext;
-use venn_search::{propagation, state, Predicate, PredicateResult};
-use std::fmt::Write;
-
 use venn_search::engine::{EngineBuilder, OpenClosePredicate};
-use venn_search::predicates::{
-    FailPredicate, InitializePredicate, VennPredicate
+use venn_search::predicates::{FailPredicate, InitializePredicate, VennPredicate};
+use venn_search::predicates::advanced_test::{
+    OpenCloseFile, PrintEdgeCyclesPredicate, PrintFaceCyclesPredicate, PrintFacesPredicate,
+    PrintHeaderPredicate,
 };
-use venn_search::predicates::advanced_test::{OpenCloseFile, PrintHeaderPredicate, PrintFacesPredicate, PrintFaceCyclesPredicate, PrintEdgeCyclesPredicate};
-use venn_search::geometry::constants::NFACES;
-use venn_search::symmetry::s6::{check_solution_canonicality, SymmetryType};
-
-#[derive(Debug)]
-pub struct FixedInnerFacePredicate([u64; 5]);
-
-impl Predicate for FixedInnerFacePredicate {
-    fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        if let Err(failure) =
-            propagation::setup_central_face(&ctx.memo, &mut ctx.state, &mut ctx.trail, &self.0)
-        {
-            eprintln!(
-                "Could not set face degree to {:?}, with {}",
-                &self.0, &failure
-            );
-            return PredicateResult::Failure;
-        }
-        ctx.state.current_face_degrees = self.0.clone();
-        PredicateResult::Success
-    }
-    fn name(&self) -> &str {
-        "InnerFace"
-    }
-}
 // Runs a program: initialize, set the degrees as given, venn, count solutions
 // by whether they are canonical or equivocal, and checks they match the expected.
 fn run_test(

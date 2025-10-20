@@ -8,6 +8,7 @@ use crate::context::SearchContext;
 use crate::engine::{Predicate, PredicateResult};
 use crate::geometry::constants::{NCOLORS, NFACES};
 use crate::propagation;
+use crate::symmetry::s6::{check_solution_canonicality, SymmetryType};
 
 /// VennPredicate finds valid facial cycle assignments.
 ///
@@ -98,7 +99,17 @@ impl Predicate for VennPredicate {
                 return PredicateResult::Failure;
             }
 
-            PredicateResult::Success
+            // 2. Check canonicality under dihedral symmetry (reject non-canonical solutions)
+            match check_solution_canonicality(&ctx.state, &ctx.memo) {
+                SymmetryType::Canonical | SymmetryType::Equivocal => {
+                    // Accept canonical and equivocal solutions
+                    PredicateResult::Success
+                }
+                SymmetryType::NonCanonical => {
+                    // Reject non-canonical solutions (force backtracking)
+                    PredicateResult::Failure
+                }
+            }
         }
     }
 

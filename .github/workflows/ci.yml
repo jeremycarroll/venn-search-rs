@@ -49,10 +49,10 @@ jobs:
             ${{ runner.os }}-cargo-build-target-
 
       - name: Run tests (NCOLORS=${{ matrix.ncolors }})
-        run: cargo test --features ncolors_${{ matrix.ncolors }} --verbose
+        run: cargo test --release --features ncolors_${{ matrix.ncolors }} --verbose
 
       - name: Run doc tests (NCOLORS=${{ matrix.ncolors }})
-        run: cargo test --doc --features ncolors_${{ matrix.ncolors }} --verbose
+        run: cargo test --release --doc --features ncolors_${{ matrix.ncolors }} --verbose
 
   clippy:
     name: Clippy (Linting)
