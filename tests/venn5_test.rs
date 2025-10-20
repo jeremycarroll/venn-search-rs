@@ -96,6 +96,8 @@ fn run_test(
     let mut ctx = SearchContext::new();
 
     // Build a custom predicate that prints each solution before counting it
+
+    #[derive(Debug)]
     struct PrintSolutionPredicate;
     impl Predicate for PrintSolutionPredicate {
         fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {

@@ -14,7 +14,7 @@ use venn_search::predicates::{
 };
 
 /// Simple counter predicate that increments on each solution.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct CounterPredicate {
     count: Rc<RefCell<usize>>,
 }
@@ -34,7 +34,7 @@ impl Predicate for CounterPredicate {
 }
 
 /// Validation predicate that checks solution structure correctness.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct ValidationPredicate;
 
 impl Predicate for ValidationPredicate {

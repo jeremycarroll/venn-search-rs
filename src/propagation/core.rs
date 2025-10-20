@@ -160,14 +160,14 @@ pub fn propagate_cycle_choice(
     // disconnected curve).
     //
     // Uncomment this code when implementing VennPredicate:
-    // if depth == 0 && state.colors_completed_this_call != 0 {
-    //     use crate::geometry::constants::NCOLORS;
-    //     for color_idx in 0..NCOLORS {
-    //         if (state.colors_completed_this_call & (1 << color_idx)) != 0 {
-    //             remove_completed_color_from_search(memo, state, trail, color_idx)?;
-    //         }
-    //     }
-    // }
+    if true && depth == 0 && state.colors_completed_this_call != 0 {
+        use crate::geometry::constants::NCOLORS;
+        for color_idx in 0..NCOLORS {
+            if (state.colors_completed_this_call & (1 << color_idx)) != 0 {
+                remove_completed_color_from_search(memo, state, trail, color_idx)?;
+            }
+        }
+    }
 
     Ok(())
 }

@@ -15,6 +15,7 @@
 //! - Engine then calls `retry_pred(round, choice)` for choice in 0..n
 //! - Searches succeed via side effects, then Suspend or Fail to terminate
 
+use std::fmt::Debug;
 use crate::context::SearchContext;
 use crate::engine::{Predicate, PredicateResult, TerminalPredicate};
 
@@ -113,14 +114,14 @@ pub struct ChoicePredicate<T: Clone> {
     options: Vec<T>,
 }
 
-impl<T: Clone> ChoicePredicate<T> {
+impl<T: Clone + Debug> ChoicePredicate<T> {
     /// Create a new ChoicePredicate with the given options.
     pub fn new(options: Vec<T>) -> Self {
         Self { options }
     }
 }
 
-impl<T: Clone> Predicate for ChoicePredicate<T> {
+impl<T: Clone + Debug> Predicate for ChoicePredicate<T> {
     fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
         if self.options.is_empty() {
             PredicateResult::Failure

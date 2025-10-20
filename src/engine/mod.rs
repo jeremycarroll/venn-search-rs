@@ -221,6 +221,7 @@ impl SearchEngine {
                     let pred_idx = entry.predicate_index;
                     let round = entry.round;
                     self.try_count += 1;
+                    eprintln!("Call: {:?} round {}", self.predicates[pred_idx], round);
                     self.predicates[pred_idx].try_pred(ctx, round)
                 };
 
@@ -470,6 +471,7 @@ mod tests {
     use super::*;
 
     /// Test predicate that always succeeds.
+    #[derive(Debug)]
     struct AlwaysSucceed;
 
     impl Predicate for AlwaysSucceed {
@@ -479,6 +481,7 @@ mod tests {
     }
 
     /// Test predicate that always fails.
+    #[derive(Debug)]
     struct AlwaysFail;
 
     impl Predicate for AlwaysFail {
@@ -488,6 +491,7 @@ mod tests {
     }
 
     /// Test predicate that suspends.
+    #[derive(Debug)]
     struct Suspend;
 
     impl Predicate for Suspend {

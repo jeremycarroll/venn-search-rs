@@ -55,7 +55,8 @@
 mod adjacency;
 mod color_removal;
 mod core;
-mod corners;
+mod corner_detection;
+mod curve_disconnection;
 mod errors;
 mod non_adjacency;
 mod setup;

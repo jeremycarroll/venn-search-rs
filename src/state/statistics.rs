@@ -11,7 +11,7 @@ use crate::propagation::PropagationFailure;
 use strum::EnumCount;
 use strum_macros::EnumCount as EnumCountMacro;
 
-#[derive(EnumCountMacro, Copy, Clone)]
+#[derive(EnumCountMacro, Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum Counters {
     VennSolutions,
@@ -51,6 +51,7 @@ impl Statistics {
     }
 }
 
+#[derive(Debug)]
 struct CountingPredicate {
     filter: fn(&SearchContext) -> bool,
     counter: Counters,

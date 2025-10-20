@@ -10,7 +10,6 @@ use crate::geometry::{CycleId, EdgeDynamic, MAX_CROSSINGS_PER_PAIR};
 use crate::trail::Trail;
 use std::ptr::NonNull;
 
-use super::corners::check_corners_for_cycle;
 use super::errors::PropagationFailure;
 
 /// Check and configure vertices for a face's assigned cycle.
@@ -159,9 +158,9 @@ pub(super) fn check_face_vertices(
         // assigned yet (this is the DYNAMIC phase)
     }
 
-    // Corner checking (only for NCOLORS > 4)
-    #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
-    check_corners_for_cycle(memo, state, trail, face_id, cycle_id, depth)?;
+    // TODO: Add corner detection check here (vertex_corner_check)
+    // TODO: Add disconnected curve check here (edge_curve_checks)
+    // These will be implemented in separate modules following C structure
 
     Ok(())
 }

@@ -34,6 +34,7 @@
 //! }
 //! ```
 
+use std::fmt::Debug;
 use crate::context::SearchContext;
 
 /// Result of attempting a predicate.
@@ -133,7 +134,7 @@ pub trait TerminalPredicate: Predicate {}
 ///     }
 /// }
 /// ```
-pub trait Predicate {
+pub trait Predicate: Debug {
     /// Try this predicate for a given round.
     ///
     /// Called when the search engine executes this predicate for round `round`.
