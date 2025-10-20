@@ -157,8 +157,7 @@ fn test_venn_search_ncolors_3_baseline() {
 #[cfg(feature = "ncolors_4")]
 fn test_venn_search_ncolors_4() {
     eprintln!("\n=== Testing VennPredicate for NCOLORS=4 ===");
-    eprintln!("Expected: 48 solutions (current implementation)");
-    eprintln!("Note: C reference gets different count - see CLAUDE.md");
+    eprintln!("Expected: 16 solutions (canonical + equivocal)");
     eprintln!("Testing constraint propagation\n");
 
     let mut ctx = SearchContext::new();
@@ -178,13 +177,11 @@ fn test_venn_search_ncolors_4() {
     let final_count = *solution_count.borrow();
     eprintln!("\n=== Results ===");
     eprintln!("Solutions found: {}", final_count);
-    eprintln!("Note: C implementation gets different count (see CLAUDE.md)");
+    eprintln!("Expected: 16");
 
-    // For NCOLORS=4 with current constraints, we find 48 solutions
-    // C reference gets a different count - we document this and move on
     assert_eq!(
-        final_count, 48,
-        "Expected 48 solutions for NCOLORS=4 (current implementation)"
+        final_count, 16,
+        "Expected exactly 16 solutions for NCOLORS=4"
     )
 }
 
