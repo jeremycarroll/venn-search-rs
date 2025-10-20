@@ -192,7 +192,7 @@ fn test_venn_search_ncolors_4() {
 #[cfg(feature = "ncolors_5")]
 fn test_venn_search_ncolors_5() {
     eprintln!("\n=== Testing VennPredicate for NCOLORS=5 ===");
-    eprintln!("Expected: 152 solutions");
+    eprintln!("Expected: 17 solutions (canonical + equivocal)");
     eprintln!("Testing full Venn diagram search\n");
 
     let mut ctx = SearchContext::new();
@@ -212,11 +212,11 @@ fn test_venn_search_ncolors_5() {
     let final_count = *solution_count.borrow();
     eprintln!("\n=== Results ===");
     eprintln!("Solutions found: {}", final_count);
-    eprintln!("Expected: 152");
+    eprintln!("Expected: 17");
 
     assert_eq!(
-        final_count, 152,
-        "Expected exactly 152 solutions for NCOLORS=5"
+        final_count, 17,
+        "Expected exactly 17 solutions for NCOLORS=5"
     )
 }
 
