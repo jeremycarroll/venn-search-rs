@@ -28,7 +28,9 @@
 //! use venn_search::engine::{EngineBuilder, Predicate, PredicateResult, TerminalPredicate};
 //! use venn_search::context::SearchContext;
 //!
+//! #[derive(Debug)]
 //! struct SimplePredicate;
+//! #[derive(Debug)]
 //! struct SuspendPredicate;
 //!
 //! impl Predicate for SimplePredicate {
@@ -68,7 +70,7 @@
 
 pub mod predicate;
 
-pub use predicate::{Predicate, PredicateResult, TerminalPredicate};
+pub use predicate::{OpenClosePredicate, Predicate, PredicateResult, TerminalPredicate};
 
 use crate::context::SearchContext;
 
@@ -160,6 +162,7 @@ impl SearchEngine {
     /// # use venn_search::engine::{EngineBuilder, Predicate, PredicateResult};
     /// # use venn_search::context::SearchContext;
     /// # use venn_search::predicates::test::SuspendPredicate;
+    /// # #[derive(Debug)]
     /// # struct MyPredicate;
     /// # impl Predicate for MyPredicate {
     /// #     fn try_pred(&mut self, _: &mut SearchContext, _: usize) -> PredicateResult {
@@ -221,6 +224,7 @@ impl SearchEngine {
                     let pred_idx = entry.predicate_index;
                     let round = entry.round;
                     self.try_count += 1;
+                    // eprintln!("Call: {:?} round {}", self.predicates[pred_idx], round);
                     self.predicates[pred_idx].try_pred(ctx, round)
                 };
 
@@ -470,56 +474,32 @@ mod tests {
     use super::*;
 
     /// Test predicate that always succeeds.
+    #[derive(Debug)]
     struct AlwaysSucceed;
 
     impl Predicate for AlwaysSucceed {
         fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
             PredicateResult::Success
         }
-
-        fn retry_pred(
-            &mut self,
-            _ctx: &mut SearchContext,
-            _round: usize,
-            _choice: usize,
-        ) -> PredicateResult {
-            PredicateResult::Failure // No retry
-        }
     }
 
     /// Test predicate that always fails.
+    #[derive(Debug)]
     struct AlwaysFail;
 
     impl Predicate for AlwaysFail {
         fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
             PredicateResult::Failure
         }
-
-        fn retry_pred(
-            &mut self,
-            _ctx: &mut SearchContext,
-            _round: usize,
-            _choice: usize,
-        ) -> PredicateResult {
-            PredicateResult::Failure
-        }
     }
 
     /// Test predicate that suspends.
+    #[derive(Debug)]
     struct Suspend;
 
     impl Predicate for Suspend {
         fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
             PredicateResult::Suspend
-        }
-
-        fn retry_pred(
-            &mut self,
-            _ctx: &mut SearchContext,
-            _round: usize,
-            _choice: usize,
-        ) -> PredicateResult {
-            PredicateResult::Failure
         }
     }
 

@@ -12,6 +12,7 @@
 //! use venn_search::engine::{Predicate, PredicateResult};
 //! use venn_search::context::SearchContext;
 //!
+//! #[derive(Debug)]
 //! struct SimplePredicate;
 //!
 //! impl Predicate for SimplePredicate {
@@ -35,6 +36,7 @@
 //! ```
 
 use crate::context::SearchContext;
+use std::fmt::Debug;
 
 /// Result of attempting a predicate.
 ///
@@ -100,6 +102,7 @@ pub trait TerminalPredicate: Predicate {}
 /// use venn_search::engine::{Predicate, PredicateResult};
 /// use venn_search::context::SearchContext;
 ///
+/// #[derive(Debug)]
 /// struct ChoicePredicate {
 ///     options: Vec<i32>,
 /// }
@@ -133,7 +136,7 @@ pub trait TerminalPredicate: Predicate {}
 ///     }
 /// }
 /// ```
-pub trait Predicate {
+pub trait Predicate: Debug {
     /// Try this predicate for a given round.
     ///
     /// Called when the search engine executes this predicate for round `round`.
@@ -164,17 +167,73 @@ pub trait Predicate {
     /// Note: retry_pred cannot return Choices or Suspend (we're already in choice mode).
     ///
     /// The trail has already been rewound to the state before this choice was tried.
+    #[allow(unused)]
     fn retry_pred(
         &mut self,
         ctx: &mut SearchContext,
         round: usize,
         choice: usize,
-    ) -> PredicateResult;
+    ) -> PredicateResult {
+        // By default, we do not allow retry. Predicates that return Choices
+        // must implement this.
+        panic!("{}::retry_pred should never be called", self.name());
+    }
 
     /// Optional: Get a name for this predicate (for debugging).
     ///
     /// Default implementation returns the type name.
     fn name(&self) -> &str {
         std::any::type_name::<Self>()
+    }
+}
+
+pub trait OpenClose {
+    fn open(&mut self, ctx: &mut SearchContext) -> bool;
+    fn close(&mut self, ctx: &mut SearchContext);
+}
+
+#[derive(Debug)]
+pub struct OpenClosePredicate<T: OpenClose> {
+    open_close: T,
+    name: String,
+}
+
+impl<T: OpenClose> OpenClosePredicate<T> {
+    pub fn new(name: &str, open_close: T) -> Self {
+        OpenClosePredicate {
+            open_close,
+            name: String::from(name),
+        }
+    }
+}
+
+impl<T: OpenClose + Debug> Predicate for OpenClosePredicate<T> {
+    fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
+        if self.open_close.open(ctx) {
+            PredicateResult::Choices(2)
+        } else {
+            PredicateResult::Failure
+        }
+    }
+
+    fn retry_pred(
+        &mut self,
+        ctx: &mut SearchContext,
+        _round: usize,
+        choice: usize,
+    ) -> PredicateResult {
+        // Map choice to integer value
+        match choice {
+            0 => PredicateResult::Success,
+            1 => {
+                self.open_close.close(ctx);
+                PredicateResult::Failure
+            }
+            _ => panic!("Unreachable"),
+        }
+    }
+
+    fn name(&self) -> &str {
+        self.name.as_str()
     }
 }

@@ -17,6 +17,8 @@ Thumbs.db
 # Results and output
 results/
 *.graphml
+solution_*.txt
+counts_*.txt
 
 # Backup files
 *.bak

@@ -10,5 +10,7 @@
 //! All state modifications are tracked on the trail for O(1) backtracking.
 
 pub mod faces;
+pub mod statistics;
 
 pub use faces::{DynamicFace, DynamicFaces};
+pub use statistics::Statistics;

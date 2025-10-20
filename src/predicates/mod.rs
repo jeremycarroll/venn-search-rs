@@ -13,6 +13,7 @@
 //! - `venn`: VennPredicate for main Venn diagram search
 //! - Built-in predicates: `FailPredicate`, `SuspendPredicate`
 
+pub mod advanced_test;
 pub mod initialize;
 pub mod innerface;
 pub mod test;
@@ -60,15 +61,6 @@ pub struct FailPredicate;
 
 impl Predicate for FailPredicate {
     fn try_pred(&mut self, _ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        PredicateResult::Failure
-    }
-
-    fn retry_pred(
-        &mut self,
-        _ctx: &mut SearchContext,
-        _round: usize,
-        _choice: usize,
-    ) -> PredicateResult {
         PredicateResult::Failure
     }
 

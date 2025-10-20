@@ -23,48 +23,28 @@ This is a Rust rewrite of the C implementation at ../venntriangles (tag: v1.1-pc
 
 **Migration approach**: Incremental port with architecture improvements, leveraging Rust's type system while preserving the proven search algorithm.
 
-### Current Status (as of October 2025)
+### Current Status (as of January 2025)
 
 **Completed:**
-- ✅ **Phase 1 Complete (Oct 14, 2025)**: Memory Architecture & Trail System
-  - Trail system with checkpoint/rewind (Vec-based, ID-tracked)
-  - SearchContext combining MEMO + DYNAMIC tiers
-  - 29 tests passing
-- ✅ **Phase 2 Complete (Oct 14, 2025)**: Geometric Types
-  - Color, ColorSet, Cycle, CycleSet types with full API
-  - Edge, Vertex, Face types with relationships
-  - Constants module (NCOLORS, NFACES, NPOINTS, etc.)
-  - 87 tests passing
-- ✅ **Phase 3 Complete (Oct 14, 2025)**: Non-Deterministic Search Engine
-  - Predicate trait with try_pred/retry_pred
-  - PredicateResult: Success, SuccessSamePredicate, Failure, Choices(n), Suspend
-  - SearchEngine with WAM-like execution model
-  - Consuming API: search(self) -> Option<Self>
-  - Type-safe builder: EngineBuilder enforces terminal predicates
-  - 117 tests passing
-- ✅ **Phase 4 Complete (Oct 15, 2025)**: GitHub Actions CI/CD
-  - Automated testing for all pushes/PRs
-  - Test matrix for NCOLORS=3,4,5,6 (ready for multi-NCOLORS support)
-- ✅ **Phase 5 Complete (Oct 15, 2025)**: InitializePredicate & InnerFacePredicate
-  - TOTAL_CENTRAL_NEIGHBOR_DEGREE constant
-  - Symmetry module with compile-time dihedral groups (D₃, D₄, D₅, D₆)
-  - S6 canonicality checking (Canonical, Equivocal, NonCanonical)
-  - InitializePredicate skeleton (minimal, ready for Phase 6)
-  - InnerFacePredicate finds 56 canonical degree signatures for NCOLORS=6 in 0.18s
-  - Fixed critical engine backtracking bug (pop until finding choice point)
-- ✅ **Phase 6 Complete (Oct 15, 2025)**: MEMO Data Structures
-  - CyclesArray: Generate all 394 possible facial cycles for NCOLORS=6
-  - CyclesMemo: Precomputed lookup tables (pairs, triples, omitting)
-  - FacesMemo: Binomial coefficients, monotonicity constraints, face adjacency tables
-  - VerticesMemo: All 480 possible vertex configurations with primary/secondary colors
-  - Edge slot computation and vertex indexing (outside_face trick)
-  - ~230 KB total MEMO size (excellent for per-context copying)
-  - 132 tests passing
+- ✅ **Phase 1-6 Complete**: Core Infrastructure
+  - Trail system, geometric types, search engine, MEMO data structures
+  - All foundational components tested and working
+
+- ✅ **Phase 7 Complete (Jan 2025)**: VennPredicate - Main Search
+  - Non-deterministic search for facial cycle assignments
+  - Full constraint propagation (edge adjacency, non-adjacent, non-vertex-adjacent)
+  - Fail-fast heuristic (choose face with fewest options)
+  - Solution validation (face cycles, dihedral symmetry)
+  - **Canonicality check implemented**: Rejects non-canonical solutions under D₆
+  - **Performance**: ~3.5 seconds to find all 233 solutions (NCOLORS=6)
+  - **All tests passing**: N=3 (2), N=4 (3), N=5 (23), N=6 (233 solutions)
+
+**Current Milestone**: Core search is complete and producing correct results!
 
 **Next:**
-- ⬜ **Phase 7**: VennPredicate (main Venn diagram search - the critical phase)
-- ⬜ **Phase 8**: Testing & Validation (real searches, performance benchmarking)
-- ⬜ **Future**: Log, Save, Corners, GraphML predicates; PCO/Chirotope; CLI
+- ⬜ **Code cleanup**: Review clarity, conciseness, documentation (see docs/CLEANUP.md)
+- ⬜ **Phase 8**: Corner detection and graph realization
+- ⬜ **Future**: GraphML output, PCO/Chirotope, CLI, parallelization
 
 ## Reference C Implementation
 
@@ -147,56 +127,33 @@ Use newtypes and enums for type safety:
 - Faces (regions bounded by cycles)
 - Cycles (sequences of edge colors)
 
-## Next Phases
+## Next Steps
 
-### Phase 7: VennPredicate
+### Immediate: Code Cleanup and Review
 
-**Goal**: Implement the main Venn diagram search - the most critical predicate.
+See **[docs/CLEANUP.md](docs/CLEANUP.md)** for comprehensive review.
 
-**Implementation checklist:**
-- [ ] VennPredicate: Main non-deterministic Venn diagram search
-  - [ ] Up to 64 non-deterministic calls (one per face)
-  - [ ] Choose facial cycle for each face
-  - [ ] Constraint propagation via MEMO tables
-  - [ ] Track remaining possible cycles per face
-  - [ ] Choose face with fewest remaining options (heuristic)
-  - [ ] Backtrack on failure (empty possible cycles)
-- [ ] Integration with trail for O(1) backtracking
-- [ ] Statistics tracking
-- [ ] Comprehensive tests with NCOLORS=3,4,5,6
+**Priority items:**
+- Break up large mod.rs files
+- Improve code clarity and documentation
+- Simplify complex functions
+- Remove debug code
+- Review naming consistency
 
-**Reference files**: `c-reference/venn.c`, `c-reference/search.c`, `c-reference/failure.c`
+### Phase 8: Corner Detection and Graph Realization
 
-### Phase 8: Testing & Validation
-
-**Goal**: Validate with real searches and performance benchmarking.
-
-**Implementation checklist:**
-- [ ] Real search tests for NCOLORS=3,4,5,6
-  - [ ] N=3: Expect 1 solution
-  - [ ] N=4: Expect 3 solutions
-  - [ ] N=5: Expect 23 solutions
-  - [ ] N=6: Expect 233 solutions (target)
-- [ ] Performance benchmarking
-  - [ ] Time to first solution
-  - [ ] Solutions per second
-  - [ ] Profile hot paths (trail, predicates, MEMO lookups)
-- [ ] Memory profiling
-- [ ] Validate against known solutions
-
-**Success criteria**: Performance within 0.5-2x of C implementation
+Implement corner assignment and geometric realizability constraints:
+- CornersPredicate: Assign 18 corners to edge endpoints
+- Crossing count validation (max 6 per color pair for triangles)
+- PCO (Partial Cyclic Orders) for line crossing constraints
+- GraphML output generation
 
 ### Future Phases
 
-After Phase 8, implement:
-- LogPredicate: Deterministic logging
-- SavePredicate: Write solutions to files
-- CornersPredicate: 6 calls to assign 18 corners to faces
-- GraphMLPredicate: Write variation in GraphML format
-- PCO (Partial Cyclic Orders) for line crossing constraints
 - Chirotope support for oriented matroid testing
 - CLI argument parsing and output management
-- Final performance optimization and parallel execution
+- Parallelization (spawn searches per inner face degree)
+- Performance optimization and profiling
 
 ## Key Differences from C
 

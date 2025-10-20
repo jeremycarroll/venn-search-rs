@@ -44,16 +44,6 @@ impl Predicate for InitializePredicate {
         PredicateResult::Success
     }
 
-    fn retry_pred(
-        &mut self,
-        _ctx: &mut SearchContext,
-        _round: usize,
-        _choice: usize,
-    ) -> PredicateResult {
-        // InitializePredicate never creates choices, so retry should never be called
-        panic!("InitializePredicate::retry_pred should never be called");
-    }
-
     fn name(&self) -> &str {
         "Initialize"
     }

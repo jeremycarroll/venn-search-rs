@@ -10,10 +10,13 @@
 //! instances to operate on the same MEMO data.
 
 use crate::geometry::constants::NCOLORS;
-use crate::geometry::{CycleId, CycleSet};
+use crate::geometry::{CrossingCounts, CycleId, CycleSet};
 use crate::memo::{CyclesArray, CyclesMemo, FacesMemo, VerticesMemo};
-use crate::state::DynamicFaces;
+use crate::state::{DynamicFaces, Statistics};
 use crate::trail::Trail;
+use std::fs::File;
+use std::io::BufWriter;
+use std::mem::size_of;
 use std::ptr::NonNull;
 
 /// Immutable precomputed data (Tier 1: MEMO).
@@ -66,8 +69,11 @@ impl MemoizedData {
 
         let mut cycles = CyclesArray::generate();
         let cycles_memo = CyclesMemo::initialize(&mut cycles);
-        let faces = FacesMemo::initialize(&cycles);
+        let mut faces = FacesMemo::initialize(&cycles);
         let vertices = VerticesMemo::initialize();
+
+        // Phase 3: Link edges to vertices for corner detection
+        faces.populate_vertex_links(&vertices);
 
         eprintln!(
             "[MemoizedData] Initialization complete ({} cycles, {} faces, {} possible vertices)",
@@ -117,6 +123,55 @@ pub struct DynamicState {
     ///
     /// Contains current_cycle, possible_cycles, and cycle_count for each face.
     pub faces: DynamicFaces,
+
+    /// Crossing counts between color pairs (for corner detection).
+    ///
+    /// Tracks how many times each pair of colors crosses in the current solution.
+    /// Used to enforce the triangle constraint (max 6 crossings per pair).
+    ///
+    /// All modifications must be trail-tracked.
+    pub crossing_counts: CrossingCounts,
+
+    /// Tracks which vertices have been processed for crossing counts.
+    ///
+    /// Array of u64 flags (0 = not processed, 1 = processed).
+    /// Size 512 to accommodate up to 480 possible vertices (see VerticesMemo).
+    ///
+    /// When a vertex is first encountered during facial cycle assignment,
+    /// we increment the crossing count for that vertex's color pair and
+    /// mark the vertex as processed to avoid double-counting.
+    ///
+    /// All modifications must be trail-tracked.
+    pub vertex_processed: Vec<u64>,
+
+    /// Tracks the number of edges assigned for each color and direction.
+    ///
+    /// Index [0][color] = clockwise edges (face contains the color)
+    /// Index [1][color] = counterclockwise edges (face doesn't contain the color)
+    ///
+    /// Used to detect disconnected curves during corner checking.
+    /// When we traverse a curve, we only follow one direction (all clockwise or all counterclockwise).
+    ///
+    /// All modifications must be trail-tracked.
+    pub edge_color_counts: [[u64; NCOLORS]; 2],
+
+    /// Tracks which colors have been checked for disconnection.
+    ///
+    /// Once a color's curve forms a complete closed loop and passes the
+    /// disconnection check, we mark it here to avoid checking again.
+    ///
+    /// All modifications must be trail-tracked.
+    pub colors_checked: [u64; NCOLORS],
+
+    /// Temporary accumulator for colors that completed during current propagation.
+    ///
+    /// Reset before each top-level propagate_cycle_choice, then checked after.
+    /// NOT trail-tracked (temporary per-call state).
+    pub colors_completed_this_call: u64,
+
+    /// Current default output within backtracking context - can only have one.
+    /// Replace with a vector, and a trailed index to provide better functionality.
+    pub output: Option<Box<BufWriter<File>>>,
 }
 
 impl DynamicState {
@@ -125,6 +180,12 @@ impl DynamicState {
         Self {
             current_face_degrees: [0; NCOLORS],
             faces: DynamicFaces::new(&memo.faces),
+            crossing_counts: CrossingCounts::new(),
+            vertex_processed: vec![0u64; 512], // 512 slots for up to 480 vertices
+            edge_color_counts: [[0; NCOLORS]; 2],
+            colors_checked: [0; NCOLORS],
+            colors_completed_this_call: 0,
+            output: None,
         }
     }
 }
@@ -170,12 +231,14 @@ impl DynamicState {
 /// ```
 #[derive(Debug)]
 pub struct SearchContext {
-    /// Immutable precomputed data (Tier 1)
+    /// Immutable precomputed data
     pub memo: MemoizedData,
-    /// Trail for O(1) backtracking (Tier 2)
+    /// Trail for O(1) backtracking
     pub trail: Trail,
-    /// Mutable search state (Tier 2)
+    /// Mutable search state
     pub state: DynamicState,
+
+    pub statistics: Statistics,
 }
 
 impl SearchContext {
@@ -187,6 +250,7 @@ impl SearchContext {
             memo,
             trail: Trail::new(),
             state,
+            statistics: Statistics::new(),
         }
     }
 
@@ -199,6 +263,7 @@ impl SearchContext {
             memo,
             trail: Trail::new(),
             state,
+            statistics: Statistics::new(),
         }
     }
 
@@ -207,7 +272,7 @@ impl SearchContext {
     /// This does NOT include heap-allocated data. For full size estimation,
     /// see `estimate_memo_heap_size()`.
     pub fn memo_size_bytes() -> usize {
-        std::mem::size_of::<MemoizedData>()
+        size_of::<MemoizedData>()
     }
 
     /// Estimate the total heap size of MEMO data.
@@ -218,8 +283,6 @@ impl SearchContext {
     /// - Vertex Box allocation
     /// - Any other heap-allocated MEMO structures
     pub fn estimate_memo_heap_size(&self) -> usize {
-        use std::mem::size_of;
-
         let mut total = 0;
 
         // Cycles Vec: capacity * size_of<Cycle>

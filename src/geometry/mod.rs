@@ -14,6 +14,7 @@
 pub mod color;
 pub mod color_set;
 pub mod constants;
+pub mod corner;
 pub mod cycle;
 pub mod cycle_set;
 pub mod edge;
@@ -24,6 +25,7 @@ pub mod vertex;
 pub use color::Color;
 pub use color_set::ColorSet;
 pub use constants::*;
+pub use corner::{CornerWalkState, CrossingCounts, MAX_CROSSINGS_PER_PAIR};
 pub use cycle::{Cycle, CycleId};
 pub use cycle_set::CycleSet;
 pub use edge::{CurveLink, EdgeDynamic, EdgeMemo, EdgeRef};

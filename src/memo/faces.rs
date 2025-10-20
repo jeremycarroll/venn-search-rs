@@ -20,6 +20,9 @@
 
 use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
 use crate::geometry::{Color, ColorSet, CycleSet, EdgeMemo, EdgeRef, Face, FaceId};
+use crate::memo::vertices::{
+    compute_incoming_edge_slot, compute_outside_face, determine_primary_secondary,
+};
 
 /// Type alias for face adjacency lookup tables.
 ///
@@ -135,6 +138,107 @@ impl FacesMemo {
     #[inline]
     pub fn get_face(&self, face_id: FaceId) -> &Face {
         &self.faces[face_id]
+    }
+
+    /// Populate possibly_to vertex linkages for all edges.
+    ///
+    /// This must be called AFTER vertices are initialized, as it links
+    /// edges to vertices based on which color pairs can meet.
+    ///
+    /// # Algorithm
+    ///
+    /// For each face:
+    ///   For each edge with color C:
+    ///     For each potential next color C':
+    ///       1. Locate the vertex where C and C' cross using the same indexing as VerticesMemo
+    ///       2. If vertex exists, create CurveLink and set edge.possibly_to[C'] = Some(link)
+    ///
+    /// This enables corner detection during search - when assigning a facial cycle,
+    /// we can look up vertices at color transitions and count crossings.
+    ///
+    /// # Arguments
+    ///
+    /// * `vertices` - The initialized VerticesMemo with all possible vertices
+    pub fn populate_vertex_links(&mut self, vertices: &crate::memo::VerticesMemo) {
+        use crate::geometry::{Color, CurveLink, EdgeRef};
+
+        eprintln!("[FacesMemo] Populating vertex links for all edges...");
+
+        let mut link_count = 0;
+
+        for face_id in 0..NFACES {
+            let face_colors = self.faces[face_id].colors;
+
+            for edge_color_idx in 0..NCOLORS {
+                let edge_color = Color::new(edge_color_idx as u8);
+
+                // For each potential next color in a cycle
+                for next_color_idx in 0..NCOLORS {
+                    if next_color_idx == edge_color_idx {
+                        continue; // Skip same color
+                    }
+                    let next_color = Color::new(next_color_idx as u8);
+
+                    // Locate the vertex where edge_color and next_color cross
+                    // Using the same logic as VerticesMemo::initialize()
+
+                    // 1. Compute incoming edge slot
+                    let slot = compute_incoming_edge_slot(edge_color, next_color, face_colors);
+
+                    // 2. Determine primary/secondary
+                    let (primary, secondary) =
+                        determine_primary_secondary(slot, edge_color, next_color);
+
+                    // 3. Compute outside face
+                    let outside_face = compute_outside_face(face_colors, primary, secondary);
+
+                    // 4. Look up vertex
+                    let primary_idx = primary.value() as usize;
+                    let secondary_idx = secondary.value() as usize;
+
+                    if let Some(vertex) =
+                        vertices.get_vertex(outside_face, primary_idx, secondary_idx)
+                    {
+                        // C: initializeEdgeLink(edge1, edge2, edge3)
+                        //    edge1->possiblyTo[other].next = edge2->reversed
+                        //
+                        // We need to find the partner edge at this vertex (same color, different slot)
+                        // and link to its reversed edge.
+
+                        // Find partner slot (0<->1, 2<->3)
+                        let partner_slot = match slot {
+                            0 => 1,
+                            1 => 0,
+                            2 => 3,
+                            3 => 2,
+                            _ => unreachable!(),
+                        };
+
+                        // Get the partner edge from vertex->incomingEdges
+                        let partner_edge = vertex.incoming_edges[partner_slot];
+                        let partner_face_id = partner_edge.face_id;
+                        let partner_color_idx = partner_edge.color_idx;
+
+                        // The reversed edge is on the adjacent face (across the color)
+                        // C: edge->reversed is (adjacent_face, same_color)
+                        let reversed_face_id = partner_face_id ^ (1 << partner_color_idx);
+                        let next_edge_ref = EdgeRef::new(reversed_face_id, partner_color_idx);
+
+                        let link = CurveLink::new(next_edge_ref, vertex.id);
+
+                        // Set possibly_to for this edge
+                        self.faces[face_id].edges[edge_color_idx]
+                            .set_possibly_to(next_color_idx, Some(link));
+                        link_count += 1;
+                    }
+                }
+            }
+        }
+
+        eprintln!(
+            "[FacesMemo] Vertex links complete: {} edge->vertex links populated.",
+            link_count
+        );
     }
 }
 
@@ -399,11 +503,25 @@ fn apply_monotonicity_constraints(
     }
 
     // Handle outer face (0): Can only have full NCOLORS-cycles
+    // Forms a cycle of length 1 (points to itself)
     filter_cycles_by_length(&mut faces[0], cycles, NCOLORS);
+    for cycle_id in 0..NCYCLES {
+        if faces[0].possible_cycles.contains(cycle_id as u64) {
+            next_by_cycle[0][cycle_id] = Some(0); // Points to itself
+            previous_by_cycle[0][cycle_id] = Some(0);
+        }
+    }
 
     // Handle inner face (NFACES-1): Can only have full NCOLORS-cycles
+    // Forms a cycle of length 1 (points to itself)
     // The inner face will be assigned cycle (0,1,2,3,4,5) during search for symmetry breaking
     filter_cycles_by_length(&mut faces[NFACES - 1], cycles, NCOLORS);
+    for cycle_id in 0..NCYCLES {
+        if faces[NFACES - 1].possible_cycles.contains(cycle_id as u64) {
+            next_by_cycle[NFACES - 1][cycle_id] = Some(NFACES - 1); // Points to itself
+            previous_by_cycle[NFACES - 1][cycle_id] = Some(NFACES - 1);
+        }
+    }
 
     (next_by_cycle, previous_by_cycle)
 }
