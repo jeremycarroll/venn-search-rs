@@ -294,25 +294,38 @@ The current implementation (Phase 7 complete) has these predicates:
 
 **Constraint Propagation**: See `src/propagation/` for detailed implementation
 
+**Corner Detection**: ✅ Implemented and essential (`src/propagation/corner_detection.rs`).
+The Carroll 2000 corner detection algorithm validates that each curve can be drawn with ≤3 corners.
+This constraint is critical - without it, the search would produce many invalid solutions that cannot
+be realized as triangles. The check runs during facial cycle assignment to fail early on non-realizable
+diagrams. Note: This validates corner *requirements* (enabling the correct 233 solutions), but doesn't
+yet assign specific corner positions to edges (Phase 8 enhancement)
+
 ### 4. FailPredicate (`src/engine/mod.rs`)
 
 **Purpose**: Terminal predicate that always fails, forcing exhaustive search.
 
 **Result**: Always `Failure`
 
-## Future Phases (Not Yet Implemented)
+## Future Phases
 
-### Phase 8: CornersPredicate
+### Phase 8: Full Corner Assignment (Enhancement Needed)
 
-**Purpose**: Assign 18 corners to edge endpoints.
+**Current**: Corner detection validates that curves require ≤3 corners
+**Needed**: Complete corner assignment and geometric realization
 
-**Algorithm**: To be implemented based on corner detection algorithm in [Carroll 2000].
+**Enhancements**:
+- Implement `CornersPredicate` to assign specific corner positions
+- Bidirectional traversal (forward and backward) to determine corner placement sub-paths
+- Ensure ≥3 corners per curve (add arbitrary corners if needed)
+- Validate crossing counts (≤6 per color pair for triangles)
+- Integrate with PCO for line crossing order constraints
 
-**Status**: 🚧 Not yet implemented
+**Status**: 🚧 Partially implemented (validation only)
 
 ### Phase 9: GraphML Output
 
-**Purpose**: Write solution to GraphML file.
+**Purpose**: Write solution to GraphML file with corner positions.
 
 **Status**: 🚧 Not yet implemented
 
@@ -496,28 +509,40 @@ cargo flamegraph --bin venn-search
 
 ## Corner Detection Algorithm
 
-This algorithm (not yet implemented) will be based on [Carroll 2000]:
+The Carroll 2000 corner detection algorithm is implemented in `src/propagation/corner_detection.rs`.
 
-For each curve C, we start with its edge on the central face, and proceed
-around the curve in one direction.
-We keep track of two sets:
-- a set Out of curves outside of which we lie.
-- a set Passed of curves which we have recently crossed from the inside
-to the outside.
+### Current Implementation (Phase 7)
 
-Both sets are initialized to empty. On our walk around C, as we pass the
-vertex v we look at the other curve C' passing through that vertex.
-If C' is in Out then:
-- We remove C' from Out.
-- If C' is in Passed then we set Passed as the empty set and add v to
-the result set. The idea is that there must be a corner between any
-two vertices in the result set.
-Otherwise, C' is not in Out and:
-- We add C' to Out.
-- We add C' to Passed.
+**Purpose**: Validate that each curve can be drawn with ≤3 corners (triangles have 3 corners).
 
-At the end of the walk we look at the cardinality of the result set. This tells
-us the minimum number of corners required on this curve.
+**Algorithm** (from [Carroll 2000]):
+
+For each curve C, we start with its edge on the central face and walk around the curve.
+We maintain two sets:
+- **Out**: curves outside of which we currently lie
+- **Passed**: curves we've recently crossed from inside to outside
+
+Starting with both sets empty, at each vertex v where curve C meets curve C':
+- If C' is in Out:
+  - Remove C' from Out
+  - If C' is also in Passed: Clear Passed and count a corner (there must be a corner between this and the previous vertex in the result set)
+- Otherwise (C' not in Out):
+  - Add C' to both Out and Passed
+
+At the end of the walk, the count tells us the minimum corners required for this curve.
+
+**When Called**: During `VennPredicate` constraint propagation, when assigning facial cycles to faces.
+The check runs on each affected edge to fail early on non-realizable diagrams.
+
+**Limitation**: This validates corner *requirements* but doesn't assign specific corner positions to edges.
+
+### Future Enhancement (Phase 8+)
+
+A full `CornersPredicate` would:
+- Assign specific corners to edge positions (18 corners total for 6 triangles)
+- Ensure crossing count validation (≤6 crossings per color pair)
+- Integrate with PCO (Partial Cyclic Orders) for line crossing constraints
+- Generate GraphML output with corner positions
 
 ## References
 
