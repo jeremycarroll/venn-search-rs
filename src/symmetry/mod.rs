@@ -14,8 +14,8 @@ pub mod canonical;
 
 // Re-export main types and constants
 pub use canonical::{
-    check_solution_canonicality, check_symmetry, SymmetryType, DIHEDRAL_GROUP_3,
-    DIHEDRAL_GROUP_4, DIHEDRAL_GROUP_5, DIHEDRAL_GROUP_6,
+    check_solution_canonicality, check_symmetry, SymmetryType, DIHEDRAL_GROUP_3, DIHEDRAL_GROUP_4,
+    DIHEDRAL_GROUP_5, DIHEDRAL_GROUP_6,
 };
 
 #[cfg(test)]
