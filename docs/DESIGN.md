@@ -88,9 +88,12 @@ achieved through recursive predicate calls, but our simplified implementation do
 general recursion. Instead, `SuccessSame` provides a limited form of iteration within a single
 predicate, useful for predicates that generate multiple solutions before moving to the next phase.
 
-Like Prolog's choice points, our predicates maintain backtracking state. Unlike Prolog,
-we use explicit trail-based backtracking rather than the WAM (Warren Abstract Machine) model,
-giving us more control over what state is saved and restored.
+Like Prolog's choice points, our predicates maintain backtracking state. Our trail-based
+backtracking aligns with the WAM (Warren Abstract Machine) trail mechanism - recording state
+changes for restoration on backtrack. However, we don't implement the full WAM architecture:
+no local stack (environment frames), no global stack (compound terms), no WAM-style heap.
+Our memory model is simpler - just the trail and direct mutation of search state, which gives
+us more control over exactly what state is tracked and how.
 
 **References**:
 - Byrd, L. (1980). "Understanding the control flow of Prolog programs."
