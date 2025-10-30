@@ -172,8 +172,9 @@ pub trait Predicate {
 - `round`: Increments on each success-same-predicate (starts at 0)
 
 **Default behavior**: For deterministic predicates (those without choice points), `retry_pred`
-should return `Failure` immediately - there are no alternative choices to explore. The default
-implementation panics to catch unimplemented predicates during development.
+should never be called. The default implementation panics immediately with a message indicating
+which predicate was incorrectly retried. Only predicates that return `Choices(n)` need to
+implement `retry_pred`.
 
 ### Open/Close Predicate Pattern
 
