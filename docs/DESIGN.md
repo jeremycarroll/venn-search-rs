@@ -1,26 +1,26 @@
-# Design Considerations
+# Design Documentation
 
 The goal of the program is to find all choices of facial cycle for each face such that
 the overall result describes a planar graph that can be drawn with six triangles.
 
-We cover both high level design and comments on lower level issues of wide scope. 
-Some other comments about lower level issues are in the code.
+We cover both high level design and implementation details of wide scope.
+Some other comments about lower level issues are in the code documentation.
 
 ## High-Level Design
 
-The problem of finding diagrams of 6 Venn triangles is a search problem. 
+The problem of finding diagrams of 6 Venn triangles is a search problem.
 The search is divided into three parts:
 
 1. Find a maximal sequence of 6 integers making a 5-face degree signature.
-1. (the main search) Find 64 facial cycles defining a Venn diagram with this 5-face degree signature,
+2. (the main search) Find 64 facial cycles defining a Venn diagram with this 5-face degree signature,
    which satisfies several necessary conditions to be drawable with triangles.
-1. Find an edge to corner mapping for this Venn diagram,
+3. Find an edge to corner mapping for this Venn diagram,
    satisfying the condition that every pair of lines cross at most once.
 
 The final step is to write the resulting Venn diagram, including its corners
 into a [GraphML](http://graphml.graphdrawing.org/primer/graphml-primer.html) file.
 
-We approach this in top-down fashion. Each of the three steps, involve guessing, and we usually guess badly. That
+We approach this in top-down fashion. Each of the three steps involves guessing, and we usually guess badly. That
 branch of the search ends in failure and we backtrack to the previous
 choice point, and make the next guess.
 
@@ -34,7 +34,7 @@ and proceed to the next guess.
 
 In the main search, at each step we assign a specific facial cycle to a specific face.
 At every step in the search we have a set of remaining possible facial cycles for each face.
-If this set is empty for any face, then the search has failed and we backtrack to 
+If this set is empty for any face, then the search has failed and we backtrack to
 the previous choice point.
 If this set is a singleton for any face, then we make that choice
 and compute all its consequences, which may result in failure, or
@@ -43,8 +43,8 @@ in a further assignment in a face with only one remaining facial cycle.
 In the main loop, we first select the face with the fewest possible choices of facial cycle as the next face.
 We choose
 a facial cycle for that face. We will later backtrack and guess again
-making all possible choices for the facial cycle for that chosen face. 
-With each choice, we compute has many consequences as we can, retricting the possible facial cycles for other faces.
+making all possible choices for the facial cycle for that chosen face.
+With each choice, we compute has many consequences as we can, restricting the possible facial cycles for other faces.
 The selection of which face to use for this iteration of the loop
 is not backtrackable - the selected face does need to have a facial cycle: we have decided
 to choose it now.
@@ -53,288 +53,567 @@ to choose it now.
 
 Given that the problem is non-deterministic, with three separate non-deterministic subproblems,
 we encode them all uniformly as top-down searches, and abandon the usual top-level control flow
-of C programs to instead use a non-deterministic engine.
-The engine executes a short non-deterministic program,
-consisting of a sequence of predicates. Each predicate can be evaluated to either succeed or fail
+to instead use a non-deterministic engine.
+The engine executes a sequence of predicates. Each predicate can be evaluated to either succeed or fail
 or create a choice point. Each choice point has a known number of choices. Each choice can either succeed
 or fail, continuing to the next choice. When the choices are exhausted the predicate fails.
 
 Success has two flavors: _success-same-predicate_ is a partial success that re-invokes the
-current predicate with an incremented _round_ (starting at 0); _success-nest-predicate_ is a full success,
-indicating that the engine should move on to the next predicate. It is a run time disaster if the final 
-predicate in the program succeeds with _success-nest-predicate_. A constant predicate the _FAILPredicate_ is provided to be the final entry in most programs.
+current predicate with an incremented _round_ (starting at 0); _success-next-predicate_ is a full success,
+indicating that the engine should move on to the next predicate. It is a runtime error if the final
+predicate succeeds with _success-next-predicate_. A constant predicate the `FailPredicate` is provided to be the final entry in most programs.
 
 On failure, if the current execution is a choice-point, the next choice (if any) is invoked. Otherwise,
-the program backtracks to the previous predicate. If there are no previous predicates then the 
+the program backtracks to the previous predicate. If there are no previous predicates then the
 program execution has completed, since the top-down search has been exhausted.
 
-The engine is somewhat motivated by Prolog: see in particular the Byrd box model.
+### Inspiration from Prolog
 
-### Forward Backward Predicates
+The engine design is inspired by Prolog's execution model, particularly the **Byrd box model**
+for understanding control flow in logic programming:
 
-There are several control predicates defined by two boolean functions and a void function.
+- **Call port**: Entry to a predicate (our `try_pred`)
+- **Exit port**: Success leaving predicate (our `Success` result)
+- **Redo port**: Re-entry on backtracking (our `retry_pred`)
+- **Fail port**: Failure leaving predicate (our `Failure` result)
 
-The first function is a gate, which can fail the predicate; if the gate passes then the
-predicate has a simple choice between two options. The first, the forward operation, can: pass, proceeding to the next
-predicate; or fail, proceeding directly to the third function. The third function, the backward operation, 
-is executed, and then the predicate fails. This allows for inserting code execution into the program execution
-as the non-deterministic search proceeds forward or backward.
+This model provides a clean mental framework for understanding non-deterministic search:
+each predicate is a "box" with four ports through which execution can flow. The trail system
+handles state restoration when flowing backward through the Redo port.
 
-In Prolog terms, this is:
+**Deviation from pure Byrd box model**: Our `SuccessSame` result doesn't fit neatly into the
+traditional 4-port model - it could be thought of as a fifth "re-call" port that loops back
+to the Call port with an incremented round counter. In Prolog, similar functionality would be
+achieved through recursive predicate calls, but our simplified implementation doesn't support
+general recursion. Instead, `SuccessSame` provides a limited form of iteration within a single
+predicate, useful for predicates that generate multiple solutions before moving to the next phase.
 
-```prolog
-predicate :- gate, (forward; backward, fail).
+Like Prolog's choice points, our predicates maintain backtracking state. Our trail-based
+backtracking aligns with the WAM (Warren Abstract Machine) trail mechanism - recording state
+changes for restoration on backtrack. However, we don't implement the full WAM architecture:
+no local stack (environment frames), no global stack (compound terms), no WAM-style heap.
+Our memory model is simpler - just the trail and direct mutation of search state, which gives
+us more control over exactly what state is tracked and how.
+
+**References**:
+- Byrd, L. (1980). "Understanding the control flow of Prolog programs."
+- See [notes on Byrd box model](https://github.com/dtonhofer/prolog_notes/blob/master/other_notes/about_byrd_box_model/README.md)
+
+### Memory Management in Rust
+
+The Rust implementation uses a two-tier memory model with clear ownership semantics:
+
+#### Tier 1: MEMO Data (Immutable, Computed Once)
+
+Precomputed lookup tables and constraints, computed during initialization:
+- Facial cycle constraint tables
+- Possible vertex configurations (480 entries for N=6)
+- Edge and face relationship tables
+- Cycle membership tables
+
+**Strategy**: Owned by `SearchContext`, computed once in `InitializePredicate`, immutable thereafter.
+
+#### Tier 2: DYNAMIC Data (Mutable, Per-Search)
+
+State that changes during search, tracked on the trail for backtracking:
+- `Trail` - records all state changes for O(1) restoration
+- `DynamicFaces` - current facial cycle assignments
+- `EdgeDynamic` - edge crossing counts
+- Search statistics and counters
+
+**Strategy**: Each `SearchContext` owns its mutable state, changes are tracked on the trail.
+
+### Trail System
+
+The trail system is critical for efficient backtracking:
+
+**Purpose**: Record state changes to enable O(1) restoration during backtracking.
+
+**Implementation**: `Vec<TrailEntry>` with checkpoint-based rewind.
+
+**Key Features**:
+- Type-safe: Different entry types for different data structures
+- Checkpoint system: Save/restore trail index for nested scopes
+- Sentinel values: Special u64 values encode Option<u64> for CycleSet
+- Zero-copy restoration: Backtracking just replays trail entries in reverse
+
+**Usage Pattern**:
+```rust
+// Save state before choice
+let checkpoint = trail.save_checkpoint();
+
+// Make changes (all tracked on trail)
+faces.set_cycle(face_id, cycle_id, trail);
+
+// On success: continue
+// On failure: restore
+trail.rewind_to_checkpoint(checkpoint);
 ```
 
-### Memory Management
+See `src/trail/mod.rs` for implementation details.
 
-While each execution step follows normal C memory management (e.g. local stack, static variables, malloc),
-the behavior between the predicates and on backtracking is mixed.
+## Search Engine
 
-1. The main program state, is in a single variable `Faces`. This stores: the facial cycle of each face; 
-   the edges around the face; the adjacent faces; the faces that might be adjacent, or might have been adjacent;
-   the vertices, both their actual, and possible configurations, etc. This state is tracked on the trail,
-   and when the engine backtracks through the normal non-deterministic operation, any changes to this state
-   are reversed. Thus the state reflects the currently active choices.
-1. Ancillary state: there are a couple of global variables that are similarly tracked with the trail, e.g. _EdgeColorCount**State**_
-   the number of times each pair of colors are crossing in the current solution. 
-1. heap, through malloc. This is temporary memory only, and is freed on each step in the engine. This is 
-   useful for temporary strings, and arrays etc. but long term use of the memory is not supported.
-1. flags set on the command line, and readable throughout the code, e.g. _TargetFolder**Flag**_
-1. shared state between the different predicates of the non-deterministic program, not on the trail.
-   The engine provides no explicit data flow between the predicates being executed. The data flow is
-   implicitly encoded with state variables, such as _GlobalSolutionsFound**IPC**_ (IPC: inter-predicate communication) which is incremented
-   as each solution is found, in the main search predicate, and read in several other predicates
-   to support various output related tasks. Notice that the read accesses can occur in predicates both
-   before and after the predicate updating the variable. In this particular case, we can log the solution
-   number in the later predicates, operating in a forward direction, and log the number of solutions found, 
-   in the earlier predicates, operating in a backward direction.
-1. Memoized computation. In the initialize phase (which is implemented as the first predicate
-   of the non-deterministic program), we compute many reusable structures. 
-   During the main search, performance is critical. Hence, any operation
-   that gets repeated is precomputed during an initialization phase.
-   Many of these correspond to some of the constraints seen in [MATH.md](./MATH.md),
-   for example, we precompute the set of all facial cycles that contain
-   the sequence _i_, _j_, _k_ for all triples _i_, _j_, _k_. This allows
-   the constraint to be applied during the search as a simple bitwise operation
-   which is very fast, uses fixed memory, and is quick and easy to add to the trail.
+The engine (`src/engine/mod.rs`) implements the non-deterministic search framework.
 
-   In some sense, many of the relationships between faces, and possible edges,
-   and possible vertices, are also memoized - in the sense that these are all
-   precomputed during initialization and then, when needed, simply put into place,
-   often just by changing a single pointer.
+### Predicate Trait
 
-   e.g. for each member of each
-   possible facial cycle, we compute: the set of facial cycles, with two entries going in the same direction, 
-   which might restrict a vertex adjacent face; and a set of facial cycles, with three entries going in the reverse direction, 
-   which might restrict an edge adjacent face.
+All search phases implement the `Predicate` trait:
 
-1. The predicates, such as _InnerFace**Predicate**_, which finds  6 integers making a 5-face degree signature.
+```rust
+pub trait Predicate {
+    fn try_pred(&mut self, round: u64, ctx: &mut SearchContext) -> PredicateResult;
+    fn retry_pred(&mut self, ctx: &mut SearchContext) -> PredicateResult;
+}
+```
 
-1. A couple of miscellaneous extras, like the `NonDeterministicProgram` itself.
+- `try_pred`: Called on first entry and after each success-same-predicate
+- `retry_pred`: Called when backtracking to this predicate
+- `round`: Increments on each success-same-predicate (starts at 0)
 
-## Seven Phases & Eight Predicates
+**Default behavior**: For deterministic predicates (those without choice points), `retry_pred`
+should never be called. The default implementation panics immediately with a message indicating
+which predicate was incorrectly retried. Only predicates that return `Choices(n)` need to
+implement `retry_pred`.
 
-There are hence the following phases and predicates:
+### Open/Close Predicate Pattern
 
-1. Deterministic initialization
+For predicates that perform side effects (I/O, logging, statistics) without participating in
+the search, we provide the `OpenClosePredicate` wrapper:
 
-   As well as the usual, this includes initializing the global solution space; and memoizing
-   several results needed for the main search.
+```rust
+pub trait OpenClose {
+    fn open(&mut self, ctx: &mut SearchContext) -> bool;
+    fn close(&mut self, ctx: &mut SearchContext);
+}
+```
 
-1. Finding 5-face degree signatures
-1. A deterministic logging step
+- `open`: Called when entering the predicate (forward execution). Returns `false` to fail immediately.
+- `close`: Called when backtracking through the predicate (backward execution). Always fails to continue backtracking.
 
-   With logging the number of results
-   for a specific 5-face degree signature
-   on the backward execution.
+This pattern is useful for:
+- Opening/closing output files around a search phase
+- Logging entry/exit of search phases
+- Recording statistics before/after operations
+- Resource management that must happen in pairs
 
-1. Finding Venn diagrams (the main search)
+The `OpenClosePredicate` wrapper handles the `try_pred`/`retry_pred` mechanics, calling
+`open` on forward pass and `close` on backtrack.
 
-   This selects a solution.
+### PredicateResult Enum
 
-1. A deterministic save step
+```rust
+pub enum PredicateResult {
+    Success,           // Move to next predicate
+    SuccessSame,       // Re-invoke try_pred with round+1
+    Failure,           // Backtrack
+}
+```
 
-   Writing the current solution to an appropriate
-   file (and including the number of variation on 
-   the backward execution)
+### Engine Stack
 
-1. Assigning corners
+The engine maintains a stack of predicate states:
+- Current predicate index
+- Current round number
+- Choice point information
 
-   Selecting all mappings of the 18 corners
-   of the diagram to the possible faces in which 
-   they might lie; this determines a variation
-   of the solution.
+On backtrack from Failure, the engine pops until finding a predicate with remaining choices,
+not just popping once.
 
-1. Deterministically Writing GraphML
-1. Fail - to force exhaustive searching
+### EngineBuilder
 
-## Unit Testing
+Predicates are composed using the builder pattern:
 
-The program was developed using TDD (test driven development),
-so while the tests are comprehensive and have good coverage,
-there is a somewhat _ad hoc_ selection. Moreover, they were ported to make extensive use of the engine, and _ad hoc_ test non-deterministic programs, in which the non-determinism is typically constrained by some of the global variables. The engine itself has no unit tests.
+```rust
+let engine = EngineBuilder::new()
+    .add(Box::new(InitializePredicate))
+    .add(Box::new(InnerFacePredicate))
+    .add(Box::new(VennPredicate::new()))
+    .terminal(Box::new(FailPredicate))
+    .build();
 
-We use [Unity](https://github.com/ThrowTheSwitch/Unity) test framework.
-Moreover, while the program uses the value 6 for the number of colors, and the number
-of curves in the Venn diagram, we support the values 3, 4 and 5 as well.
-Thus some of the tests use these different values: to present simpler tests
-that are easier to understand. Since this value is a compile time constant
-not a runtime one, the [Makefile](../Makefile) can compile with any of these values
-using folders `objs[3456]` to store the corresponding object files.
+engine.search(&mut ctx);
+```
 
-## Implementation Details
+See `src/engine/mod.rs` for implementation.
 
-### MEMO and DYNAMIC annotations
+## Three Phases & Four Predicates
 
-In [core.h](../core.h), _MEMO_, _DYNAMIC_ are defined as empty,
-i.e. they are simply comments on global variables.
-Some fields or 
-global variables maybe marked as _MEMO_ 
-indicating that those fields are set during the initialization phase, and 
-then do not change. Those fields or variables marked as _DYNAMIC_ do get changed
-during the main search, and the old values are stored on the trail
-to allow for backtracking.
+The current implementation (Phase 7 complete) has these predicates:
 
-### Source Files and Geometric Concepts
+### 1. InitializePredicate (`src/predicates/initialize.rs`)
 
+**Purpose**: Deterministic initialization of MEMO data.
 
-| Geometric Concept  | Files | Notes |
-| ------------- | ------------- | ---- |
-| Color | color.c, color.h | Edge Label |
-| ColorSet | color.c, color.h | Face Label, used as proxy forward reference to FACE |
-| Cycle | color.c, color.h | Sequence of Edge colors around a Face |
-| CycleSet | color.c, color.h | Possible Sequences of Edge colors around a Face |
-| Link in Curve | edge.h | The pointy end of an edge, where it meets a vertex, forward reference to EDGE and POINT |
-| Edge | edge.c, edge.h | A directed, labelled side of a face, between two points, one of which is called out as the arrowhead |
-| Curve | edge.c, edge.h | a connected sequence of edges with the same label |
-| Vertex | vertex.c, vertex.h | A possible oriented vertex between 4 specific faces. |
-| Face  | face.c, face.h  | A face of a Venn diagram |
-| Triangles | triangles.c, triangles.h | The six triangles that make up the Venn diagram, each a closed curve with the same label |
+**Actions**:
+- Initialize all geometric constants (NCOLORS, NFACES, etc.)
+- Compute all possible facial cycles
+- Build constraint lookup tables
+- Initialize vertex configuration tables
+- Set up face adjacency relationships
 
-The geometric files are in the sequence above, with each header file including the previous header file,
-and each c file including the corresponding header file, so that face.h and face.c include everything.
+**Result**: Always `Success` (move to next predicate)
 
-Some of the functionality that should logically be in face.c is found in search.c to better balance
-the files.
+### 2. InnerFacePredicate (`src/predicates/innerface.rs`)
 
-color.h includes core.h which defines various constants needed.
+**Purpose**: Find maximal 5-face degree signatures.
 
-### Predicate Files
+**Algorithm**:
+- Non-deterministically choose face degrees for the 6 five-faces
+- Verify degrees sum to 27 (= 6-edges + 5-edges)
+- Apply monotonicity constraints
+- Verify signature is maximal under D₆ symmetry
 
-| Predicate | Files | Notes |
-| ------------- | ------------- | ---- |
-| Initialize | initialize.c | Initializes solution space and memoizes results |
-| InnerFace | innerface.c | Processes inner faces |
-| Log | log.c | Logging of inner faces |
-| Venn | venn.c | Main search for Venn diagrams |
-| Save | save.c | Saves solutions |
-| Corners | corners.c | Assigns corners to faces |
-| GraphML | graphml.c | Writes GraphML output |
-| FAIL | engine.c | Final predicate that always fails |
-| SUSPEND | engine.c | Special predicate for testing |
+**Result**:
+- `Success` when found maximal signature → proceed to VennPredicate
+- `Failure` when no more signatures → backtrack (search complete)
 
-Each predicate file implements a single predicate, with the predicate's name matching the file name.
-The header files declare the predicate structure and any helper functions needed by the predicate.
-The implementation files contain the predicate's logic and any file-scoped helper functions.
+**Expected**: ~39 maximal signatures for N=6
 
-### Other Source Files
+**Status**: ✅ Complete
 
-| Files | Notes |
-| ------------- | ---- |
-| s6.c, s6.h | The symmetric group S₆ and the dihedral group D₆, used to avoid computing symmetries without loss of generality |
-| engine.h, common.h, predicates.h | Common definitions for the non-deterministic engine and predicates |
-| nondeterminism.c, nondeterminism.h | The non-deterministic program |
-| core.h | Core constants and type definitions |
-| failure.c, failure.h | Failures to meet the Venn condition, for the main search. |
-| entrypoint.c, main.c, main.h | Program entry point and command line handling |
-| trail.h | Trail interface for backtracking |
-| memory.c, memory.h | Memory management utilities |
-| statistics.c, statistics.h | Performance statistics collection and printing |
-| utils.c, utils.h | Two other functions |
-| visible_for_testing.h | Testing support definitions |
+### 3. VennPredicate (`src/predicates/venn.rs`)
 
-### Naming Conventions
+**Purpose**: Find valid facial cycle assignments (main search).
 
-Static variables of any scope (function, file, global) are in PascalCase.
+**Algorithm**:
+1. Select face with fewest remaining cycle choices (fail-fast heuristic)
+2. Non-deterministically assign a cycle to that face
+3. Apply constraint propagation:
+   - Edge adjacency: If faces F, F' are edge-adjacent at color j, and i,j,k is in cycle(F), then k,j,i must be in cycle(F')
+   - Non-adjacency: If F and F' differ by one color j but aren't edge-adjacent, j appears in neither cycle
+   - Vertex adjacency: If F, F' meet at vertex where colors i,j cross, and i,j is in cycle(F), then i,j is in cycle(F')
+4. Repeat until all faces have cycles assigned
+5. Validate solution (face cycles, vertex configurations)
+6. Check solution canonicality under D₆ symmetry
 
-Functions of any scope are in camelCase.
+**Result**:
+- `Success` when found canonical solution → continue search (no next predicate yet)
+- `SuccessSame` when backtracking after logging solution
+- `Failure` when constraints violated or solution non-canonical
 
-Non-static local variables are in camelCase.
+**Expected**: 233 canonical solutions for N=6 (plus ~14 equivocal duplicates that are filtered)
 
-Macros are in UPPER_SNAKE_CASE.
+**Status**: ✅ Complete (Phase 7)
 
-### Vertex Structure and Edge Organization
+**Constraint Propagation**: See `src/propagation/` for detailed implementation
 
-In a vertex, there are 4 incoming edges: 2 for the primary color and 2 for the secondary color.
-Each edge is mapped to its appropriate slot (0-3) based on:
-- Whether it's a clockwise edge or not
-- Whether the other color is a member of the face colors
+**Corner Detection**: ✅ Implemented and essential (`src/propagation/corner_detection.rs`).
+The Carroll 2000 corner detection algorithm validates that each curve can be drawn with ≤3 corners.
+This constraint is critical - without it, the search would produce many invalid solutions that cannot
+be realized as triangles. The check runs during facial cycle assignment to fail early on non-realizable
+diagrams. Note: This validates corner *requirements* (enabling the correct 233 solutions), but doesn't
+yet assign specific corner positions to edges (Phase 8 enhancement)
 
-The mapping works as follows:
-- Slot 0: Primary clockwise edge, when other color contains face
-- Slot 1: Primary counterclockwise edge, when other color excludes face
-- Slot 2: Secondary counterclockwise edge, when other color contains face
-- Slot 3: Secondary clockwise edge, when other color excludes face
+### 4. FailPredicate (`src/engine/mod.rs`)
 
-### Corner Detection Algorithm
+**Purpose**: Terminal predicate that always fails, forcing exhaustive search.
 
-This is the algorithm as documented by Carroll, 2000.
+**Result**: Always `Failure`
 
-For each curve C, we start with its edge on the central face, and proceed
-around the curve in one direction.
-We keep track of two sets:
-· a set Out of curves outside of which we lie.
-· a set Passed of curves which we have recently crossed from the inside
-to the outside.
+## Future Phases
 
-Both sets are initialised to empty. On our walk around C, as we pass the
-vertex v we look at the other curve C' passing through that vertex.
-If C' is in Out then:
-· We remove C' from Out.
-· If C' is in Passed then we set Passed as the empty set and add v to
-the result set. The idea is that there must be a corner between any
-two vertices in the result set.
-Otherwise, C' is not in Out and:
-· We add C' to Out.
-· We add C' to Passed.
-At the end of the walk we look at the cardinality of the result set. This tells
-us the minimum number of corners required on this curve.
-By conducting a similar walk in the opposite direction around the curve we
-get a corresponding result set. We can align these two result sets, and find
-sub-paths along which a corner must lie. For each sub-path one end lies in
-one result set and the other end in the other.
-We arbitrarily choose one edge in each of these subpaths and subdivide it
-with an additional vertex.
-If any curve has fewer than three corners found with this algorithm then
-additional corners are added arbitrarily.
+### Phase 8: Full Corner Assignment (Enhancement Needed)
 
-#### Function name prefixes
+**Current**: Corner detection validates that curves require ≤3 corners
+**Needed**: Complete corner assignment and geometric realization
 
-We use the following naming conventions:
+**Enhancements**:
+- Implement `CornersPredicate` to assign specific corner positions
+- Bidirectional traversal (forward and backward) to determine corner placement sub-paths
+- Ensure ≥3 corners per curve (add arbitrary corners if needed)
+- Validate crossing counts (≤6 per color pair for triangles)
+- Integrate with PCO for line crossing order constraints
 
-- functions that modify the solution area, or create memoized results, 
-  before we begin the search start with `initialize...`
-- functions that modify the `Faces` variable during the dynamic search, recording
-  the changes on the trail start with `dynamic...`
+**Status**: 🚧 Partially implemented (validation only)
 
-### File Layout Conventions
+### Phase 9: GraphML Output
 
-Most of the files correspond to geometric concepts with both a .c file and .h file.
-Sometimes we put more than one geometric concept into one .c file. A few .h files
-are motivated independently.
+**Purpose**: Write solution to GraphML file with corner positions.
 
-Each .c file has the following layout:
+**Status**: 🚧 Not yet implemented
 
-- includes
-- global variables: first globally scoped then file scope (except predicates)
-- functions follow a define before use paradigm, so that the external entry points are grouped together at the end of the files.
-- the externally linked functions are ordered as:
-  - `initialize...` functions
-  - `dynamic...` functions
-  - other functions
-  - predicates (i.e. the global variables)
+## Module Structure
+
+### Core Modules
+
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| `geometry/` | Type-safe geometric primitives | Color, Edge, Vertex, Face, Cycle |
+| `geometry/constants.rs` | Compile-time constants | NCOLORS, NFACES, NEDGES, NVERTICES |
+| `geometry/color.rs` | Edge labels and color sets | Color, ColorSet |
+| `geometry/cycle.rs` | Facial cycles | Cycle, CycleSet |
+| `geometry/edge.rs` | Directed edges | Edge, EdgeRef |
+| `geometry/vertex.rs` | Oriented vertices | Vertex, VertexConfig |
+| `geometry/face.rs` | Face regions | Face, FaceId |
+
+### State Modules
+
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| `trail/` | Backtracking support | Trail, TrailEntry, Checkpoint |
+| `state/` | Mutable search state | DynamicFaces, DynamicEdge, Statistics |
+| `state/faces.rs` | Face cycle assignments | DynamicFaces |
+| `state/statistics.rs` | Performance counters | Statistics, Counters |
+
+### MEMO Modules
+
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| `memo/` | Immutable lookup tables | MemoizedData |
+| `memo/cycles.rs` | Cycle constraint tables | CycleConstraints |
+| `memo/vertices.rs` | Vertex configurations | VertexMemo |
+| `memo/faces.rs` | Face relationship tables | FaceMemo |
+
+### Algorithm Modules
+
+| Module | Purpose | Key Files |
+|--------|---------|-----------|
+| `engine/` | Non-deterministic search | mod.rs, predicate.rs |
+| `predicates/` | Search phases | initialize.rs, innerface.rs, venn.rs |
+| `propagation/` | Constraint propagation | adjacency.rs, non_adjacency.rs, vertices.rs |
+| `symmetry/` | Dihedral group D₆ | s6.rs (canonicality checking) |
+
+### Context Module
+
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| `context/` | Search context | SearchContext (owns MEMO + DYNAMIC state) |
+
+## Type Safety Through Newtypes
+
+Rust's type system prevents many errors at compile time:
+
+```rust
+// Each geometric concept has its own type
+pub struct Color(u8);           // 0..NCOLORS-1
+pub struct ColorSet(u64);       // Bitmask of colors
+pub struct Cycle(u16);          // Index into cycle table
+pub struct CycleSet(u128);      // Bitmask of possible cycles
+pub struct Edge { ... };        // Directed edge with color
+pub struct Vertex { ... };      // Oriented meeting point
+pub struct Face(u8);            // 0..NFACES-1
+```
+
+These types prevent:
+- Mixing up color indices with cycle indices
+- Using face IDs where edge IDs are expected
+- Bit manipulation errors
+
+## Vertex Structure and Edge Organization
+
+At each vertex, two curves intersect. One curve (the **primary**) crosses from inside the other curve
+(the **secondary**) to outside it. This creates a natural orientation at the vertex.
+
+Each vertex has 4 edges meeting at it: 2 of the primary color and 2 of the secondary color.
+These edges are organized into 4 slots based on their orientation and face relationships:
+
+**Edge slot mapping**:
+- **Slot 0**: Primary color, clockwise edge, when secondary color contains the face
+- **Slot 1**: Primary color, counterclockwise edge, when secondary color excludes the face
+- **Slot 2**: Secondary color, counterclockwise edge, when primary color contains the face
+- **Slot 3**: Secondary color, clockwise edge, when primary color excludes the face
+
+This structure is critical for:
+- Constraint propagation (vertex adjacency constraints)
+- Determining which faces meet at each vertex
+- Validating vertex configurations during search
+
+The 480 possible vertex configurations (for N=6) are precomputed during initialization,
+with each configuration specifying the valid edge arrangements for a given set of face colors.
+
+## Memory Architecture for Parallelization
+
+**Current Status**: Single-threaded, but architecture is parallelization-ready.
+
+**Design Decision**: Two-tier memory model enables independent `SearchContext` instances.
+
+**Parallelization Point** (future): After InnerFacePredicate finds each degree signature,
+spawn independent thread for VennPredicate + CornersPredicate + GraphML output.
+
+**Key Architectural Decisions**:
+- No global mutable state (unlike the C implementation)
+- Each `SearchContext` owns its MEMO and DYNAMIC data
+- MEMO data could be Arc-shared across threads (future optimization)
+- Enables Send + Sync for SearchContext (with appropriate marker traits)
+
+**Expected Speedup**: 5-10x on modern multi-core systems (39 degree signatures, ~6-8 cores typical)
+
+## MEMO vs DYNAMIC Annotations
+
+Throughout the codebase, fields may be conceptually marked as MEMO or DYNAMIC:
+
+- **MEMO**: Set during initialization, never changes. Example: `vertices: Vec<VertexConfig>` in MemoizedData
+- **DYNAMIC**: Changes during search, tracked on trail. Example: `cycle: Option<Cycle>` in DynamicFace
+
+This distinction is architectural documentation, not enforced by types (yet).
+
+## Naming Conventions
+
+The Rust implementation follows standard Rust conventions:
+
+- **Modules**: `snake_case` (e.g., `geometry`, `state`)
+- **Types**: `PascalCase` (e.g., `SearchContext`, `PredicateResult`)
+- **Functions**: `snake_case` (e.g., `set_cycle`, `try_pred`)
+- **Constants**: `UPPER_SNAKE_CASE` (e.g., `NCOLORS`, `NFACES`)
+- **Lifetimes**: `'a`, `'ctx` (rarely needed due to ownership design)
+
+## Error Handling
+
+The implementation uses two approaches:
+
+**1. Result types for internal search state**:
+Constraint propagation returns `Result<(), PropagationFailure>` as part of the backtracking mechanism:
+
+```rust
+pub enum PropagationFailure {
+    NoMatchingCycles { face_id: usize, depth: usize },
+    ConflictingConstraints { ... },
+    CrossingLimitExceeded { ... },
+    TooManyCorners { ... },
+    DisconnectedCurve { ... },
+    DepthExceeded { depth: usize },
+}
+```
+
+These are **internal to the search algorithm** - they signal that a search branch should backtrack,
+not actual errors. They're part of the non-deterministic search mechanism.
+
+**2. Panics for everything else**:
+Used for both invariant violations and runtime errors (I/O, out of memory, etc.):
+
+```rust
+.expect("Face must have cycle assigned")  // Programming bug
+.expect("Failed to write output file")    // I/O error
+```
+
+**No user-facing error types**: The program either succeeds (finds solutions), or panics. There's
+no meaningful error recovery - I/O failures, out of memory, or bugs should all just panic.
+
+## Testing Strategy
+
+See **[TESTS.md](TESTS.md)** for complete test documentation.
+
+**Test Organization**:
+- Unit tests: Inline with modules (using `#[cfg(test)]`)
+- Integration tests: `tests/` directory
+- Feature flags: `ncolors_3`, `ncolors_5`, `ncolors_6` for different N values
+
+**Test Approach**:
+- Validate solution counts against known results
+- Verify constraint propagation correctness
+- Test trail backtracking mechanics
+- Validate engine predicate execution
+
+## Performance Considerations
+
+**Current Performance** (Phase 7, N=6, release mode):
+- Full search: ~3.5 seconds
+- 233 solutions found
+- ~39 inner face degree signatures
+
+**Optimization Priorities**:
+1. Trail operations (millions of calls) - already optimized
+2. Predicate try/retry - hot loop
+3. Constraint propagation - already optimized with bitsets
+4. Memory allocations - minimized in hot paths
+
+**Profiling**:
+```bash
+# Build with optimizations
+cargo build --release
+
+# Run with profiler (requires cargo-flamegraph)
+cargo flamegraph --bin venn-search
+```
+
+**Key Optimizations Applied**:
+- Trail uses unsafe for direct memory access (carefully encapsulated)
+- CycleSet uses bit manipulation for set operations
+- Constraint propagation uses precomputed lookup tables
+- Fail-fast heuristic (choose face with fewest options)
+
+## Corner Detection Algorithm
+
+The Carroll 2000 corner detection algorithm is implemented in `src/propagation/corner_detection.rs`.
+
+### Original Algorithm Description (Carroll 2000)
+
+The following is the algorithm as documented by Carroll, 2000:
+
+> For each curve C, we start with its edge on the central face, and proceed around the curve in one
+> direction. We keep track of two sets:
+> - a set Out of curves outside of which we lie.
+> - a set Passed of curves which we have recently crossed from the inside to the outside.
+>
+> Both sets are initialised to empty. On our walk around C, as we pass the vertex v we look at the
+> other curve C' passing through that vertex.
+>
+> If C' is in Out then:
+> - We remove C' from Out.
+> - If C' is in Passed then we set Passed as the empty set and add v to the result set. The idea
+>   is that there must be a corner between any two vertices in the result set.
+>
+> Otherwise, C' is not in Out and:
+> - We add C' to Out.
+> - We add C' to Passed.
+>
+> At the end of the walk we look at the cardinality of the result set. This tells us the minimum
+> number of corners required on this curve.
+>
+> By conducting a similar walk in the opposite direction around the curve we get a corresponding
+> result set. We can align these two result sets, and find sub-paths along which a corner must lie.
+> For each sub-path one end lies in one result set and the other end in the other.
+>
+> We arbitrarily choose one edge in each of these subpaths and subdivide it with an additional vertex.
+>
+> If any curve has fewer than three corners found with this algorithm then additional corners are
+> added arbitrarily.
+
+### Current Implementation (Phase 7)
+
+**Purpose**: Validate that each curve can be drawn with ≤3 corners (triangles have 3 corners).
+
+**Algorithm** (from [Carroll 2000]):
+
+For each curve C, we start with its edge on the central face and walk around the curve.
+We maintain two sets:
+- **Out**: curves outside of which we currently lie
+- **Passed**: curves we've recently crossed from inside to outside
+
+Starting with both sets empty, at each vertex v where curve C meets curve C':
+- If C' is in Out:
+  - Remove C' from Out
+  - If C' is also in Passed: Clear Passed and count a corner (there must be a corner between this and the previous vertex in the result set)
+- Otherwise (C' not in Out):
+  - Add C' to both Out and Passed
+
+At the end of the walk, the count tells us the minimum corners required for this curve.
+
+**When Called**: During `VennPredicate` constraint propagation, when assigning facial cycles to faces.
+The check runs on each affected edge to fail early on non-realizable diagrams.
+
+**Limitation**: This validates corner *requirements* but doesn't assign specific corner positions to edges.
+
+### Future Enhancement (Phase 8+)
+
+A full `CornersPredicate` would:
+- Assign specific corners to edge positions (18 corners total for 6 triangles)
+- Ensure crossing count validation (≤6 crossings per color pair)
+- Integrate with PCO (Partial Cyclic Orders) for line crossing constraints
+- Generate GraphML output with corner positions
 
 ## References
 
-Byrd, Lawrence. "Understanding the control flow of Prolog programs." in _Proceedings of the Logic Programming Workshop in Debrecen, Hungary_ (Sten Åke Tärnlund, editor). 1980. See these [notes](https://github.com/dtonhofer/prolog_notes/blob/master/other_notes/about_byrd_box_model/README.md).
+**Algorithm**:
+- [Carroll 2000]: Carroll, Jeremy J. "Drawing Venn triangles." HP LABORATORIES TECHNICAL REPORT HPL-2000-73 (2000).
+
+**Design Patterns**:
+- Byrd, Lawrence. "Understanding the control flow of Prolog programs." in _Proceedings of the Logic Programming Workshop in Debrecen, Hungary_ (Sten Åke Tärnlund, editor). 1980.
+  See [notes on Byrd box model](https://github.com/dtonhofer/prolog_notes/blob/master/other_notes/about_byrd_box_model/README.md).
+
+**Related Documentation**:
+- [MATH.md](MATH.md) - Mathematical foundations
+- [TESTS.md](TESTS.md) - Test suite documentation
+- [CLAUDE.md](../CLAUDE.md) - Development guide
+- [CLEANUP.md](CLEANUP.md) - Code review and cleanup tasks

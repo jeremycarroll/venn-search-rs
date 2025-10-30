@@ -10,10 +10,13 @@ The search uses a non-deterministic backtracking algorithm with an efficient tra
 
 ## Status
 
-🚧 **Work in Progress** - This is a Rust rewrite of the proven C implementation.
+✅ **Phase 7 Complete** - Core Venn diagram search is working!
 
+- **Results**: Finds all 233 solutions for N=6 in ~3.5 seconds
+- **Features**: Full constraint propagation, canonicality filtering under D₆ symmetry
+- **Tests**: All passing for N=3 (2 solutions), N=4 (3), N=5 (23), N=6 (233)
+- **Next**: Code cleanup and Phase 8 (corner detection)
 - **C Reference**: See `c-reference/` directory or the [original C repo](https://github.com/jeremycarroll/venntriangles) (tag v1.1-pco)
-- **Migration Progress**: See issues and project board
 
 ## Building
 
@@ -90,7 +93,7 @@ cargo doc --open
 
 ## References
 
-- Carroll, J.J. (2000). [Paper title and publication details]
+- Carroll, J.J. (2000). "Drawing Venn triangles." HP LABORATORIES TECHNICAL REPORT HPL-2000-73. [PDF](https://shiftleft.com/mirrors/www.hpl.hp.com/techreports/2000/HPL-2000-73.pdf)
 - Original C implementation: https://github.com/jeremycarroll/venntriangles
 
 ## License

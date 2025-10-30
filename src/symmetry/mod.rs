@@ -112,15 +112,15 @@ mod tests {
         assert_eq!(group.len(), 2 * NCOLORS);
 
         // First element should be identity
-        for i in 0..NCOLORS {
-            assert_eq!(group[0][i], i as u8);
+        for (i, &value) in group[0].iter().enumerate() {
+            assert_eq!(value, i as u8);
         }
 
         // Last NCOLORS elements should be reflections
         // First reflection should reverse the sequence
         let first_reflection_idx = NCOLORS;
-        for i in 0..NCOLORS {
-            assert_eq!(group[first_reflection_idx][i], (NCOLORS - 1 - i) as u8);
+        for (i, &value) in group[first_reflection_idx].iter().enumerate() {
+            assert_eq!(value, (NCOLORS - 1 - i) as u8);
         }
     }
 }

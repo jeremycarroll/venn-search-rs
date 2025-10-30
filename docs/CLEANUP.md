@@ -89,7 +89,6 @@ The code was developed incrementally over several phases with focus on correctne
 - [ ] **Consider using more idiomatic Rust**
   - Some functions use C-style iteration patterns
   - Could use more iterator combinators where appropriate
-  - Review use of `expect()` vs proper error handling
 
 ## Architectural Improvements to Consider
 
@@ -130,10 +129,48 @@ Consider for Phase 8+:
 
 ## Testing Gaps
 
-- [ ] Property-based tests for geometric invariants
+See **[TESTS.md](TESTS.md)** for complete test documentation.
+
+### Test Documentation Gaps
+
+**What's well covered** ✅:
+- Trail system and backtracking mechanics
+- Search engine operation
+- Full search solution counts (N=3: 2, N=5: 23, N=6: 233)
+- Canonicality filtering correctness
+- Carroll 2000 solution verification
+
+**Areas needing better documentation**:
+
+1. **Detailed vertex/edge validation**
+   - Could add tests validating specific vertex configurations at each face type
+   - Could verify edge orientation (primary/secondary, clockwise/counterclockwise)
+   - Current tests validate via solution counts, not detailed internal state
+   - **Action**: Low priority - internal correctness validated indirectly
+
+2. **Isomorphism class mechanics**
+   - Could add tests verifying all 10 D₅ symmetry operations explicitly
+   - Could validate signature maximization across all labellings
+   - Current tests verify canonicality works via correct solution counts
+   - **Action**: Low priority - results are correct
+
+3. **Visual test documentation**
+   - Tests lack visual diagrams (face arrangements, vertex orientations, edge directions)
+   - Would aid understanding of complex test cases
+   - **Action**: Medium priority - add diagrams for key test cases
+
+4. **4-Venn diagram tests**
+   - No dedicated venn4_test.rs with monotonicity validation
+   - **Action**: Low priority - not production target
+
+### Future Test Enhancements
+
+- [ ] Property-based tests for geometric invariants (using proptest)
 - [ ] Stress tests (very deep search trees)
 - [ ] Memory usage tests (ensure no leaks during backtracking)
 - [ ] Parallel execution tests (when implemented)
+- [ ] Port vertex configuration validation from C
+- [ ] Add visual diagrams for key Rust test cases
 
 ## Code Metrics (Estimated)
 

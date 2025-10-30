@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code when working with this Rust rewrite of the venntriangles C codebase.
 
+## Purpose and Audience
+
+**Purpose:** This is a complete, self-contained research artifact. The goal is that a single motivated PhD student in the future can pick this up, understand it deeply, and build upon it.
+
+**Not optimizing for:** GitHub stars, community building, broad adoption.
+
+**Optimizing for:** One researcher who picks this up in 5 years and can fully reconstruct the reasoning.
+
+**Documentation philosophy:**
+- Stand completely alone (no broken links to external resources that may vanish)
+- Explain the "why" as much as the "how" (mathematical foundations, design rationale)
+- Visual aids and detailed explanations are about teaching, not just reference
+- Code should be exemplary - showing how to think about the problem
+- Design decisions should be documented (Prolog inspiration, trail architecture, memory model)
+
+This context matters for anyone (AI or human) working on this project: we're creating an intellectual artifact that must be comprehensible decades from now, not optimizing for short-term convenience.
+
 ## Quick Start
 
 ```bash
@@ -11,7 +28,8 @@ cargo test
 cargo clippy
 cargo fmt
 
-# Commands that will work once implementation is complete:
+# Run the search (Phase 7 complete - finds all 233 solutions for N=6)
+# Note: CLI arguments and output generation (Phase 8+) not yet implemented
 # cargo run --release -- -f ../results
 # cargo run --release -- -f ../results -d 664443
 # cargo run --release -- -f ../results -n 1 -j 1
@@ -70,7 +88,7 @@ Output is in GraphML format defining a planar graph with 18 pseudoline segments 
 - **[docs/DESIGN.md](docs/DESIGN.md)** - Comprehensive design documentation
 - **[docs/MATH.md](docs/MATH.md)** - Mathematical foundations
 - **[docs/RESULTS.md](docs/RESULTS.md)** - Expected results: 233 solutions with 1.7M variations
-- **[docs/TESTS.md](docs/TESTS.md)** - Test suite documentation with visual diagrams
+- **[docs/TESTS.md](docs/TESTS.md)** - Test suite documentation
 
 ## Memory Architecture
 
@@ -272,4 +290,4 @@ cargo flamegraph --bin venn -- -f results -n 1
   - Grünbaum, Branko. "The importance of being straight." Proc. 12th Biannual Intern. Seminar of the Canadian Math. Congress. 1970.
   - Felsner, Stefan, and Jacob E. Goodman. "Pseudoline arrangements." Handbook of Discrete and Computational Geometry. 2017.
 - **Expected results**: [docs/RESULTS.md](docs/RESULTS.md) - 233 solutions, 1.7M variations, performance data
-- **Test documentation**: [docs/TESTS.md](docs/TESTS.md) - Visual test cases for 3-, 4-, 5-, 6-Venn diagrams
+- **Test documentation**: [docs/TESTS.md](docs/TESTS.md) - Test suite documentation with visual diagrams
