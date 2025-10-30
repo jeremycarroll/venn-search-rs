@@ -458,8 +458,8 @@ The Rust implementation follows standard Rust conventions:
 
 The implementation uses two approaches:
 
-**1. Result types for search failures**:
-Constraint propagation returns `Result<(), PropagationFailure>` to handle search failures gracefully:
+**1. Result types for internal search state**:
+Constraint propagation returns `Result<(), PropagationFailure>` as part of the backtracking mechanism:
 
 ```rust
 pub enum PropagationFailure {
@@ -472,16 +472,19 @@ pub enum PropagationFailure {
 }
 ```
 
-These errors indicate search branches that should fail and backtrack, not program bugs.
+These are **internal to the search algorithm** - they signal that a search branch should backtrack,
+not actual errors. They're part of the non-deterministic search mechanism.
 
-**2. Panics for invariant violations**:
-Used for conditions that should never occur if the algorithm is correct:
+**2. Panics for everything else**:
+Used for both invariant violations and runtime errors (I/O, out of memory, etc.):
 
 ```rust
-.expect("Face must have cycle assigned")
+.expect("Face must have cycle assigned")  // Programming bug
+.expect("Failed to write output file")    // I/O error
 ```
 
-These indicate programming errors, not search failures.
+**No user-facing error types**: The program either succeeds (finds solutions), or panics. There's
+no meaningful error recovery - I/O failures, out of memory, or bugs should all just panic.
 
 ## Testing Strategy
 
