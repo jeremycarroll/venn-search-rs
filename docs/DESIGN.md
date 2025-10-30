@@ -537,6 +537,39 @@ cargo flamegraph --bin venn-search
 
 The Carroll 2000 corner detection algorithm is implemented in `src/propagation/corner_detection.rs`.
 
+### Original Algorithm Description (Carroll 2000)
+
+The following is the algorithm as documented by Carroll, 2000:
+
+> For each curve C, we start with its edge on the central face, and proceed around the curve in one
+> direction. We keep track of two sets:
+> - a set Out of curves outside of which we lie.
+> - a set Passed of curves which we have recently crossed from the inside to the outside.
+>
+> Both sets are initialised to empty. On our walk around C, as we pass the vertex v we look at the
+> other curve C' passing through that vertex.
+>
+> If C' is in Out then:
+> - We remove C' from Out.
+> - If C' is in Passed then we set Passed as the empty set and add v to the result set. The idea
+>   is that there must be a corner between any two vertices in the result set.
+>
+> Otherwise, C' is not in Out and:
+> - We add C' to Out.
+> - We add C' to Passed.
+>
+> At the end of the walk we look at the cardinality of the result set. This tells us the minimum
+> number of corners required on this curve.
+>
+> By conducting a similar walk in the opposite direction around the curve we get a corresponding
+> result set. We can align these two result sets, and find sub-paths along which a corner must lie.
+> For each sub-path one end lies in one result set and the other end in the other.
+>
+> We arbitrarily choose one edge in each of these subpaths and subdivide it with an additional vertex.
+>
+> If any curve has fewer than three corners found with this algorithm then additional corners are
+> added arbitrarily.
+
 ### Current Implementation (Phase 7)
 
 **Purpose**: Validate that each curve can be drawn with ≤3 corners (triangles have 3 corners).
