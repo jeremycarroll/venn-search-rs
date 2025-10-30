@@ -168,6 +168,34 @@ pub trait Predicate {
 - `retry_pred`: Called when backtracking to this predicate
 - `round`: Increments on each success-same-predicate (starts at 0)
 
+**Default behavior**: For deterministic predicates (those without choice points), `retry_pred`
+should return `Failure` immediately - there are no alternative choices to explore. The default
+implementation panics to catch unimplemented predicates during development.
+
+### Open/Close Predicate Pattern
+
+For predicates that perform side effects (I/O, logging, statistics) without participating in
+the search, we provide the `OpenClosePredicate` wrapper:
+
+```rust
+pub trait OpenClose {
+    fn open(&mut self, ctx: &mut SearchContext) -> bool;
+    fn close(&mut self, ctx: &mut SearchContext);
+}
+```
+
+- `open`: Called when entering the predicate (forward execution). Returns `false` to fail immediately.
+- `close`: Called when backtracking through the predicate (backward execution).
+
+This pattern is useful for:
+- Opening/closing output files around a search phase
+- Logging entry/exit of search phases
+- Recording statistics before/after operations
+- Resource management that must happen in pairs
+
+The `OpenClosePredicate` wrapper handles the `try_pred`/`retry_pred` mechanics, calling
+`open` on forward pass and `close` on backtrack.
+
 ### PredicateResult Enum
 
 ```rust
