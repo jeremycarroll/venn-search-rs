@@ -36,6 +36,12 @@ cargo test -- --nocapture
 
 # Run specific test
 cargo test test_all
+
+# Run doc tests (code examples in documentation comments)
+cargo test --doc
+
+# Run all tests including doc tests (used in CI)
+cargo test --all-features --doc
 ```
 
 ## Key Test Categories
