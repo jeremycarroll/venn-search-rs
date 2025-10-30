@@ -81,6 +81,13 @@ This model provides a clean mental framework for understanding non-deterministic
 each predicate is a "box" with four ports through which execution can flow. The trail system
 handles state restoration when flowing backward through the Redo port.
 
+**Deviation from pure Byrd box model**: Our `SuccessSame` result doesn't fit neatly into the
+traditional 4-port model - it could be thought of as a fifth "re-call" port that loops back
+to the Call port with an incremented round counter. In Prolog, similar functionality would be
+achieved through recursive predicate calls, but our simplified implementation doesn't support
+general recursion. Instead, `SuccessSame` provides a limited form of iteration within a single
+predicate, useful for predicates that generate multiple solutions before moving to the next phase.
+
 Like Prolog's choice points, our predicates maintain backtracking state. Unlike Prolog,
 we use explicit trail-based backtracking rather than the WAM (Warren Abstract Machine) model,
 giving us more control over what state is saved and restored.
