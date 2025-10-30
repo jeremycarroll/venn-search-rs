@@ -79,7 +79,7 @@ Tests the simplest case - single 3-Venn diagram with 2 labellings:
   - Expected: 2 solutions
   - Status: ✅ Passing
 
-See `images/` directory for visual diagrams of 3-Venn diagram configurations.
+See `images/` directory (at repository root) for visual diagrams of 3-Venn diagram configurations. For detailed explanations with inline images, see [TESTS-C.md](TESTS-C.md).
 
 #### N=5: `venn5_test.rs`
 
