@@ -179,7 +179,6 @@ fn get_face_degrees_in_canonical_order(
 /// # Returns
 ///
 /// SymmetryType indicating whether to accept (Canonical/Equivocal) or reject (NonCanonical).
-#[allow(static_mut_refs)]
 pub fn check_solution_canonicality(
     state: &crate::context::DynamicState,
     memo: &crate::context::MemoizedData,
@@ -212,26 +211,12 @@ pub fn check_solution_canonicality(
         degrees[order_idx] = cycle.len() as u8;
     }
 
-    // Debug: Print once for first solution
-    static mut FIRST_CALL: bool = true;
-    unsafe {
-        if FIRST_CALL {
-            eprintln!("[S6] First call to check_solution_canonicality");
-            let print_len = NFACES.min(10);
-            eprintln!("[S6] Degrees: {:?}", &degrees[..print_len]);
-            FIRST_CALL = false;
-        }
-    }
-
     // Find lexicographically maximal permutation and count ties
     let mut max_perm = [0u8; NFACES];
     let mut max_count = 0;
     let mut first = true;
 
-    // Debug: Check first permutation
-    static mut DEBUG_FIRST: bool = true;
-
-    for (perm_idx, permutation) in group.iter().enumerate() {
+    for permutation in group.iter() {
         let mut permuted = [0u8; NFACES];
 
         // Apply this permutation to all face IDs
@@ -244,34 +229,6 @@ pub fn check_solution_canonicality(
 
             // Copy the cycle length from the original order position
             permuted[permuted_order_idx] = degrees[order_idx];
-
-            // Debug: Print first few transformations on first call
-            unsafe {
-                if DEBUG_FIRST && perm_idx < 2 && order_idx < 3 {
-                    eprintln!(
-                        "[S6] perm[{}]: face {} → face {} (order {} → {}), degree={}",
-                        perm_idx,
-                        face_id,
-                        permuted_face_id,
-                        order_idx,
-                        permuted_order_idx,
-                        degrees[order_idx]
-                    );
-                }
-            }
-        }
-
-        unsafe {
-            if DEBUG_FIRST && perm_idx == 0 {
-                let print_len = NFACES.min(10);
-                eprintln!("[S6] Identity permutation: {:?}", &permuted[..print_len]);
-            }
-            if DEBUG_FIRST && perm_idx == 1 {
-                let print_len = NFACES.min(10);
-                eprintln!("[S6] Second permutation: {:?}", &permuted[..print_len]);
-                eprintln!("[S6] Comparison: {:?}", permuted.cmp(&degrees));
-                DEBUG_FIRST = false;
-            }
         }
 
         if first {
@@ -289,25 +246,6 @@ pub fn check_solution_canonicality(
                 }
                 std::cmp::Ordering::Less => {}
             }
-        }
-    }
-
-    // Debug: Log the result
-    unsafe {
-        static mut CALL_COUNT: usize = 0;
-        CALL_COUNT += 1;
-        if CALL_COUNT <= 5 || CALL_COUNT.is_multiple_of(1000) {
-            let result_type = if degrees != max_perm {
-                "NonCanonical"
-            } else if max_count > 1 {
-                "Equivocal"
-            } else {
-                "Canonical"
-            };
-            eprintln!(
-                "[S6] Solution #{}: {} (max_count={})",
-                CALL_COUNT, result_type, max_count
-            );
         }
     }
 

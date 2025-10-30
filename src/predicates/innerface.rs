@@ -42,18 +42,13 @@ pub struct InnerFacePredicate;
 
 impl Predicate for InnerFacePredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, round: usize) -> PredicateResult {
-        // // eprintln!("[InnerFace try_pred] round={}", round);
-
         if round == NCOLORS {
             // Final round - validate the complete sequence
             let degrees = ctx.get_face_degrees();
-            // eprintln!("[InnerFace] Complete sequence: {:?}", degrees);
 
             // Check sum constraint
             let sum: u64 = degrees.iter().sum();
-            // eprintln!("[InnerFace] Sum: {} (expected: {})", sum, TOTAL_CENTRAL_NEIGHBOR_DEGREE);
             if sum != TOTAL_CENTRAL_NEIGHBOR_DEGREE as u64 {
-                // eprintln!("[InnerFace] REJECT: sum incorrect");
                 return PredicateResult::Failure;
             }
 
@@ -68,30 +63,22 @@ impl Predicate for InnerFacePredicate {
             };
 
             let symmetry = check_symmetry(&degrees_u8);
-            // eprintln!("[InnerFace] Symmetry: {:?}", symmetry);
             match symmetry {
-                SymmetryType::NonCanonical => {
-                    // eprintln!("[InnerFace] REJECT: non-canonical");
-                    PredicateResult::Failure
-                }
+                SymmetryType::NonCanonical => PredicateResult::Failure,
                 SymmetryType::Canonical | SymmetryType::Equivocal => {
-                    eprintln!("[InnerFace] ACCEPT: canonical/equivocal");
-
                     // Only set up central face for NCOLORS > 4
                     #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
                     {
                         // Copy degrees array to avoid borrow checker issues
                         let degrees_copy = *degrees;
-                        eprintln!("[InnerFace] setting up");
                         // Set up central face configuration before proceeding to VennPredicate
-                        if let Err(failure) = propagation::setup_central_face(
+                        if let Err(_failure) = propagation::setup_central_face(
                             &ctx.memo,
                             &mut ctx.state,
                             &mut ctx.trail,
                             &degrees_copy,
                         ) {
                             // Setup failed - constraints are unsatisfiable for this degree signature
-                            eprintln!("[InnerFace] setting up {}", failure);
                             return PredicateResult::Failure;
                         }
                     }
@@ -101,7 +88,6 @@ impl Predicate for InnerFacePredicate {
             }
         } else {
             // Generate choices for this round
-            // eprintln!("[InnerFace] Returning Choices({})", NCOLORS - 2);
             PredicateResult::Choices(NCOLORS - 2)
         }
     }
@@ -114,7 +100,6 @@ impl Predicate for InnerFacePredicate {
     ) -> PredicateResult {
         // Map choice to degree: 0→NCOLORS, 1→NCOLORS-1, ..., (NCOLORS-3)→3
         let degree = (NCOLORS - choice) as u64;
-        // eprintln!("[InnerFace retry_pred] round={}, choice={}, degree={}", round, choice, degree);
 
         // Invariant: The engine guarantees choice is in range [0, NCOLORS-3], which
         // ensures degree is in [3, NCOLORS]. This assertion catches programming errors
@@ -129,12 +114,7 @@ impl Predicate for InnerFacePredicate {
 
         // Set the degree for this round
         ctx.set_face_degree(round, degree);
-        // eprintln!("[InnerFace] Set degree[{}] = {}", round, degree);
 
-        // Additional constraint checking could go here
-        // For now, we just accept any degree in the valid range
-
-        // eprintln!("[InnerFace] Returning SuccessSamePredicate");
         PredicateResult::SuccessSamePredicate
     }
 
