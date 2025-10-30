@@ -2,6 +2,10 @@
 
 This document describes the test suite for the Rust implementation.
 
+> **Note**: For detailed visual explanations of Venn diagram structure (face arrangements, vertex orientations, edge relationships), see **[TESTS-C.md](TESTS-C.md)**. That document provides comprehensive illustrations with images that are helpful for understanding the mathematical concepts, even though it documents the C implementation. It's a better place to start if you want to understand the problem space deeply.
+>
+> This document focuses on what the Rust tests actually validate: solution counts, search correctness, and canonicality filtering.
+
 ## Overview
 
 The Rust test suite validates the Venn diagram search implementation for N=3, 4, 5, and 6 colors. Tests use conditional compilation with feature flags to build for different values of NCOLORS.
