@@ -189,7 +189,7 @@ pub trait OpenClose {
 ```
 
 - `open`: Called when entering the predicate (forward execution). Returns `false` to fail immediately.
-- `close`: Called when backtracking through the predicate (backward execution).
+- `close`: Called when backtracking through the predicate (backward execution). Always fails to continue backtracking.
 
 This pattern is useful for:
 - Opening/closing output files around a search phase
