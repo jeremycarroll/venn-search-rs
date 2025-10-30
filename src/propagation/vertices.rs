@@ -6,7 +6,8 @@
 //! and enforces the triangle constraint by counting crossings at vertices.
 
 use crate::context::{DynamicState, MemoizedData};
-use crate::geometry::{CycleId, EdgeDynamic, MAX_CROSSINGS_PER_PAIR};
+use crate::geometry::{CycleId, MAX_CROSSINGS_PER_PAIR};
+use crate::state::EdgeDynamic;
 use crate::trail::Trail;
 use std::ptr::NonNull;
 

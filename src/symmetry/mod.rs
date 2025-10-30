@@ -4,57 +4,19 @@
 //!
 //! This module provides functionality to check whether a sequence of face degrees
 //! is canonical under the symmetry group of rotations and reflections.
+//!
+//! ## Module Structure
+//!
+//! - `canonical`: Canonicality checking under dihedral symmetry (includes dihedral group constants)
+//! - `mod`: Public API and re-exports
 
-pub mod s6;
+pub mod canonical;
 
-/// Helper macro to generate dihedral group elements at compile time.
-///
-/// The dihedral group D_n has 2n elements:
-/// - n rotations: identity, rotate by 1, rotate by 2, ..., rotate by n-1
-/// - n reflections: reflect, then rotate by 0, 1, 2, ..., n-1
-macro_rules! make_dihedral_group {
-    ($n:expr) => {{
-        const N: usize = $n;
-        const SIZE: usize = 2 * N;
-        let mut result = [[0u8; N]; SIZE];
-
-        // Generate N rotations
-        let mut i = 0;
-        while i < N {
-            let mut j = 0;
-            while j < N {
-                result[i][j] = ((i + j) % N) as u8;
-                j += 1;
-            }
-            i += 1;
-        }
-
-        // Generate N reflections (rotation of reverse)
-        let mut i = 0;
-        while i < N {
-            let mut j = 0;
-            while j < N {
-                result[N + i][j] = ((N - 1 - j + i) % N) as u8;
-                j += 1;
-            }
-            i += 1;
-        }
-
-        result
-    }};
-}
-
-/// Dihedral group D_3 for NCOLORS=3 (6 elements: 3 rotations + 3 reflections).
-pub const DIHEDRAL_GROUP_3: [[u8; 3]; 6] = make_dihedral_group!(3);
-
-/// Dihedral group D_4 for NCOLORS=4 (8 elements: 4 rotations + 4 reflections).
-pub const DIHEDRAL_GROUP_4: [[u8; 4]; 8] = make_dihedral_group!(4);
-
-/// Dihedral group D_5 for NCOLORS=5 (10 elements: 5 rotations + 5 reflections).
-pub const DIHEDRAL_GROUP_5: [[u8; 5]; 10] = make_dihedral_group!(5);
-
-/// Dihedral group D_6 for NCOLORS=6 (12 elements: 6 rotations + 6 reflections).
-pub const DIHEDRAL_GROUP_6: [[u8; 6]; 12] = make_dihedral_group!(6);
+// Re-export main types and constants
+pub use canonical::{
+    check_solution_canonicality, check_symmetry, SymmetryType, DIHEDRAL_GROUP_3,
+    DIHEDRAL_GROUP_4, DIHEDRAL_GROUP_5, DIHEDRAL_GROUP_6,
+};
 
 #[cfg(test)]
 mod tests {

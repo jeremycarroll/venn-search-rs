@@ -6,8 +6,9 @@
 //! and is tracked on the trail for backtracking.
 
 use crate::geometry::constants::NCOLORS;
-use crate::geometry::{CycleId, CycleSet, EdgeDynamic};
+use crate::geometry::{CycleId, CycleSet};
 use crate::memo::FacesMemo;
+use crate::state::EdgeDynamic;
 
 /// Per-face dynamic state (mutable, trail-tracked).
 #[derive(Debug)]

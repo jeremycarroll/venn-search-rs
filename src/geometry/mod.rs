@@ -28,6 +28,6 @@ pub use constants::*;
 pub use corner::{CornerWalkState, CrossingCounts, MAX_CROSSINGS_PER_PAIR};
 pub use cycle::{Cycle, CycleId};
 pub use cycle_set::CycleSet;
-pub use edge::{CurveLink, EdgeDynamic, EdgeMemo, EdgeRef};
+pub use edge::{CurveLink, EdgeMemo, EdgeRef};
 pub use face::{Face, FaceId};
 pub use vertex::{Vertex, VertexId};

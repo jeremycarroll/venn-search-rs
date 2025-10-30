@@ -1,11 +1,63 @@
 // Copyright (C) 2025 Jeremy J. Carroll. See LICENSE for details.
 
-//! S6 symmetry checking for face degree sequences.
+//! Canonicality checking under dihedral symmetry.
 //!
 //! This module implements canonicality checking for sequences of face degrees
 //! under the dihedral group D_NCOLORS (rotations and reflections).
+//!
+//! It includes the dihedral group constants for N=3,4,5,6 and the algorithms
+//! for checking whether degree sequences are canonical, equivocal, or non-canonical.
 
 use crate::geometry::constants::NCOLORS;
+
+/// Helper macro to generate dihedral group elements at compile time.
+///
+/// The dihedral group D_n has 2n elements:
+/// - n rotations: identity, rotate by 1, rotate by 2, ..., rotate by n-1
+/// - n reflections: reflect, then rotate by 0, 1, 2, ..., n-1
+macro_rules! make_dihedral_group {
+    ($n:expr) => {{
+        const N: usize = $n;
+        const SIZE: usize = 2 * N;
+        let mut result = [[0u8; N]; SIZE];
+
+        // Generate N rotations
+        let mut i = 0;
+        while i < N {
+            let mut j = 0;
+            while j < N {
+                result[i][j] = ((i + j) % N) as u8;
+                j += 1;
+            }
+            i += 1;
+        }
+
+        // Generate N reflections (rotation of reverse)
+        let mut i = 0;
+        while i < N {
+            let mut j = 0;
+            while j < N {
+                result[N + i][j] = ((N - 1 - j + i) % N) as u8;
+                j += 1;
+            }
+            i += 1;
+        }
+
+        result
+    }};
+}
+
+/// Dihedral group D_3 for NCOLORS=3 (6 elements: 3 rotations + 3 reflections).
+pub const DIHEDRAL_GROUP_3: [[u8; 3]; 6] = make_dihedral_group!(3);
+
+/// Dihedral group D_4 for NCOLORS=4 (8 elements: 4 rotations + 4 reflections).
+pub const DIHEDRAL_GROUP_4: [[u8; 4]; 8] = make_dihedral_group!(4);
+
+/// Dihedral group D_5 for NCOLORS=5 (10 elements: 5 rotations + 5 reflections).
+pub const DIHEDRAL_GROUP_5: [[u8; 5]; 10] = make_dihedral_group!(5);
+
+/// Dihedral group D_6 for NCOLORS=6 (12 elements: 6 rotations + 6 reflections).
+pub const DIHEDRAL_GROUP_6: [[u8; 6]; 12] = make_dihedral_group!(6);
 
 /// Result of symmetry checking for a face degree sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,19 +89,19 @@ pub enum SymmetryType {
 pub fn check_symmetry(degrees: &[u8; NCOLORS]) -> SymmetryType {
     // Get the appropriate dihedral group for the current NCOLORS using conditional compilation
     #[cfg(feature = "ncolors_3")]
-    let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_3;
+    let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_3;
 
     #[cfg(feature = "ncolors_4")]
-    let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_4;
+    let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_4;
 
     #[cfg(feature = "ncolors_5")]
-    let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_5;
+    let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_5;
 
     #[cfg(any(
         feature = "ncolors_6",
         not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))
     ))]
-    let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_6;
+    let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_6;
 
     // Find the lexicographically maximal permutation and count ties
     let mut max_perm = [0u8; NCOLORS];
@@ -187,19 +239,19 @@ pub fn check_solution_canonicality(
 
     // Get the appropriate dihedral group
     #[cfg(feature = "ncolors_3")]
-    let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_3;
+    let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_3;
 
     #[cfg(feature = "ncolors_4")]
-    let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_4;
+    let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_4;
 
     #[cfg(feature = "ncolors_5")]
-    let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_5;
+    let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_5;
 
     #[cfg(any(
         feature = "ncolors_6",
         not(any(feature = "ncolors_3", feature = "ncolors_4", feature = "ncolors_5"))
     ))]
-    let group: &[[u8; NCOLORS]] = &super::DIHEDRAL_GROUP_6;
+    let group: &[[u8; NCOLORS]] = &DIHEDRAL_GROUP_6;
 
     // Extract cycle lengths for all faces in canonical order
     let mut degrees = [0u8; NFACES];

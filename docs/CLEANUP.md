@@ -27,7 +27,7 @@ The code was developed incrementally over several phases with focus on correctne
 
 ### High Priority
 
-- [ ] **Remove debug output** - Clean up eprintln! statements and debug flags
+- [x] **Remove debug output** - Clean up eprintln! statements and debug flags
   - src/symmetry/s6.rs: Remove static mut DEBUG_FIRST and associated logging
   - src/predicates/innerface.rs: Clean up debug output
   - Any other temporary debug code
@@ -37,7 +37,7 @@ The code was developed incrementally over several phases with focus on correctne
   - src/memo/mod.rs: Could be cleaner with submodules
   - src/context/mod.rs: Separate MemoizedData and DynamicState
 
-- [ ] **Reorganize symmetry module**
+- [x] **Reorganize symmetry module**
   - Rename src/symmetry/s6.rs to src/symmetry/dihedral.rs or src/symmetry/canonical.rs
   - Move dihedral group constants from mod.rs into the renamed file
   - Better separation between degree signature checking and solution checking

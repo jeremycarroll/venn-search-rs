@@ -10,7 +10,7 @@ use crate::engine::{Predicate, PredicateResult};
 use crate::geometry::constants::{NCOLORS, TOTAL_CENTRAL_NEIGHBOR_DEGREE};
 #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
 use crate::propagation;
-use crate::symmetry::s6::{check_symmetry, SymmetryType};
+use crate::symmetry::{check_symmetry, SymmetryType};
 
 /// InnerFacePredicate finds valid degree signatures for the NCOLORS symmetric faces.
 ///
