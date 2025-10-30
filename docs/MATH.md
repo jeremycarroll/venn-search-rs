@@ -103,7 +103,7 @@ is by identifying a Venn diagram by the facial cycles of every face.
 
 We have a small number of choices for the facial cycle depending on N, i.e. $\sum_{k=3}^N {}_N \mathrm{ C }_k (N-1)! $
 
-We can order these so that the cycle (a b c d e f) is last (one way is shown in the definition of `initializeCycles` in [color.c](../color.c)), hence giving a number for each facial cycle, with a simple clockwise rotation being maximal. 
+We can order these so that the cycle (a b c d e f) is last (one way is shown in `src/memo/cycles.rs`), hence giving a number for each facial cycle, with a simple clockwise rotation being maximal. 
 
 Given a labelling of a Venn diagram we construct the facial cycle signature being
 a sequence of $2^N$ numbers, each being the identifying number of the facial cycle of the corresonding face 
