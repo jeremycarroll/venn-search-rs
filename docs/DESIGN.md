@@ -456,13 +456,32 @@ The Rust implementation follows standard Rust conventions:
 
 ## Error Handling
 
-The implementation uses panics for invariant violations (which should never occur if the algorithm is correct):
+The implementation uses two approaches:
+
+**1. Result types for search failures**:
+Constraint propagation returns `Result<(), PropagationFailure>` to handle search failures gracefully:
+
+```rust
+pub enum PropagationFailure {
+    NoMatchingCycles { face_id: usize, depth: usize },
+    ConflictingConstraints { ... },
+    CrossingLimitExceeded { ... },
+    TooManyCorners { ... },
+    DisconnectedCurve { ... },
+    DepthExceeded { depth: usize },
+}
+```
+
+These errors indicate search branches that should fail and backtrack, not program bugs.
+
+**2. Panics for invariant violations**:
+Used for conditions that should never occur if the algorithm is correct:
 
 ```rust
 .expect("Face must have cycle assigned")
 ```
 
-For user-facing errors (Phase 8+), will use `Result<T, E>` with appropriate error types.
+These indicate programming errors, not search failures.
 
 ## Testing Strategy
 
