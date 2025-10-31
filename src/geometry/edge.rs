@@ -7,7 +7,7 @@
 //! - **EdgeRef**: Stable reference to an edge (face_id, color_idx)
 //! - **CurveLink**: Connection from edge to vertex via next edge
 //!
-//! For the DYNAMIC (mutable, trail-tracked) edge data, see `state::EdgeDynamic`.
+//! For the DYNAMIC (mutable, trail-tracked) edge data, see `state::DynamicEdge`.
 //!
 //! Each face has NCOLORS edges (one per color), stored in the edges array in FaceMemo.
 //! Edges are referenced via EdgeRef (face_id, color_idx) which provides stable references
@@ -84,7 +84,7 @@ pub struct EdgeMemo {
     ///
     /// During initialization, we precompute all possible ways this edge could
     /// connect to a vertex. During search, one of these is selected and placed
-    /// in state::EdgeDynamic.
+    /// in state::DynamicEdge.
     pub possibly_to: [Option<CurveLink>; NCOLORS],
 }
 

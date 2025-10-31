@@ -14,6 +14,6 @@ pub mod edge;
 pub mod faces;
 pub mod statistics;
 
-pub use edge::EdgeDynamic;
+pub use edge::DynamicEdge;
 pub use faces::{DynamicFace, DynamicFaces};
 pub use statistics::Statistics;

@@ -7,7 +7,7 @@
 
 use crate::context::{DynamicState, MemoizedData};
 use crate::geometry::{CycleId, MAX_CROSSINGS_PER_PAIR};
-use crate::state::EdgeDynamic;
+use crate::state::DynamicEdge;
 use crate::trail::Trail;
 use std::ptr::NonNull;
 
@@ -148,7 +148,7 @@ pub(super) fn check_face_vertices(
                             [edge_color_idx]
                             .possibly_to[other_color_idx]
                         {
-                            let encoded = EdgeDynamic::encode_to(Some(link_to_set));
+                            let encoded = DynamicEdge::encode_to(Some(link_to_set));
                             unsafe {
                                 trail.record_and_set(
                                     NonNull::from(

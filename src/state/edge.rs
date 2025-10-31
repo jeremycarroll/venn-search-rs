@@ -16,13 +16,13 @@ const CURVELINK_SOME_BIT: u64 = 1 << 63;
 
 /// DYNAMIC (mutable, trail-tracked) edge data.
 ///
-/// EdgeDynamic contains runtime state that changes during search:
+/// DynamicEdge contains runtime state that changes during search:
 /// - Current vertex connection (set during vertex configuration)
 ///
-/// Each DynamicFace has NCOLORS EdgeDynamic structures in its edge_dynamic array.
+/// Each DynamicFace has NCOLORS DynamicEdge structures in its edge_dynamic array.
 /// All modifications must be trail-tracked for backtracking.
 #[derive(Debug, Clone, Copy)]
-pub struct EdgeDynamic {
+pub struct DynamicEdge {
     /// Encoded vertex connection (set during search, trail-tracked)
     ///
     /// This is one of the possible connections from EdgeMemo.possibly_to,
@@ -40,8 +40,8 @@ pub struct EdgeDynamic {
     pub to_encoded: u64,
 }
 
-impl EdgeDynamic {
-    /// Create a new EdgeDynamic with no vertex connection.
+impl DynamicEdge {
+    /// Create a new DynamicEdge with no vertex connection.
     pub fn new() -> Self {
         Self { to_encoded: 0 }
     }
@@ -56,7 +56,7 @@ impl EdgeDynamic {
     ///
     /// This method is used with trail tracking like:
     /// ```ignore
-    /// let encoded = EdgeDynamic::encode_to(Some(link));
+    /// let encoded = DynamicEdge::encode_to(Some(link));
     /// trail.record_and_set(ptr_to_to_encoded, encoded);
     /// ```
     #[inline]
@@ -130,7 +130,7 @@ fn decode_curve_link(encoded: u64) -> Option<CurveLink> {
     }
 }
 
-impl Default for EdgeDynamic {
+impl Default for DynamicEdge {
     fn default() -> Self {
         Self::new()
     }
@@ -142,11 +142,11 @@ mod tests {
 
     #[test]
     fn test_edge_dynamic_default() {
-        let edge = EdgeDynamic::new();
+        let edge = DynamicEdge::new();
         assert!(edge.get_to().is_none());
         assert_eq!(edge.to_encoded, 0);
 
-        let edge2 = EdgeDynamic::default();
+        let edge2 = DynamicEdge::default();
         assert!(edge2.get_to().is_none());
         assert_eq!(edge2.to_encoded, 0);
     }
@@ -154,20 +154,20 @@ mod tests {
     #[test]
     fn test_edge_dynamic_encode_decode() {
         // Test None encoding
-        let encoded_none = EdgeDynamic::encode_to(None);
+        let encoded_none = DynamicEdge::encode_to(None);
         assert_eq!(encoded_none, 0);
         assert_eq!(decode_curve_link(encoded_none), None);
 
         // Test Some(CurveLink) encoding
         let link = CurveLink::new(EdgeRef::new(42, 3), 123);
-        let encoded = EdgeDynamic::encode_to(Some(link));
+        let encoded = DynamicEdge::encode_to(Some(link));
         assert_ne!(encoded, 0);
 
         let decoded = decode_curve_link(encoded);
         assert_eq!(decoded, Some(link));
 
-        // Test with EdgeDynamic accessor
-        let mut edge = EdgeDynamic::new();
+        // Test with DynamicEdge accessor
+        let mut edge = DynamicEdge::new();
         edge.to_encoded = encoded;
         assert_eq!(edge.get_to(), Some(link));
     }
@@ -180,7 +180,7 @@ mod tests {
         let max_vertex = 479; // 9 bits (0-511, we use 0-479)
 
         let link = CurveLink::new(EdgeRef::new(max_face, max_color), max_vertex);
-        let encoded = EdgeDynamic::encode_to(Some(link));
+        let encoded = DynamicEdge::encode_to(Some(link));
         let decoded = decode_curve_link(encoded);
 
         assert_eq!(decoded, Some(link));
