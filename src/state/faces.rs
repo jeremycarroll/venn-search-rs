@@ -6,8 +6,9 @@
 //! and is tracked on the trail for backtracking.
 
 use crate::geometry::constants::NCOLORS;
-use crate::geometry::{CycleId, CycleSet, EdgeDynamic};
+use crate::geometry::{CycleId, CycleSet};
 use crate::memo::FacesMemo;
+use crate::state::DynamicEdge;
 
 /// Per-face dynamic state (mutable, trail-tracked).
 #[derive(Debug)]
@@ -43,11 +44,11 @@ pub struct DynamicFace {
     /// `edge_dynamic[i]` contains the runtime state for edge of color i on this face.
     /// This is the DYNAMIC part that pairs with EdgeMemo in Face.edges[i].
     ///
-    /// The `to` field in each EdgeDynamic is set during search by dynamicCheckFacePoints
+    /// The `to` field in each DynamicEdge is set during search by dynamicCheckFacePoints
     /// and must be trail-tracked for backtracking.
     ///
     /// Matches DYNAMIC fields of C `struct edge`.
-    pub edge_dynamic: [EdgeDynamic; NCOLORS],
+    pub edge_dynamic: [DynamicEdge; NCOLORS],
 
     /// Next face in the dual graph cycle (trail-tracked).
     ///
@@ -73,7 +74,7 @@ impl DynamicFace {
             current_cycle_encoded: 0, // None
             possible_cycles,
             cycle_count,
-            edge_dynamic: [EdgeDynamic::new(); NCOLORS],
+            edge_dynamic: [DynamicEdge::new(); NCOLORS],
             next_face_id_encoded: 0,     // unset
             previous_face_id_encoded: 0, // unset
         }

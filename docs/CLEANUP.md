@@ -27,25 +27,25 @@ The code was developed incrementally over several phases with focus on correctne
 
 ### High Priority
 
-- [ ] **Remove debug output** - Clean up eprintln! statements and debug flags
+- [x] **Remove debug output** - Clean up eprintln! statements and debug flags
   - src/symmetry/s6.rs: Remove static mut DEBUG_FIRST and associated logging
   - src/predicates/innerface.rs: Clean up debug output
   - Any other temporary debug code
 
-- [ ] **Break up large mod.rs files**
-  - src/propagation/mod.rs (~800 lines): Extract modules for different constraint types
-  - src/memo/mod.rs: Could be cleaner with submodules
-  - src/context/mod.rs: Separate MemoizedData and DynamicState
+- [x] **Break up large mod.rs files**
+  - ✅ src/context/mod.rs: Separated MemoizedData and DynamicState into submodules (482 → 316 lines)
+  - ⬜ src/propagation/mod.rs (~800 lines): Extract modules for different constraint types (deferred)
+  - ⬜ src/memo/mod.rs: Could be cleaner with submodules (deferred)
 
-- [ ] **Reorganize symmetry module**
-  - Rename src/symmetry/s6.rs to src/symmetry/dihedral.rs or src/symmetry/canonical.rs
-  - Move dihedral group constants from mod.rs into the renamed file
-  - Better separation between degree signature checking and solution checking
+- [x] **Reorganize symmetry module**
+  - ✅ Renamed src/symmetry/s6.rs → src/symmetry/canonical.rs
+  - ✅ Moved dihedral group constants from mod.rs into canonical.rs
+  - ✅ Better separation between degree signature checking and solution checking
 
-- [ ] **Move EdgeDynamic to state module**
-  - Currently in src/geometry/edge.rs (with static MEMO data)
-  - Should be in src/state/ with other dynamic/trail-tracked components
-  - Fix inconsistency: DynamicFace in state/, but EdgeDynamic in geometry/
+- [x] **Move EdgeDynamic to state module**
+  - ✅ Now DynamicEdge in src/state/edge.rs (separated from geometry/edge.rs)
+  - ✅ Consistent with DynamicFace, DynamicFaces pattern
+  - ✅ Fixed MEMO/DYNAMIC separation: EdgeMemo (geometry) vs DynamicEdge (state)
 
 ### Medium Priority
 
@@ -177,11 +177,11 @@ See **[TESTS.md](TESTS.md)** for complete test documentation.
 | Component | Lines | Complexity | Priority |
 |-----------|-------|------------|----------|
 | src/propagation/mod.rs | ~800 | High | Review & split |
-| src/context/mod.rs | ~400 | Medium | Review |
+| src/context/mod.rs | ~316 | Medium | ✅ Done (split into submodules) |
 | src/memo/* | ~600 | Medium | OK |
 | src/geometry/* | ~800 | Low | OK |
 | src/predicates/* | ~500 | Medium | Review |
-| src/symmetry/* | ~400 | Medium | Reorganize |
+| src/symmetry/* | ~200 | Low | ✅ Done (reorganized) |
 | tests/* | ~1000 | Low | Some cleanup |
 
 **Total implementation**: ~5000 lines (excluding tests)
