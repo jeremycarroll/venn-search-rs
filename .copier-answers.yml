@@ -1,0 +1,12 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: 58021a7
+_src_path: https://github.com/1000lines/symphony-client-template.git
+build_command: cargo build --release
+cadence_app_slug: 1000lines-cadence
+cadence_reviewer: claude
+default_branch: main
+linear_team_key: '100'
+repo_slug: jeremycarroll/venn-search-rs
+symphony_app_slug: 1000lines-symphony
+test_command: cargo test --release
+

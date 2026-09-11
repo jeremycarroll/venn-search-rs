@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "symphony-repository/v1",
+  "linear": {
+    "teamKey": "100"
+  },
+  "workingDirectory": ".",
+  "instructions": [
+    "SYMPHONY.md",
+    "CLAUDE.md"
+  ],
+  "commands": {
+    "build": [
+      [
+        "bash",
+        "-lc",
+        "cargo build --release"
+      ]
+    ],
+    "test": [
+      [
+        "bash",
+        "-lc",
+        "cargo test --release"
+      ]
+    ],
+    "lint": [
+      [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      [
+        "cargo",
+        "clippy",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    ]
+  },
+  "ci": {
+    "requiredChecks": [
+      {
+        "name": "Test Suite (NCOLORS=3)",
+        "workflow": ".github/workflows/ci.yml",
+        "appId": 15368
+      },
+      {
+        "name": "Test Suite (NCOLORS=4)",
+        "workflow": ".github/workflows/ci.yml",
+        "appId": 15368
+      },
+      {
+        "name": "Test Suite (NCOLORS=5)",
+        "workflow": ".github/workflows/ci.yml",
+        "appId": 15368
+      },
+      {
+        "name": "Test Suite (NCOLORS=6)",
+        "workflow": ".github/workflows/ci.yml",
+        "appId": 15368
+      },
+      {
+        "name": "Clippy (Linting)",
+        "workflow": ".github/workflows/ci.yml",
+        "appId": 15368
+      },
+      {
+        "name": "Format Check",
+        "workflow": ".github/workflows/ci.yml",
+        "appId": 15368
+      }
+    ]
+  }
+}

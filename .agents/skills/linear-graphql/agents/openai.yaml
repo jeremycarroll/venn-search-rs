@@ -1,0 +1,4 @@
+interface:
+  display_name: "Linear GraphQL"
+  short_description: "Run Linear GraphQL safely from Codex"
+  default_prompt: "Use $linear-graphql to query a Linear issue via GraphQL."
