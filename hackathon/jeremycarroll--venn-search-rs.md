@@ -23,7 +23,7 @@
 - Configured remote validation and CI-completion wakeups; removed redundant command workflow per participant instruction. Build/test execution belongs to GitHub runners.
 - Shared tooling checkout: /Users/jeremy/hackathon/symphony-example at 0d0d496061b4e67afc3d5b90afaec9986339f150.
 
-- Setup PR: https://github.com/jeremycarroll/venn-search-rs/pull/16. Initial CI found one existing Clippy useless_borrows_in_formatting failure; removed the redundant borrow without changing behavior.
+- Setup PR: https://github.com/jeremycarroll/venn-search-rs/pull/16. Initial CI found existing Clippy useless_borrows_in_formatting failures in the library and shared test helper; removed redundant borrows without changing behavior.
 
 ## End-of-day result
 
