@@ -616,7 +616,9 @@ mod tests {
                 let full_cycle = cycles.get(cycle_id as u64).len() == NCOLORS;
                 let adjacent = if full_cycle { Some(face_id) } else { None };
                 assert_eq!(
-                    memo.faces[face_id].possible_cycles.contains(cycle_id as u64),
+                    memo.faces[face_id]
+                        .possible_cycles
+                        .contains(cycle_id as u64),
                     full_cycle
                 );
                 assert_eq!(memo.next_face_by_cycle[face_id][cycle_id], adjacent);
