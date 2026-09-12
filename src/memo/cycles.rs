@@ -1,16 +1,16 @@
 // Copyright (C) 2025 Jeremy J. Carroll. See LICENSE for details.
 
-//! Cycle generation and global cycles array.
+//! Cycle generation and per-context cycle tables.
 //!
 //! This module generates all possible facial cycles for the current NCOLORS
-//! and provides the global Cycles array used throughout the search.
+//! and provides the cycle array owned by each search context.
 //!
 //! # Cycle Generation Algorithm
 //!
 //! Cycles are generated in a specific order to ensure deterministic behavior:
 //! 1. Grouped by maximum color (from 2 to NCOLORS-1)
 //! 2. Within each max color, ordered by length (3 to max+1)
-//! 3. Within each length, ordered lexicographically
+//! 3. Within each length, ordered in reverse lexicographic order
 //!
 //! This ordering ensures that cycles using fewer colors come first, which
 //! helps with incremental search strategies.
@@ -26,8 +26,8 @@
 //! # Example
 //!
 //! For NCOLORS=3, we generate 2 cycles:
-//! - (abc) - length 3, max color 2
-//! - (acb) - length 3, max color 2
+//! - ID 0: (acb) - length 3, max color 2
+//! - ID 1: (abc) - length 3, max color 2
 //!
 //! For NCOLORS=6, we generate 394 cycles total.
 
@@ -79,7 +79,7 @@ pub struct CyclesMemo {
     /// contain the directed edge from color i to color j.
     ///
     /// **Design note**: Although this checks DIRECTED edges (i→j distinct from j→i),
-    /// only the upper triangle is used. The search algorithm (venn.c:98-109) iterates
+    /// only the upper triangle is used. The search iterates
     /// `for i < j` and only accesses `[i][j]` entries. The lower triangle ([j][i] for j > i)
     /// is never populated or accessed, and attempting to access it is a bug.
     ///
@@ -89,10 +89,11 @@ pub struct CyclesMemo {
     cycles_omitting_color_pair: [[[u64; CYCLESET_LENGTH]; NCOLORS]; NCOLORS],
 }
 
-/// Global array of all possible facial cycles.
+/// Per-context array of all possible facial cycles.
 ///
 /// This array contains all NCYCLES cycles, indexed by CycleId (0..NCYCLES-1).
-/// Cycles are generated once during initialization and never change.
+/// Cycles are generated and their direction tables filled during initialization.
+/// Search then reads the completed cycles without changing them.
 ///
 /// # Memory
 ///
@@ -286,10 +287,13 @@ impl CyclesMemo {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// let cycles_memo = CyclesMemo::initialize(&cycles);
-    /// let omitting = cycles_memo.get_cycles_omitting_color_pair(2, 4); // OK: 2 < 4
-    /// // let omitting = cycles_memo.get_cycles_omitting_color_pair(4, 2); // PANIC in debug!
+    /// ```
+    /// use venn_search::memo::{CyclesArray, CyclesMemo};
+    ///
+    /// let mut cycles = CyclesArray::generate();
+    /// let cycles_memo = CyclesMemo::initialize(&mut cycles);
+    /// let omitting = cycles_memo.get_cycles_omitting_color_pair(0, 1);
+    /// assert_ne!(omitting[0] & 1, 0); // Cycle 0 is (a,c,b), without a→b.
     /// ```
     #[inline]
     pub fn get_cycles_omitting_color_pair(&self, i: usize, j: usize) -> &[u64; CYCLESET_LENGTH] {
@@ -316,9 +320,13 @@ impl CyclesMemo {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// let cycles_memo = CyclesMemo::initialize(&cycles);
-    /// let omitting = cycles_memo.get_cycles_omitting_one_color(3); // Cycles without color 3
+    /// ```
+    /// use venn_search::memo::{CyclesArray, CyclesMemo};
+    ///
+    /// let mut cycles = CyclesArray::generate();
+    /// let cycles_memo = CyclesMemo::initialize(&mut cycles);
+    /// let omitting = cycles_memo.get_cycles_omitting_one_color(2);
+    /// assert_eq!(omitting[0] & 1, 0); // Cycle 0 contains color 2 for every NCOLORS.
     /// ```
     #[inline]
     pub fn get_cycles_omitting_one_color(&self, color_idx: usize) -> [u64; CYCLESET_LENGTH] {

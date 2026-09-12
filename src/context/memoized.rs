@@ -6,26 +6,9 @@ use crate::memo::{CyclesArray, CyclesMemo, FacesMemo, VerticesMemo};
 
 /// Immutable precomputed data (Tier 1: MEMO).
 ///
-/// This data is computed once during initialization and never changes during search.
-/// It can be shared across multiple SearchContext instances (via copy or reference).
-///
-/// # Size Estimation
-///
-/// Measured size (Phase 6, NCOLORS=6):
-/// - Stack: ~16 KB (CyclesMemo lookup tables) + 88 bytes (Vec/Box headers + arrays)
-/// - Heap: ~214 KB
-///   - CyclesArray: ~12 KB (394 Cycle structs in Vec)
-///   - FacesMemo: ~55 KB (5 KB Face structs + 50 KB next/previous arrays)
-///   - VerticesMemo: ~147 KB (64×6×6 Option<Vertex> array in Box)
-/// - **Total: ~230 KB**
-///
-/// Future additions may increase size:
-/// - Edge relationship tables
-/// - PCO/Chirotope structures
-/// - Expected final size: ~250-300 KB
-///
-/// **Decision: Copy strategy confirmed** - At <1MB, copying per SearchContext
-/// provides excellent cache locality while enabling parallelization.
+/// Each SearchContext eagerly constructs and owns its own tables. Construction
+/// fills cycle directions and face/vertex links before returning; search then
+/// reads these tables without changing them. Clone copies the owned allocations.
 #[derive(Debug, Clone)]
 pub struct MemoizedData {
     /// All possible facial cycles (NCYCLES = 394 for NCOLORS=6)
@@ -39,9 +22,6 @@ pub struct MemoizedData {
 
     /// All vertex-related MEMO data (crossing point configurations)
     pub vertices: VerticesMemo,
-    // TODO: Add more MEMO fields in later phases:
-    // - Edge relationship tables
-    // - PCO/Chirotope structures
 }
 
 impl MemoizedData {
@@ -57,14 +37,14 @@ impl MemoizedData {
         let mut faces = FacesMemo::initialize(&cycles);
         let vertices = VerticesMemo::initialize();
 
-        // Phase 3: Link edges to vertices for corner detection
+        // Complete cross-references after both faces and vertices exist.
         faces.populate_vertex_links(&vertices);
 
         eprintln!(
             "[MemoizedData] Initialization complete ({} cycles, {} faces, {} possible vertices)",
             cycles.len(),
             faces.faces.len(),
-            vertices.vertices.len()
+            vertices.vertices_by_id.len()
         );
 
         Self {
@@ -79,5 +59,63 @@ impl MemoizedData {
 impl Default for MemoizedData {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geometry::constants::NPOINTS;
+    use crate::geometry::{CurveLink, EdgeRef};
+
+    #[test]
+    fn test_vertex_tables_and_face_links_agree() {
+        let memo = MemoizedData::new();
+        assert_eq!(memo.vertices.vertices_by_id.len(), NPOINTS);
+
+        for (outside, primary_rows) in memo.vertices.vertices.iter().enumerate() {
+            for (primary, secondary_row) in primary_rows.iter().enumerate() {
+                for (secondary, entry) in secondary_row.iter().enumerate() {
+                    let Some(vertex) = entry else { continue };
+                    assert_eq!(memo.vertices.get_vertex_by_id(vertex.id), Some(vertex));
+
+                    // The four incident regions differ only in the crossing colors.
+                    let primary_bit = 1 << primary;
+                    let secondary_bit = 1 << secondary;
+                    assert_eq!(outside & (primary_bit | secondary_bit), 0);
+                    assert_eq!(
+                        vertex.incoming_edges,
+                        [
+                            EdgeRef::new(outside | primary_bit | secondary_bit, primary),
+                            EdgeRef::new(outside, primary),
+                            EdgeRef::new(outside | primary_bit, secondary),
+                            EdgeRef::new(outside | secondary_bit, secondary),
+                        ]
+                    );
+
+                    for incoming in vertex.incoming_edges {
+                        let other = if incoming.color_idx == primary {
+                            secondary
+                        } else {
+                            primary
+                        };
+                        // Continuing along a curve crosses only the other curve.
+                        let next =
+                            EdgeRef::new(incoming.face_id ^ (1 << other), incoming.color_idx);
+                        let edge = &memo.faces.faces[incoming.face_id].edges[incoming.color_idx];
+                        assert_eq!(
+                            edge.possibly_to[other],
+                            Some(CurveLink::new(next, vertex.id))
+                        );
+                    }
+                }
+            }
+        }
+
+        for face in &memo.faces.faces {
+            for (color, edge) in face.edges.iter().enumerate() {
+                assert!(edge.possibly_to[color].is_none());
+            }
+        }
     }
 }
