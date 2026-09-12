@@ -5,6 +5,7 @@
 //! This module contains the main entry points for constraint propagation:
 //! - `propagate_cycle_choice` - Propagate a cycle assignment through the network
 //! - `restrict_face_cycles` - Restrict a face's possible cycles and handle cascading
+//!
 //! Mutators borrow the paired `TrailedState` owner; cycle words and counts
 //! are updated together by its `set_face_possible_cycles` method.
 

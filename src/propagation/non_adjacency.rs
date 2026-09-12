@@ -51,13 +51,7 @@ pub(super) fn propagate_non_adjacent_faces(
         let omitting_cycleset = CycleSet::from_words(omitting_words);
 
         // Restrict adjacent face to these cycles
-        restrict_face_cycles(
-            memo,
-            state,
-            adjacent_face_id,
-            &omitting_cycleset,
-            depth,
-        )?;
+        restrict_face_cycles(memo, state, adjacent_face_id, &omitting_cycleset, depth)?;
     }
 
     Ok(())
@@ -117,13 +111,7 @@ pub(super) fn propagate_non_vertex_adjacent_faces(
             let omitting_cycleset = CycleSet::from_words(omitting_words);
 
             // Restrict adjacent face to these cycles
-            restrict_face_cycles(
-                memo,
-                state,
-                adjacent_face_id,
-                &omitting_cycleset,
-                depth,
-            )?;
+            restrict_face_cycles(memo, state, adjacent_face_id, &omitting_cycleset, depth)?;
         }
     }
 

@@ -241,9 +241,15 @@ fn moved_owner_restores_all_ten_target_kinds() {
     owner.increment_edge_color_count(1, NCOLORS - 1);
     owner.mark_color_checked(NCOLORS - 1);
 
-    assert_eq!(owner.state().faces.faces[NFACES - 1].edge_dynamic[NCOLORS - 1].get_to(), Some(link));
+    assert_eq!(
+        owner.state().faces.faces[NFACES - 1].edge_dynamic[NCOLORS - 1].get_to(),
+        Some(link)
+    );
     assert_eq!(owner.state().faces.faces[NFACES - 1].next_face(), Some(0));
-    assert_eq!(owner.state().faces.faces[NFACES - 1].previous_face(), Some(NFACES - 1));
+    assert_eq!(
+        owner.state().faces.faces[NFACES - 1].previous_face(),
+        Some(NFACES - 1)
+    );
     assert_eq!(owner.state().crossing_counts.get(0, NCOLORS - 1), 6);
     assert_eq!(owner.state().vertex_processed[NPOINTS - 1], 1);
     assert_eq!(owner.state().edge_color_counts[1][NCOLORS - 1], 1);
@@ -301,7 +307,10 @@ fn failed_propagation_restores_partial_writes() {
     let checkpoint = ctx.checkpoint();
     let (memo, owner) = ctx.parts_mut();
     let result = propagate_cycle_choice(memo, owner, NFACES - 1, (NCYCLES - 1) as u64, 0);
-    assert!(matches!(result, Err(PropagationFailure::CrossingLimitExceeded { count: 7, .. })));
+    assert!(matches!(
+        result,
+        Err(PropagationFailure::CrossingLimitExceeded { count: 7, .. })
+    ));
     assert!(ctx.checkpoint() > checkpoint);
     ctx.rewind_to(checkpoint);
     assert_eq!(format!("{:?}", ctx.state()), before);

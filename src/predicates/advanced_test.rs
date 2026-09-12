@@ -136,8 +136,7 @@ impl Predicate for PrintFaceCyclesPredicate {
                 (0..NFACES).find(|&id| memo.faces.get_face(id).colors.len() == color_count);
 
             if let Some(start_id) = first_face {
-                let _expected_length =
-                    memo.faces.face_degree_by_color_count[color_count] as usize;
+                let _expected_length = memo.faces.face_degree_by_color_count[color_count] as usize;
                 let mut current_id = start_id;
                 let mut iterations = 0;
 

@@ -66,7 +66,9 @@ impl Predicate for VennPredicate {
                 // Set up with no restrictions (all zeros)
                 let no_restrictions = [0u64; NCOLORS];
                 let (memo, state) = ctx.parts_mut();
-                if let Err(_failure) = propagation::setup_central_face(memo, state, &no_restrictions) {
+                if let Err(_failure) =
+                    propagation::setup_central_face(memo, state, &no_restrictions)
+                {
                     return PredicateResult::Failure;
                 }
             }
@@ -128,7 +130,9 @@ impl Predicate for VennPredicate {
 
         // Constraint propagation
         let (memo, state) = ctx.parts_mut();
-        if let Err(_failure) = propagation::propagate_cycle_choice(memo, state, face_id, next_cycle, 0) {
+        if let Err(_failure) =
+            propagation::propagate_cycle_choice(memo, state, face_id, next_cycle, 0)
+        {
             // Propagation failed - engine will backtrack
             return PredicateResult::Failure;
         }

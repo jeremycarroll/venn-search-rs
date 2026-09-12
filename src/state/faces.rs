@@ -149,7 +149,12 @@ pub(crate) fn encode_optional_index(index: Option<u64>, limit: usize) -> u64 {
     match index {
         None => 0,
         Some(id) => {
-            assert!(id < limit as u64, "Optional index {} out of range 0..{}", id, limit);
+            assert!(
+                id < limit as u64,
+                "Optional index {} out of range 0..{}",
+                id,
+                limit
+            );
             id.checked_add(1).expect("Optional index overflow")
         }
     }
@@ -165,9 +170,13 @@ mod tests {
         for limit in [NCYCLES, NFACES] {
             assert_eq!(encode_optional_index(None, limit), 0);
             assert_eq!(encode_optional_index(Some(0), limit), 1);
-            assert_eq!(encode_optional_index(Some((limit - 1) as u64), limit), limit as u64);
+            assert_eq!(
+                encode_optional_index(Some((limit - 1) as u64), limit),
+                limit as u64
+            );
             assert!(
-                std::panic::catch_unwind(|| encode_optional_index(Some(limit as u64), limit)).is_err()
+                std::panic::catch_unwind(|| encode_optional_index(Some(limit as u64), limit))
+                    .is_err()
             );
         }
     }

@@ -73,7 +73,9 @@ impl Predicate for InnerFacePredicate {
                         let degrees_copy = *degrees;
                         // Set up central face configuration before proceeding to VennPredicate
                         let (memo, state) = ctx.parts_mut();
-                        if let Err(_failure) = propagation::setup_central_face(memo, state, &degrees_copy) {
+                        if let Err(_failure) =
+                            propagation::setup_central_face(memo, state, &degrees_copy)
+                        {
                             // Setup failed - constraints are unsatisfiable for this degree signature
                             return PredicateResult::Failure;
                         }

@@ -126,8 +126,9 @@ pub(super) fn check_face_vertices(
                     let edge_color_idx = edge_ref.color_idx;
 
                     // Set edge->to if not already set (C: dynamicProcessIncomingEdge)
-                    let existing_to =
-                        state.state().faces.faces[edge_face_id].edge_dynamic[edge_color_idx].get_to();
+                    let existing_to = state.state().faces.faces[edge_face_id].edge_dynamic
+                        [edge_color_idx]
+                        .get_to();
                     if existing_to.is_none() {
                         // Find which color this edge connects to at this vertex
                         let edge_color = crate::geometry::Color::new(edge_color_idx as u8);

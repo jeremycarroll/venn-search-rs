@@ -123,7 +123,10 @@ impl TrailedState {
     /// The checkpoint must originate from this owner, without an intervening reset,
     /// and be no greater than the current log length. Rewind costs O(k) undone writes.
     pub fn rewind_to(&mut self, checkpoint: usize) {
-        assert!(checkpoint <= self.trail.len(), "Checkpoint beyond trail end");
+        assert!(
+            checkpoint <= self.trail.len(),
+            "Checkpoint beyond trail end"
+        );
         let target = checkpoint.max(self.trail.frozen_checkpoint.unwrap_or(0));
         while self.trail.len() > target {
             let entry = self.trail.entries.pop().unwrap();
