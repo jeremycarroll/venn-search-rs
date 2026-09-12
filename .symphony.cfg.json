@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "symphony-repository/v1",
+  "linear": {"teamKey": "100"},
+  "workingDirectory": ".",
+  "instructions": ["SYMPHONY.md"],
+  "commands": {
+    "build": [["bash", "-lc", "cargo build --release\n\n\n\n"]],
+    "test": [["bash", "-lc", "cargo test\n"]]
+  },
+  "ci": {"requiredChecks": []}
+}

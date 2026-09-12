@@ -1,0 +1,17 @@
+{
+  "name": "1000lines-symphony[bot]",
+  "url": "https://github.com/jeremycarroll/venn-search-rs",
+  "description": "Symphony author operations for this repository",
+  "public": false,
+  "default_events": [],
+  "default_permissions": {
+    "metadata": "read",
+    "contents": "write",
+    "actions": "read",
+    "pull_requests": "write",
+    "issues": "write",
+    "checks": "read",
+    "statuses": "read",
+    "workflows": "write"
+  }
+}

@@ -1,0 +1,18 @@
+name: Symphony Client CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  commands:
+    uses: 1000lines/symphony-client-workflows/.github/workflows/symphony-client-commands.yml@alpha
+    with:
+      tested-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      commands: >-
+        [["bash", "-lc", "cargo build --release\n\n\n\n"], ["bash", "-lc", "cargo test\n"]]
