@@ -54,6 +54,14 @@ jobs:
       - name: Run doc tests (NCOLORS=${{ matrix.ncolors }})
         run: cargo test --release --doc --features ncolors_${{ matrix.ncolors }} --verbose
 
+      # VENN_CLEANUP_MEASUREMENT: VC-FINAL removes only this tagged step.
+      - name: Measure cleanup on paired refs
+        if: github.event_name == 'pull_request' && matrix.ncolors == 6
+        env:
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/measure-cleanup.sh "$BASELINE_SHA" "$PR_HEAD_SHA"
+
   clippy:
     name: Clippy (Linting)
     runs-on: ubuntu-latest
