@@ -8,7 +8,7 @@ use crate::context::SearchContext;
 use crate::engine::{Predicate, PredicateResult};
 use crate::geometry::constants::{NCOLORS, NFACES};
 use crate::propagation;
-use crate::symmetry::s6::{check_solution_canonicality, SymmetryType};
+use crate::symmetry::{check_solution_canonicality, SymmetryType};
 
 /// VennPredicate finds valid facial cycle assignments.
 ///

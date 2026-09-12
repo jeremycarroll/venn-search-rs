@@ -10,7 +10,7 @@ use crate::engine::predicate::OpenClose;
 use crate::engine::{Predicate, PredicateResult};
 use crate::geometry::{Color, NCOLORS, NFACES};
 use crate::state::statistics::Counters;
-use crate::symmetry::s6::check_solution_canonicality;
+use crate::symmetry::check_solution_canonicality;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufWriter, Write};

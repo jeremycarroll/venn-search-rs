@@ -221,20 +221,10 @@ fn check_for_disconnected_curve(
         .get_to()
         .is_some();
 
-    eprintln!(
-        "DEBUG check_for_disconnected: face={}, color={}, adjacent={}, reversed_has_to={}",
-        face_id, color_idx, adjacent_face_id, reversed_has_to
-    );
-
     if reversed_has_to {
         // We have a colored cycle in the FISC
         // C: length = curveLength(edge);
-        eprintln!(
-            "DEBUG: Computing curve_length from face={}, color={}",
-            face_id, color_idx
-        );
         let length = curve_length(face_id, color_idx, state);
-        eprintln!("DEBUG: curve_length={}", length);
 
         // C: if (length < EdgeColorCountState[IS_CLOCKWISE_EDGE(edge)][edge->color])
         // Check against the edge count for THIS edge's direction
@@ -242,15 +232,6 @@ fn check_for_disconnected_curve(
         let is_clockwise = face_colors.contains(crate::geometry::Color::new(color_idx as u8));
         let direction = if is_clockwise { 0 } else { 1 };
         let total_edges = state.edge_color_counts[direction][color_idx] as usize;
-
-        eprintln!(
-            "DEBUG: color={}, length={}, total_edges={} (direction={}), check={}",
-            color_idx,
-            length,
-            total_edges,
-            direction,
-            length < total_edges && total_edges > 0
-        );
 
         // Only fail if there's an actual mismatch (not when both are 0 during early setup)
         if length < total_edges && total_edges > 0 {
@@ -267,10 +248,6 @@ fn check_for_disconnected_curve(
         // If curve_length > edge_count, this indicates a problem with our edge tracking
         // or curve traversal. This shouldn't happen - treat it as disconnection.
         if length > total_edges {
-            eprintln!(
-                "WARNING: curve_length ({}) > edge_count ({}) for color {}",
-                length, total_edges, color_idx
-            );
             return Err(PropagationFailure::DisconnectedCurve {
                 color: color_idx,
                 edges_visited: length,
@@ -339,11 +316,6 @@ pub fn edge_curve_checks(
 
     // C: EDGE start = findStartOfCurve(edge);
     let (start_face, start_color) = find_start_of_curve(face_id, color_idx, memo, state);
-
-    eprintln!(
-        "DEBUG disconnection check: face={}, color={} -> start_face={}, start_color={}",
-        face_id, color_idx, start_face, start_color
-    );
 
     // C: return dynamicCheckForDisconnectedCurve(start, depth);
     check_for_disconnected_curve(start_face, start_color, depth, memo, state, trail)
