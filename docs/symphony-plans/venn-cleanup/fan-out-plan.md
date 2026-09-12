@@ -83,17 +83,17 @@ is unfinished. Each task branches from main, never another task branch.
 ```mermaid
 %% symphony-dag/v1
 flowchart LR
-  RECOVER["Round 1: Recover PR 14 cleanup with compatibility"]
-  SAFETY["Round 2: Own state and indexed undo log; migrate every caller"]
-  MEMO["Round 2: Clarify MEMO construction without changing tables"]
-  VERTEX["Round 3: Clarify vertex linking and crossing checks"]
-  RESTRICT["Round 3: Clarify restriction cascade and central setup"]
-  DISCONNECT["Round 3: Bound inactive disconnection helpers"]
-  ENGINE["Round 3: Clarify engine re-entry and predicate contracts"]
-  TESTS["Round 3: Isolate Venn fixtures and add missing invariants"]
-  MEASURE["Round 4: Assess cursor selection with paired runner evidence"]
-  DOCS["Round 4: Explain the implemented search and contribution path"]
-  FINAL["Round 5: Reconcile cleanup and remove measurement scaffolding"]
+  RECOVER["100-123: Round 1: Recover PR 14 cleanup with compatibility"]
+  SAFETY["100-124: Round 2: Own state and indexed undo log; migrate every caller"]
+  MEMO["100-125: Round 2: Clarify MEMO construction without changing tables"]
+  VERTEX["100-126: Round 3: Clarify vertex linking and crossing checks"]
+  RESTRICT["100-127: Round 3: Clarify restriction cascade and central setup"]
+  DISCONNECT["100-128: Round 3: Bound inactive disconnection helpers"]
+  ENGINE["100-129: Round 3: Clarify engine re-entry and predicate contracts"]
+  TESTS["100-130: Round 3: Isolate Venn fixtures and add missing invariants"]
+  MEASURE["100-131: Round 4: Assess cursor selection with paired runner evidence"]
+  DOCS["100-132: Round 4: Explain the implemented search and contribution path"]
+  FINAL["100-133: Round 5: Reconcile cleanup and remove measurement scaffolding"]
   RECOVER --> SAFETY
   RECOVER --> MEMO
   SAFETY --> VERTEX
@@ -115,6 +115,35 @@ flowchart LR
   MEASURE --> FINAL
   DOCS --> FINAL
 ```
+
+## Fan-out mapping
+
+The plan was approved in [PR #18](https://github.com/jeremycarroll/venn-search-rs/pull/18#pullrequestreview-5188201819)
+and merged at `5ebf31261a9b651957cc82f6fed1059d3f2c3770`. [100-112](https://linear.app/1000lines/issue/100-112/trigger-fan-out)
+created the eleven issues below in Backlog, verified their labels, assignee,
+complete descriptions and all twenty direct blocker relations, then activated
+the full set. The pinned Codex workpad records mutation inputs and API readbacks.
+This mapping preserves every manifest key, node ID, branch template and edge.
+
+| Node / payload key         | Linear issue                                                                                               | Task branch (branch base and PR base: main) |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| RECOVER / VC-RECOVER       | [100-123](https://linear.app/1000lines/issue/100-123/recover-pr-14-cleanup-with-compatibility)             | `symphony/venn-cleanup/100-123/recover`     |
+| SAFETY / VC-SAFETY         | [100-124](https://linear.app/1000lines/issue/100-124/own-state-and-indexed-undo-log-migrate-every-caller)  | `symphony/venn-cleanup/100-124/safety`      |
+| MEMO / VC-MEMO             | [100-125](https://linear.app/1000lines/issue/100-125/clarify-memo-construction-without-changing-tables)    | `symphony/venn-cleanup/100-125/memo`        |
+| VERTEX / VC-VERTEX         | [100-126](https://linear.app/1000lines/issue/100-126/clarify-vertex-linking-and-crossing-checks)           | `symphony/venn-cleanup/100-126/vertex`      |
+| RESTRICT / VC-RESTRICT     | [100-127](https://linear.app/1000lines/issue/100-127/clarify-restriction-cascade-and-central-setup)        | `symphony/venn-cleanup/100-127/restrict`    |
+| DISCONNECT / VC-DISCONNECT | [100-128](https://linear.app/1000lines/issue/100-128/bound-inactive-disconnection-helpers)                 | `symphony/venn-cleanup/100-128/disconnect`  |
+| ENGINE / VC-ENGINE         | [100-129](https://linear.app/1000lines/issue/100-129/clarify-engine-re-entry-and-predicate-contracts)      | `symphony/venn-cleanup/100-129/engine`      |
+| TESTS / VC-TESTS           | [100-130](https://linear.app/1000lines/issue/100-130/isolate-venn-fixtures-and-add-missing-invariants)     | `symphony/venn-cleanup/100-130/tests`       |
+| MEASURE / VC-MEASURE       | [100-131](https://linear.app/1000lines/issue/100-131/assess-cursor-selection-with-paired-runner-evidence)  | `symphony/venn-cleanup/100-131/measure`     |
+| DOCS / VC-DOCS             | [100-132](https://linear.app/1000lines/issue/100-132/explain-the-implemented-search-and-contribution-path) | `symphony/venn-cleanup/100-132/docs`        |
+| FINAL / VC-FINAL           | [100-133](https://linear.app/1000lines/issue/100-133/reconcile-cleanup-and-remove-measurement-scaffolding) | `symphony/venn-cleanup/100-133/final`       |
+
+The graph above and standalone `fan-out-plan.mmd` carry the same identifier
+prefixes. Mermaid click directives are omitted because the accepted shared
+`symphony-dag` parser rejects them; the table supplies clickable issue links
+without changing its supported graph syntax. Reapplying annotations replaces
+an existing identifier prefix instead of duplicating it.
 
 ## Common task contract
 
