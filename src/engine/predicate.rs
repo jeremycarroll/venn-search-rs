@@ -93,8 +93,8 @@ pub trait TerminalPredicate: Predicate {}
 /// # Trail Integration
 ///
 /// Predicates can modify `SearchContext` state. The engine automatically:
-/// - Calls `trail.checkpoint()` before `try_pred` or `retry_pred`
-/// - Calls `trail.rewind()` on failure to restore state
+/// - Calls `ctx.checkpoint()` before `try_pred` or `retry_pred`
+/// - Calls `ctx.rewind_to(checkpoint)` on failure to restore state
 ///
 /// # Example: Choice Predicate
 ///

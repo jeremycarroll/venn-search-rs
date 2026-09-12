@@ -5,6 +5,9 @@
 //! This module implements the cascading constraint propagation algorithm that prunes
 //! the search space from ~10^150 configurations to a tractable size.
 //!
+//! Mutators receive immutable MEMO and a paired `TrailedState` owner. Read-only
+//! validation accepts `DynamicState`; it cannot record or replay undo entries.
+//!
 //! # Algorithm Overview
 //!
 //! When a face is assigned a cycle:

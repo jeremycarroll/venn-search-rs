@@ -15,8 +15,8 @@ pub struct FixedInnerFacePredicate(pub [u64; NCOLORS]);
 
 impl Predicate for FixedInnerFacePredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        if let Err(failure) =
-            propagation::setup_central_face(&ctx.memo, &mut ctx.state, &mut ctx.trail, &self.0)
+        let (memo, state) = ctx.parts_mut();
+        if let Err(failure) = propagation::setup_central_face(memo, state, &self.0)
         {
             eprintln!(
                 "Could not set face degree to {:?}, with {}",
@@ -24,7 +24,9 @@ impl Predicate for FixedInnerFacePredicate {
             );
             return PredicateResult::Failure;
         }
-        ctx.state.current_face_degrees = self.0;
+        for (round, degree) in self.0.iter().copied().enumerate() {
+            ctx.set_face_degree(round, degree);
+        }
         PredicateResult::Success
     }
 

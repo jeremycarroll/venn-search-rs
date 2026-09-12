@@ -40,8 +40,7 @@
 //! Called for each edge when a facial cycle is assigned to a face.
 
 use crate::context::{DynamicState, MemoizedData};
-use crate::trail::Trail;
-use std::ptr::NonNull;
+use crate::trail::TrailedState;
 
 use super::errors::PropagationFailure;
 
@@ -198,8 +197,7 @@ fn find_start_of_curve(
 /// * `color_idx` - Color of the edge
 /// * `depth` - Recursion depth for error messages
 /// * `memo` - Immutable MEMO data
-/// * `state` - Mutable search state
-/// * `trail` - Trail for tracking completed colors
+/// * `state` - Paired state and undo-log owner
 ///
 /// # Returns
 ///
@@ -211,27 +209,26 @@ fn check_for_disconnected_curve(
     color_idx: usize,
     depth: usize,
     memo: &MemoizedData,
-    state: &mut DynamicState,
-    trail: &mut Trail,
+    state: &mut TrailedState,
 ) -> Result<(), PropagationFailure> {
     // C: if (edge->reversed->to != NULL)
     // Check if reversed edge is connected (forming a closed curve)
     let adjacent_face_id = memo.faces.get_face(face_id).adjacent_faces[color_idx];
-    let reversed_has_to = state.faces.faces[adjacent_face_id].edge_dynamic[color_idx]
+    let reversed_has_to = state.state().faces.faces[adjacent_face_id].edge_dynamic[color_idx]
         .get_to()
         .is_some();
 
     if reversed_has_to {
         // We have a colored cycle in the FISC
         // C: length = curveLength(edge);
-        let length = curve_length(face_id, color_idx, state);
+        let length = curve_length(face_id, color_idx, state.state());
 
         // C: if (length < EdgeColorCountState[IS_CLOCKWISE_EDGE(edge)][edge->color])
         // Check against the edge count for THIS edge's direction
         let face_colors = memo.faces.get_face(face_id).colors;
         let is_clockwise = face_colors.contains(crate::geometry::Color::new(color_idx as u8));
         let direction = if is_clockwise { 0 } else { 1 };
-        let total_edges = state.edge_color_counts[direction][color_idx] as usize;
+        let total_edges = state.state().edge_color_counts[direction][color_idx] as usize;
 
         // Only fail if there's an actual mismatch (not when both are 0 during early setup)
         if length < total_edges && total_edges > 0 {
@@ -258,18 +255,16 @@ fn check_for_disconnected_curve(
 
         // C: if (ColorCompletedState & 1u << edge->color) return NULL;
         // Check if already marked as complete
-        if (state.colors_completed_this_call & (1 << color_idx)) != 0 {
+        if (state.state().colors_completed_this_call & (1 << color_idx)) != 0 {
             return Ok(());
         }
 
         // C: ColorCompletedState |= 1u << edge->color;
-        state.colors_completed_this_call |= 1 << color_idx;
+        state.add_completed_color(color_idx);
 
         // C: trailSetInt(&EdgeCurvesComplete[edge->color], 1);
         // Mark this color's curve as complete (trail-tracked)
-        unsafe {
-            trail.record_and_set(NonNull::from(&mut state.colors_checked[color_idx]), 1);
-        }
+        state.mark_color_checked(color_idx);
     }
 
     // C: return NULL;
@@ -289,8 +284,7 @@ fn check_for_disconnected_curve(
 /// # Arguments
 ///
 /// * `memo` - Immutable MEMO data
-/// * `state` - Mutable search state
-/// * `trail` - Trail for backtracking
+/// * `state` - Paired state and undo-log owner
 /// * `face_id` - Face containing the edge
 /// * `color_idx` - Color of the edge to check
 /// * `depth` - Recursion depth for error messages
@@ -302,21 +296,20 @@ fn check_for_disconnected_curve(
 #[allow(dead_code)]
 pub fn edge_curve_checks(
     memo: &MemoizedData,
-    state: &mut DynamicState,
-    trail: &mut Trail,
+    state: &mut TrailedState,
     face_id: usize,
     color_idx: usize,
     depth: usize,
 ) -> Result<(), PropagationFailure> {
     // C: if (EdgeCurvesComplete[edge->color]) return NULL;
     // Check if this color's curve is already marked complete
-    if state.colors_checked[color_idx] != 0 {
+    if state.state().colors_checked[color_idx] != 0 {
         return Ok(());
     }
 
     // C: EDGE start = findStartOfCurve(edge);
-    let (start_face, start_color) = find_start_of_curve(face_id, color_idx, memo, state);
+    let (start_face, start_color) = find_start_of_curve(face_id, color_idx, memo, state.state());
 
     // C: return dynamicCheckForDisconnectedCurve(start, depth);
-    check_for_disconnected_curve(start_face, start_color, depth, memo, state, trail)
+    check_for_disconnected_curve(start_face, start_color, depth, memo, state)
 }

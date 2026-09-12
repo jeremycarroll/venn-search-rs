@@ -58,8 +58,16 @@ impl CycleSet {
         Self(words)
     }
 
-    /// Create a cycle set from a word array.
+    /// Create a cycle set from a word array. Panics on out-of-domain high bits.
     pub fn from_words(words: [u64; CYCLESET_LENGTH]) -> Self {
+        let remaining_bits = NCYCLES % 64;
+        if remaining_bits != 0 {
+            assert_eq!(
+                words[CYCLESET_LENGTH - 1] >> remaining_bits,
+                0,
+                "CycleSet has out-of-domain bits"
+            );
+        }
         Self(words)
     }
 
@@ -502,5 +510,17 @@ mod tests {
             let ids: Vec<_> = set.iter().collect();
             assert_eq!(ids, expected);
         }
+    }
+}
+
+#[cfg(test)]
+mod encoding_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_bits_outside_the_configured_cycle_domain() {
+        let mut words = [0; CYCLESET_LENGTH];
+        words[CYCLESET_LENGTH - 1] = 1u64 << (NCYCLES % 64);
+        assert!(std::panic::catch_unwind(|| CycleSet::from_words(words)).is_err());
     }
 }

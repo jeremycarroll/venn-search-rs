@@ -7,9 +7,9 @@
 //! - Faces not sharing a color must use cycles omitting that color
 //! - Faces not sharing a vertex must use cycles omitting certain edges
 
-use crate::context::{DynamicState, MemoizedData};
+use crate::context::MemoizedData;
 use crate::geometry::{Color, CycleId, CycleSet};
-use crate::trail::Trail;
+use crate::trail::TrailedState;
 
 use super::core::restrict_face_cycles;
 use super::errors::PropagationFailure;
@@ -22,8 +22,7 @@ use super::errors::PropagationFailure;
 /// Uses `cycles_omitting_one_color` from CyclesMemo.
 pub(super) fn propagate_non_adjacent_faces(
     memo: &MemoizedData,
-    state: &mut DynamicState,
-    trail: &mut Trail,
+    state: &mut TrailedState,
     face_id: usize,
     cycle_id: CycleId,
     depth: usize,
@@ -55,7 +54,6 @@ pub(super) fn propagate_non_adjacent_faces(
         restrict_face_cycles(
             memo,
             state,
-            trail,
             adjacent_face_id,
             &omitting_cycleset,
             depth,
@@ -74,8 +72,7 @@ pub(super) fn propagate_non_adjacent_faces(
 /// Uses `cycles_omitting_color_pair` (upper triangle only) from CyclesMemo.
 pub(super) fn propagate_non_vertex_adjacent_faces(
     memo: &MemoizedData,
-    state: &mut DynamicState,
-    trail: &mut Trail,
+    state: &mut TrailedState,
     face_id: usize,
     cycle_id: CycleId,
     depth: usize,
@@ -123,7 +120,6 @@ pub(super) fn propagate_non_vertex_adjacent_faces(
             restrict_face_cycles(
                 memo,
                 state,
-                trail,
                 adjacent_face_id,
                 &omitting_cycleset,
                 depth,

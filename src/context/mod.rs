@@ -19,57 +19,60 @@ pub use memoized::MemoizedData;
 use crate::geometry::constants::NCOLORS;
 use crate::geometry::{CycleId, CycleSet};
 use crate::state::Statistics;
-use crate::trail::Trail;
+use crate::trail::{Trail, TrailedState};
+use std::fs::File;
+use std::io::BufWriter;
 use std::mem::size_of;
-use std::ptr::NonNull;
 
 /// Search context combining MEMO and DYNAMIC state.
 ///
 /// This is the main data structure passed through the search algorithm.
 /// Each SearchContext can operate independently, enabling parallelization.
 ///
-/// # Memory Model
+/// The dynamic owner contains both state and its indexed undo log. Moving a
+/// context preserves every undo target; immutable state access cannot resize or
+/// replace its storage. Rewind costs O(k) for k recorded writes.
 ///
-/// ```text
-/// SearchContext {
-///     memo: MemoizedData,        // Tier 1: Immutable, shared
-///     trail: Trail,              // Tier 2: Mutable, owned
-///     state: DynamicState,       // Tier 2: Mutable, owned
-/// }
+/// ```
+/// use venn_search::SearchContext;
+/// let mut ctx = SearchContext::new();
+/// let checkpoint = ctx.checkpoint();
+/// ctx.set_face_degree(0, 4);
+/// let mut moved = Box::new(ctx);
+/// moved.rewind_to(checkpoint);
+/// assert_eq!(moved.get_face_degree(0), 0);
 /// ```
 ///
-/// # Trail Safety
-///
-/// The trail stores raw pointers to data in `state`. This is safe because:
-/// - Both `trail` and `state` are owned by `SearchContext`
-/// - Rust's ownership ensures they have the same lifetime
-/// - `state` cannot be moved while `trail` has pointers into it
-/// - Trail methods are only accessible through safe wrappers on `SearchContext`
-///
-/// # Example
-///
-/// ```ignore
-/// // Single-threaded search
+/// The two halves cannot be swapped independently:
+/// ```compile_fail
+/// use venn_search::SearchContext;
+/// let mut a = SearchContext::new();
+/// let mut b = SearchContext::new();
+/// std::mem::swap(&mut a.dynamic.state, &mut b.dynamic.state);
+/// ```
+/// ```compile_fail
+/// use venn_search::SearchContext;
 /// let mut ctx = SearchContext::new();
-/// let checkpoint = ctx.trail.checkpoint();
-/// ctx.set_example_value(42);  // Safe wrapper
-/// ctx.trail.rewind_to(checkpoint);  // Automatically restores value
+/// ctx.parts_mut().1.trail = venn_search::SearchContext::new().parts_mut().1.trail;
+/// ```
 ///
-/// // Parallel search (future)
-/// let memo = MemoizedData::initialize();
-/// let contexts: Vec<_> = (0..num_threads)
-///     .map(|_| SearchContext::with_memo(memo.clone()))
-///     .collect();
-/// contexts.into_par_iter().for_each(|mut ctx| run_search(&mut ctx));
+/// Neither access path allows unrestricted mutable storage:
+/// ```compile_fail
+/// use venn_search::SearchContext;
+/// let mut ctx = SearchContext::new();
+/// ctx.state().faces.faces.clear();
+/// ```
+/// ```compile_fail
+/// use venn_search::SearchContext;
+/// let mut ctx = SearchContext::new();
+/// ctx.parts_mut().1.state().vertex_processed.resize(0, 0);
 /// ```
 #[derive(Debug)]
 pub struct SearchContext {
     /// Immutable precomputed data
     pub memo: MemoizedData,
-    /// Trail for O(1) backtracking
-    pub trail: Trail,
-    /// Mutable search state
-    pub state: DynamicState,
+    dynamic: TrailedState,
+    output: Option<Box<BufWriter<File>>>,
 
     pub statistics: Statistics,
 }
@@ -78,11 +81,11 @@ impl SearchContext {
     /// Create a new search context with initialized MEMO data.
     pub fn new() -> Self {
         let memo = MemoizedData::new();
-        let state = DynamicState::new(&memo);
+        let dynamic = TrailedState::new(&memo);
         Self {
             memo,
-            trail: Trail::new(),
-            state,
+            dynamic,
+            output: None,
             statistics: Statistics::new(),
         }
     }
@@ -91,11 +94,11 @@ impl SearchContext {
     ///
     /// This is useful for parallel searches that share the same MEMO data.
     pub fn with_memo(memo: MemoizedData) -> Self {
-        let state = DynamicState::new(&memo);
+        let dynamic = TrailedState::new(&memo);
         Self {
             memo,
-            trail: Trail::new(),
-            state,
+            dynamic,
+            output: None,
             statistics: Statistics::new(),
         }
     }
@@ -134,121 +137,111 @@ impl SearchContext {
         total
     }
 
-    // Safe trail wrapper methods
-    // These ensure pointers only point into self.state
+    /// Immutable current search state.
+    pub fn state(&self) -> &DynamicState {
+        self.dynamic.state()
+    }
 
-    // Face degree management (for InnerFacePredicate)
+    /// Inspect log length, capacity and entry layout.
+    pub fn trail(&self) -> &Trail {
+        self.dynamic.trail()
+    }
 
-    /// Set a face degree with trail recording.
-    ///
-    /// # Arguments
-    ///
-    /// * `round` - The face index (0..NCOLORS)
-    /// * `degree` - The degree value to set
-    ///
-    /// # Panics
-    ///
-    /// Panics if round >= NCOLORS.
+    /// Borrow immutable MEMO and the inseparable mutable state/log owner.
+    pub fn parts_mut(&mut self) -> (&MemoizedData, &mut TrailedState) {
+        (&self.memo, &mut self.dynamic)
+    }
+
+    /// Current owner-local log position; see `TrailedState::checkpoint`.
+    pub fn checkpoint(&self) -> usize {
+        self.dynamic.checkpoint()
+    }
+
+    /// Restore this owner's writes; see `TrailedState::rewind_to` for checkpoint rules.
+    pub fn rewind_to(&mut self, checkpoint: usize) {
+        self.dynamic.rewind_to(checkpoint);
+    }
+
+    /// Prevent rewind past the current log position.
+    pub fn freeze(&mut self) {
+        self.dynamic.freeze();
+    }
+
+    /// Reinitialize state, log and output together. Existing checkpoints are invalidated.
+    /// MEMO and statistics retain their existing values.
+    pub fn reset_state(&mut self) {
+        self.dynamic = TrailedState::new(&self.memo);
+        self.output = None;
+    }
+
+    /// Replace the untrailed output stream for an OpenClose lifecycle.
+    pub fn replace_output(
+        &mut self,
+        output: Option<Box<BufWriter<File>>>,
+    ) -> Option<Box<BufWriter<File>>> {
+        std::mem::replace(&mut self.output, output)
+    }
+
+    /// Borrow output mutably alongside immutable data used to format it.
+    pub fn output_parts(
+        &mut self,
+    ) -> (
+        &MemoizedData,
+        &DynamicState,
+        &Statistics,
+        Option<&mut BufWriter<File>>,
+    ) {
+        (
+            &self.memo,
+            self.dynamic.state(),
+            &self.statistics,
+            self.output.as_deref_mut(),
+        )
+    }
+
+    /// Set a face degree with trail recording. Panics if round >= NCOLORS.
     pub fn set_face_degree(&mut self, round: usize, degree: u64) {
-        assert!(round < NCOLORS, "Face round out of bounds: {}", round);
-        unsafe {
-            self.trail.record_and_set(
-                NonNull::from(&mut self.state.current_face_degrees[round]),
-                degree,
-            );
-        }
+        self.dynamic.set_face_degree(round, degree);
     }
 
     /// Get the current face degrees array.
-    ///
-    /// Returns a reference to the NCOLORS-element array of face degrees.
     pub fn get_face_degrees(&self) -> &[u64; NCOLORS] {
-        &self.state.current_face_degrees
+        &self.state().current_face_degrees
     }
 
-    /// Get a single face degree value.
-    ///
-    /// # Panics
-    ///
-    /// Panics if round >= NCOLORS.
+    /// Get one degree. Panics if round >= NCOLORS.
     pub fn get_face_degree(&self, round: usize) -> u64 {
-        assert!(round < NCOLORS, "Face round out of bounds: {}", round);
-        self.state.current_face_degrees[round]
+        self.state().current_face_degrees[round]
     }
 
-    // Face cycle management (for VennPredicate)
-
-    /// Reset face's current_cycle to None (trail-tracked).
-    ///
-    /// Used by try_pred to reset cycle on entry. Trail will restore
-    /// the previous value on backtrack.
+    /// Trail a cycle reset for predicate entry.
     pub fn reset_face_cycle(&mut self, face_id: usize) {
-        unsafe {
-            self.trail.record_and_set(
-                NonNull::from(&mut self.state.faces.faces[face_id].current_cycle_encoded),
-                0, // 0 = None
-            );
-        }
+        self.dynamic.reset_face_cycle(face_id);
     }
 
-    /// Set a face's cycle assignment (trail-tracked).
-    ///
-    /// Used by constraint propagation when a face's possible_cycles
-    /// reduces to a singleton. Trail will restore on backtrack.
-    #[allow(dead_code)]
+    /// Trail a checked forced assignment.
     pub fn set_face_cycle(&mut self, face_id: usize, cycle_id: CycleId) {
-        unsafe {
-            self.trail.record_and_set(
-                NonNull::from(&mut self.state.faces.faces[face_id].current_cycle_encoded),
-                cycle_id + 1, // n+1 = Some(n)
-            );
-        }
+        self.dynamic.set_face_cycle(face_id, cycle_id);
     }
 
-    /// Set possible cycles for a face (trail-tracked).
-    ///
-    /// Only trails words that actually change (optimization).
-    /// Also updates the cached cycle_count.
-    #[allow(dead_code)]
+    /// Advance the retry cursor without trailing it; it survives choice rewind.
+    pub fn set_retry_cursor_untrailed(&mut self, face_id: usize, cycle: Option<CycleId>) {
+        self.dynamic.set_retry_cursor_untrailed(face_id, cycle);
+    }
+
+    /// Trail changed cycle words and the cached count together.
     pub fn set_face_possible_cycles(&mut self, face_id: usize, new_cycles: CycleSet) {
-        use crate::geometry::constants::CYCLESET_LENGTH;
-
-        let face = &mut self.state.faces.faces[face_id];
-
-        // Copy old words to avoid borrow checker issues
-        let old_words = *face.possible_cycles.words();
-        let new_words = *new_cycles.words();
-
-        // Trail only modified words
-        unsafe {
-            let words_mut = face.possible_cycles.words_mut();
-            for i in 0..CYCLESET_LENGTH {
-                if old_words[i] != new_words[i] {
-                    // Get pointer to word i in the mutable words array
-                    self.trail
-                        .record_and_set(NonNull::from(&mut words_mut[i]), new_words[i]);
-                }
-            }
-        }
-
-        // Update cached cycle count (also trail-tracked)
-        let new_count = new_cycles.len() as u64;
-        if face.cycle_count != new_count {
-            unsafe {
-                self.trail
-                    .record_and_set(NonNull::from(&mut face.cycle_count), new_count);
-            }
-        }
+        self.dynamic.set_face_possible_cycles(face_id, new_cycles);
     }
 
     /// Get a face's possible cycles.
     pub fn get_face_possible_cycles(&self, face_id: usize) -> &CycleSet {
-        &self.state.faces.faces[face_id].possible_cycles
+        &self.state().faces.faces[face_id].possible_cycles
     }
 
-    /// Get a face's cycle count.
+    /// Get a face's cached cycle count.
     pub fn get_face_cycle_count(&self, face_id: usize) -> u64 {
-        self.state.faces.faces[face_id].cycle_count
+        self.state().faces.faces[face_id].cycle_count
     }
 }
 
@@ -265,9 +258,9 @@ mod tests {
     #[test]
     fn test_search_context_new() {
         let ctx = SearchContext::new();
-        assert_eq!(ctx.trail.len(), 0);
+        assert_eq!(ctx.trail().len(), 0);
         // Dynamic state should be initialized
-        assert!(!ctx.state.faces.faces.is_empty());
+        assert!(!ctx.state().faces.faces.is_empty());
     }
 
     #[test]
@@ -277,10 +270,10 @@ mod tests {
         let ctx2 = SearchContext::new();
 
         // Both contexts have independent state
-        assert_eq!(ctx1.trail.len(), 0);
-        assert_eq!(ctx2.trail.len(), 0);
-        assert!(!ctx1.state.faces.faces.is_empty());
-        assert!(!ctx2.state.faces.faces.is_empty());
+        assert_eq!(ctx1.trail().len(), 0);
+        assert_eq!(ctx2.trail().len(), 0);
+        assert!(!ctx1.state().faces.faces.is_empty());
+        assert!(!ctx2.state().faces.faces.is_empty());
     }
 
     #[test]
@@ -290,8 +283,8 @@ mod tests {
         let ctx2 = SearchContext::with_memo(memo.clone());
 
         // Both contexts have independent trails
-        assert_eq!(ctx1.trail.len(), 0);
-        assert_eq!(ctx2.trail.len(), 0);
+        assert_eq!(ctx1.trail().len(), 0);
+        assert_eq!(ctx2.trail().len(), 0);
     }
 
     #[test]

@@ -58,19 +58,15 @@ impl Predicate for VennPredicate {
         #[cfg(not(any(feature = "ncolors_3", feature = "ncolors_4")))]
         if round == 0 {
             let inner_face_id = NFACES - 1;
-            if ctx.state.faces.faces[inner_face_id]
+            if ctx.state().faces.faces[inner_face_id]
                 .current_cycle()
                 .is_none()
             {
                 // Not yet set up (InnerFacePredicate not run or didn't set it up)
                 // Set up with no restrictions (all zeros)
                 let no_restrictions = [0u64; NCOLORS];
-                if let Err(_failure) = propagation::setup_central_face(
-                    &ctx.memo,
-                    &mut ctx.state,
-                    &mut ctx.trail,
-                    &no_restrictions,
-                ) {
+                let (memo, state) = ctx.parts_mut();
+                if let Err(_failure) = propagation::setup_central_face(memo, state, &no_restrictions) {
                     return PredicateResult::Failure;
                 }
             }
@@ -94,12 +90,12 @@ impl Predicate for VennPredicate {
             // All faces assigned - run final validation checks
 
             // 1. Validate face cycles (faces with M colors form single cycle of length C(NCOLORS, M))
-            if let Err(_failure) = propagation::validate_face_cycles(&ctx.memo, &ctx.state) {
+            if let Err(_failure) = propagation::validate_face_cycles(&ctx.memo, ctx.state()) {
                 return PredicateResult::Failure;
             }
 
             // 2. Check canonicality under dihedral symmetry (reject non-canonical solutions)
-            match check_solution_canonicality(&ctx.state, &ctx.memo) {
+            match check_solution_canonicality(ctx.state(), &ctx.memo) {
                 SymmetryType::Canonical | SymmetryType::Equivocal => {
                     // Accept canonical and equivocal solutions
                     PredicateResult::Success
@@ -121,24 +117,18 @@ impl Predicate for VennPredicate {
         let face_id = self.faces_in_order[round];
 
         // Get current_cycle to use as iterator cursor
-        let current_cycle = ctx.state.faces.faces[face_id].current_cycle();
+        let current_cycle = ctx.state().faces.faces[face_id].current_cycle();
 
         // Choose next cycle from possible_cycles
         let next_cycle = choose_next_cycle(ctx, face_id, current_cycle);
 
         // Set current_cycle directly (NOT trail-tracked, iterator usage)
         // Not trail-tracked, otherwise it would get unset before the next retry.
-        ctx.state.faces.faces[face_id].set_current_cycle(Some(next_cycle));
+        ctx.set_retry_cursor_untrailed(face_id, Some(next_cycle));
 
         // Constraint propagation
-        if let Err(_failure) = propagation::propagate_cycle_choice(
-            &ctx.memo,
-            &mut ctx.state,
-            &mut ctx.trail,
-            face_id,
-            next_cycle,
-            0,
-        ) {
+        let (memo, state) = ctx.parts_mut();
+        if let Err(_failure) = propagation::propagate_cycle_choice(memo, state, face_id, next_cycle, 0) {
             // Propagation failed - engine will backtrack
             return PredicateResult::Failure;
         }
@@ -157,7 +147,7 @@ fn choose_next_face(ctx: &SearchContext) -> Option<usize> {
     let mut best_face = None;
 
     for face_id in 0..NFACES {
-        let face = &ctx.state.faces.faces[face_id];
+        let face = &ctx.state().faces.faces[face_id];
 
         // Skip if already assigned (current_cycle != None)
         if face.current_cycle().is_some() {
@@ -213,11 +203,11 @@ mod tests {
         let ctx = SearchContext::new();
 
         // All faces should have dynamic state
-        assert_eq!(ctx.state.faces.faces.len(), NFACES);
+        assert_eq!(ctx.state().faces.faces.len(), NFACES);
 
         // All faces should start with no assigned cycle
         for face_id in 0..NFACES {
-            let face = ctx.state.faces.get(face_id);
+            let face = ctx.state().faces.get(face_id);
             assert!(face.current_cycle().is_none());
         }
     }
@@ -236,7 +226,7 @@ mod tests {
         let mut ctx = SearchContext::new();
 
         // Assign a cycle to face 0
-        ctx.state.faces.faces[0].set_current_cycle(Some(0));
+        ctx.set_retry_cursor_untrailed(0, Some(0));
 
         // Should choose a different face
         let face_id = choose_next_face(&ctx);
@@ -302,7 +292,7 @@ mod tests {
 
         // After try_pred, the chosen face should have current_cycle = None
         let face_id = pred.faces_in_order[0];
-        assert!(ctx.state.faces.faces[face_id].current_cycle().is_none());
+        assert!(ctx.state().faces.faces[face_id].current_cycle().is_none());
     }
 
     #[test]
@@ -322,7 +312,7 @@ mod tests {
             PredicateResult::SuccessSamePredicate => {
                 // If it succeeded, should have assigned a cycle
                 let face_id = pred.faces_in_order[0];
-                assert!(ctx.state.faces.faces[face_id].current_cycle().is_some());
+                assert!(ctx.state().faces.faces[face_id].current_cycle().is_some());
             }
             PredicateResult::Failure => {
                 // Propagation failed (e.g., crossing limit exceeded) - this is OK
@@ -337,7 +327,7 @@ mod tests {
         let ctx = SearchContext::new();
 
         for face_id in 0..NFACES {
-            let face = ctx.state.faces.get(face_id);
+            let face = ctx.state().faces.get(face_id);
             let expected_count = face.possible_cycles.len() as u64;
             assert_eq!(face.cycle_count, expected_count);
         }

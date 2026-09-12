@@ -126,10 +126,10 @@ impl CrossingCounts {
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if i >= j (must use upper triangle).
+    /// Panics if i >= j (must use upper triangle).
     #[inline]
     pub fn get(&self, i: usize, j: usize) -> u64 {
-        debug_assert!(
+        assert!(
             i < j,
             "CrossingCounts only valid for i < j (upper triangle), got i={}, j={}",
             i,
@@ -138,24 +138,10 @@ impl CrossingCounts {
         self.counts[i][j]
     }
 
-    /// Get a mutable pointer to a crossing count for trail tracking.
-    ///
-    /// # Safety
-    ///
-    /// Caller must use trail.record_and_set() to modify the value.
-    ///
-    /// # Panics
-    ///
-    /// Panics in debug builds if i >= j (must use upper triangle).
-    #[inline]
-    pub fn get_mut_ptr(&mut self, i: usize, j: usize) -> *mut u64 {
-        debug_assert!(
-            i < j,
-            "CrossingCounts only valid for i < j (upper triangle), got i={}, j={}",
-            i,
-            j
-        );
-        &mut self.counts[i][j] as *mut u64
+    /// Checked access used only inside the paired state owner's mutation boundary.
+    pub(crate) fn get_mut(&mut self, i: usize, j: usize) -> &mut u64 {
+        assert!(i < j, "CrossingCounts only valid for i < j");
+        &mut self.counts[i][j]
     }
 
     /// Check if a crossing count exceeds the maximum allowed.
@@ -239,7 +225,6 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "CrossingCounts only valid for i < j")]
-    #[cfg(debug_assertions)]
     fn test_crossing_counts_panics_on_lower_triangle() {
         let counts = CrossingCounts::new();
         let _ = counts.get(3, 1); // i > j - should panic
@@ -247,7 +232,6 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "CrossingCounts only valid for i < j")]
-    #[cfg(debug_assertions)]
     fn test_crossing_counts_panics_on_diagonal() {
         let counts = CrossingCounts::new();
         let _ = counts.get(2, 2); // i == j - should panic

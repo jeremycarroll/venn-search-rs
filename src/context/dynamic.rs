@@ -5,8 +5,6 @@
 use crate::geometry::constants::NCOLORS;
 use crate::geometry::CrossingCounts;
 use crate::state::DynamicFaces;
-use std::fs::File;
-use std::io::BufWriter;
 
 use super::MemoizedData;
 
@@ -21,7 +19,7 @@ use super::MemoizedData;
 /// - **Stack**: Small fixed-size arrays (e.g., `current_face_degrees: [u64; 6]`)
 /// - **Heap**: Variable-size collections (e.g., Vecs for edge lists, cycle sets)
 ///
-/// The trail records raw pointers to these locations for O(1) backtracking.
+/// The paired owner records logical indices; rewinding k writes costs O(k).
 #[derive(Debug)]
 pub struct DynamicState {
     /// Current face degree assignments (for InnerFacePredicate).
@@ -81,10 +79,6 @@ pub struct DynamicState {
     /// Reset before each top-level propagate_cycle_choice, then checked after.
     /// NOT trail-tracked (temporary per-call state).
     pub colors_completed_this_call: u64,
-
-    /// Current default output within backtracking context - can only have one.
-    /// Replace with a vector, and a trailed index to provide better functionality.
-    pub output: Option<Box<BufWriter<File>>>,
 }
 
 impl DynamicState {
@@ -98,7 +92,6 @@ impl DynamicState {
             edge_color_counts: [[0; NCOLORS]; 2],
             colors_checked: [0; NCOLORS],
             colors_completed_this_call: 0,
-            output: None,
         }
     }
 }

@@ -21,14 +21,12 @@ use crate::geometry::{Color, ColorSet};
 /// Both geometry import paths refer to the same type as the state module.
 ///
 /// ```
-/// use venn_search::geometry::{edge, CurveLink, EdgeDynamic, EdgeRef};
+/// use venn_search::geometry::{edge, EdgeDynamic};
 /// use venn_search::state::DynamicEdge;
 ///
 /// let _: DynamicEdge = EdgeDynamic::new();
-/// let mut old: edge::EdgeDynamic = DynamicEdge::default();
-/// let link = CurveLink::new(EdgeRef::new(0, 0), 0);
-/// old.to_encoded = EdgeDynamic::encode_to(Some(link));
-/// assert_eq!(old.get_to(), Some(link));
+/// let old: edge::EdgeDynamic = DynamicEdge::default();
+/// assert_eq!(old.get_to(), None);
 /// ```
 pub use crate::state::DynamicEdge as EdgeDynamic;
 
@@ -100,7 +98,7 @@ pub struct EdgeMemo {
     ///
     /// During initialization, we precompute all possible ways this edge could
     /// connect to a vertex. During search, one of these is selected and placed
-    /// in [`crate::state::DynamicEdge::to_encoded`].
+    /// in [`crate::state::DynamicEdge`].
     pub possibly_to: [Option<CurveLink>; NCOLORS],
 }
 

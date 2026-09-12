@@ -8,7 +8,8 @@
 //! - EdgeColorCount (crossing counts)
 //! - Other mutable search variables
 //!
-//! All state modifications are tracked on the trail for O(1) backtracking.
+//! The paired owner tracks search writes for O(k) rewind of k entries.
+//! Retry cursors, statistics and output have explicit untrailed lifecycles.
 
 pub mod edge;
 pub mod faces;
