@@ -17,7 +17,7 @@ use venn_search::predicates::advanced_test::{
     PrintHeaderPredicate,
 };
 use venn_search::predicates::{FailPredicate, InitializePredicate, VennPredicate};
-use venn_search::symmetry::s6::{check_solution_canonicality, SymmetryType};
+use venn_search::symmetry::{check_solution_canonicality, SymmetryType};
 
 #[test]
 fn test_venn3() {

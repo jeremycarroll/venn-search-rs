@@ -60,5 +60,5 @@ pub mod trail;
 // Re-export commonly used types
 pub use context::SearchContext;
 pub use engine::{Predicate, PredicateResult, SearchEngine};
-pub use symmetry::s6::{check_symmetry, SymmetryType};
+pub use symmetry::{check_symmetry, SymmetryType};
 pub use trail::Trail;
