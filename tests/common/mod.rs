@@ -20,7 +20,7 @@ impl Predicate for FixedInnerFacePredicate {
         {
             eprintln!(
                 "Could not set face degree to {:?}, with {}",
-                &self.0, &failure
+                self.0, failure
             );
             return PredicateResult::Failure;
         }

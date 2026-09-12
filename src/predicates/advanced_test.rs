@@ -228,7 +228,7 @@ impl Predicate for PrintEdgeCyclesPredicate {
                     break;
                 }
             }
-            let _ = writeln!(writer, " [{} steps]", &edge_count);
+            let _ = writeln!(writer, " [{} steps]", edge_count);
             assert!((self.validate_length)(&edge_count));
         }
         let _ = writeln!(writer, "\n\nGrand total: {} edges", total_edges);
