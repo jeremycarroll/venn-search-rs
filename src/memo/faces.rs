@@ -8,21 +8,15 @@
 //! - Cycle-to-face relationship lookups (next/previous by cycle ID)
 //! - Monotonicity constraints
 //!
-//! # Monotonicity and Convex Curves
-//!
-//! This implementation searches for **monotone Venn diagrams**, which can be drawn
-//! with convex curves. Triangles are convex, so any diagram drawable with triangles
-//! must be monotone.
-//!
-//! A monotone diagram has the property that each facial cycle crosses each curve
-//! at most once. This constraint eliminates many invalid configurations and is
-//! enforced during MEMO initialization by filtering out non-monotone cycles.
+//! For each non-extreme face, an allowed facial cycle has one nonempty run
+//! of colors inside the face and one nonempty run outside it. The two changes
+//! between runs determine the previous/next faces by toggling both colors.
+//! Inner and outer faces instead allow only full-length cycles and self links.
+//! These tables constrain the search; they do not prove triangle realizability.
 
 use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
 use crate::geometry::{Color, ColorSet, CycleSet, EdgeMemo, EdgeRef, Face, FaceId};
-use crate::memo::vertices::{
-    compute_incoming_edge_slot, compute_outside_face, determine_primary_secondary,
-};
+use crate::memo::vertices::VertexLocation;
 
 /// Type alias for face adjacency lookup tables.
 ///
@@ -55,7 +49,7 @@ pub struct FacesMemo {
     /// **Heap-allocated** via Vec to handle variable NFACES (8 for N=3, 64 for N=6).
     pub faces: Vec<Face>,
 
-    /// Expected cycle length for faces with k colors.
+    /// Number of faces whose bitmask contains k colors.
     ///
     /// `face_degree_by_color_count[k]` = C(NCOLORS, k) = number of ways to
     /// choose k items from NCOLORS items.
@@ -109,7 +103,7 @@ impl FacesMemo {
     ///
     /// # Arguments
     ///
-    /// * `cycles` - The global array of all possible cycles
+    /// * `cycles` - This context's array of all possible cycles
     pub fn initialize(cycles: &crate::memo::CyclesArray) -> Self {
         eprintln!("[FacesMemo] Computing binomial coefficients...");
         let face_degree_by_color_count = compute_binomial_coefficients();
@@ -160,7 +154,7 @@ impl FacesMemo {
     ///
     /// * `vertices` - The initialized VerticesMemo with all possible vertices
     pub fn populate_vertex_links(&mut self, vertices: &crate::memo::VerticesMemo) {
-        use crate::geometry::{Color, CurveLink, EdgeRef};
+        use crate::geometry::CurveLink;
 
         eprintln!("[FacesMemo] Populating vertex links for all edges...");
 
@@ -179,52 +173,23 @@ impl FacesMemo {
                     }
                     let next_color = Color::new(next_color_idx as u8);
 
-                    // Locate the vertex where edge_color and next_color cross
-                    // Using the same logic as VerticesMemo::initialize()
-
-                    // 1. Compute incoming edge slot
-                    let slot = compute_incoming_edge_slot(edge_color, next_color, face_colors);
-
-                    // 2. Determine primary/secondary
-                    let (primary, secondary) =
-                        determine_primary_secondary(slot, edge_color, next_color);
-
-                    // 3. Compute outside face
-                    let outside_face = compute_outside_face(face_colors, primary, secondary);
-
-                    // 4. Look up vertex
+                    let VertexLocation {
+                        outside_face,
+                        primary,
+                        secondary,
+                        slot,
+                    } = VertexLocation::new(edge_color, next_color, face_colors);
                     let primary_idx = primary.value() as usize;
                     let secondary_idx = secondary.value() as usize;
 
                     if let Some(vertex) =
                         vertices.get_vertex(outside_face, primary_idx, secondary_idx)
                     {
-                        // C: initializeEdgeLink(edge1, edge2, edge3)
-                        //    edge1->possiblyTo[other].next = edge2->reversed
-                        //
-                        // We need to find the partner edge at this vertex (same color, different slot)
-                        // and link to its reversed edge.
-
-                        // Find partner slot (0<->1, 2<->3)
-                        let partner_slot = match slot {
-                            0 => 1,
-                            1 => 0,
-                            2 => 3,
-                            3 => 2,
-                            _ => unreachable!(),
-                        };
-
-                        // Get the partner edge from vertex->incomingEdges
-                        let partner_edge = vertex.incoming_edges[partner_slot];
-                        let partner_face_id = partner_edge.face_id;
-                        let partner_color_idx = partner_edge.color_idx;
-
-                        // The reversed edge is on the adjacent face (across the color)
-                        // C: edge->reversed is (adjacent_face, same_color)
-                        let reversed_face_id = partner_face_id ^ (1 << partner_color_idx);
-                        let next_edge_ref = EdgeRef::new(reversed_face_id, partner_color_idx);
-
-                        let link = CurveLink::new(next_edge_ref, vertex.id);
+                        // Same-color incoming edges occupy paired slots 0/1 or 2/3.
+                        // Reverse the partner to continue out of this crossing.
+                        let partner = vertex.incoming_edges[slot ^ 1];
+                        let next = self.faces[partner.face_id].edges[partner.color_idx].reversed;
+                        let link = CurveLink::new(next, vertex.id);
 
                         // Set possibly_to for this edge
                         self.faces[face_id].edges[edge_color_idx]
@@ -281,7 +246,7 @@ fn compute_binomial_coefficients() -> [u64; NCOLORS + 1] {
 /// - Colors set from bitmask
 /// - Edges initialized (one per color, with reversed references)
 /// - Adjacent faces computed via XOR
-/// - Possible cycles initialized to all cycles with matching colors
+/// - Possible cycles initialized to all cycles, pending monotonicity filtering
 fn create_face_with_edges(face_id: FaceId) -> Face {
     // Convert face ID bitmask to ColorSet
     let mut colors = ColorSet::empty();
@@ -310,7 +275,7 @@ fn create_face_with_edges(face_id: FaceId) -> Face {
         edges[color_idx] = EdgeMemo::new(color, colors, reversed_edge_ref);
     }
 
-    // Start with all possible cycles for this color count
+    // Start with all possible cycles
     // (Will be filtered by monotonicity constraints)
     let possible_cycles = CycleSet::full();
 
@@ -440,29 +405,14 @@ fn check_exactly_two_transitions(
 /// 2. If valid, compute next/previous faces for this cycle
 /// 3. If invalid, remove from possible_cycles
 ///
-/// # Monotonicity and Convex Curves
+/// Regular faces require one nonempty run of inside colors and one nonempty
+/// run of outside colors around the cycle. For face {a}, cycle (a,b,c) has
+/// transitions c→a and a→b; toggling each pair gives previous face {c} and
+/// next face {b}. Cycles entirely inside or outside the face are excluded.
 ///
-/// This constraint is fundamental to drawing Venn diagrams with **convex curves**.
-/// Since **triangles are convex**, any diagram drawable with triangles must be monotone.
-///
-/// A monotone Venn diagram has the property that each facial cycle crosses each curve
-/// at most once. This means:
-/// - A cycle for face {a,b,c} must have colors from {a,b,c}
-/// - The cycle must have exactly 2 edge transitions (in/out of face)
-/// - The next and previous faces are determined by which edges transition
-///
-/// Non-monotone diagrams (where cycles can cross curves multiple times) cannot be
-/// drawn with convex curves and are excluded from this search
-///
-/// # Special Cases
-///
-/// - **Outer face (0)**: Can only have cycles of length NCOLORS (full 6-cycles)
-///   - Monotonicity requires the outer boundary to cross each curve exactly once
-/// - **Inner face (NFACES-1)**: Can only have cycles of length NCOLORS (full 6-cycles)
-///   - Monotonicity requires the inner boundary to cross each curve exactly once
-///   - (Non-monotone diagrams can have 4- or 5-cycles, but not with convex curves)
-///   - The inner face will later be assigned the canonical cycle (0,1,2,3,4,5)
-///     for symmetry breaking (done during search, not here)
+/// Inner and outer faces allow only cycles containing all NCOLORS colors.
+/// Their next/previous entries point to themselves. Search assigns the
+/// canonical inner cycle later for symmetry breaking.
 ///
 /// # Returns
 ///
@@ -502,24 +452,15 @@ fn apply_monotonicity_constraints(
         }
     }
 
-    // Handle outer face (0): Can only have full NCOLORS-cycles
-    // Forms a cycle of length 1 (points to itself)
-    filter_cycles_by_length(&mut faces[0], cycles, NCOLORS);
-    for cycle_id in 0..NCYCLES {
-        if faces[0].possible_cycles.contains(cycle_id as u64) {
-            next_by_cycle[0][cycle_id] = Some(0); // Points to itself
-            previous_by_cycle[0][cycle_id] = Some(0);
-        }
-    }
-
-    // Handle inner face (NFACES-1): Can only have full NCOLORS-cycles
-    // Forms a cycle of length 1 (points to itself)
-    // The inner face will be assigned cycle (0,1,2,3,4,5) during search for symmetry breaking
-    filter_cycles_by_length(&mut faces[NFACES - 1], cycles, NCOLORS);
-    for cycle_id in 0..NCYCLES {
-        if faces[NFACES - 1].possible_cycles.contains(cycle_id as u64) {
-            next_by_cycle[NFACES - 1][cycle_id] = Some(NFACES - 1); // Points to itself
-            previous_by_cycle[NFACES - 1][cycle_id] = Some(NFACES - 1);
+    // Inner and outer faces allow only full cycles, with self adjacency.
+    // Search assigns the canonical inner cycle later.
+    for face_id in [0, NFACES - 1] {
+        filter_cycles_by_length(&mut faces[face_id], cycles, NCOLORS);
+        for cycle_id in 0..NCYCLES {
+            if faces[face_id].possible_cycles.contains(cycle_id as u64) {
+                next_by_cycle[face_id][cycle_id] = Some(face_id);
+                previous_by_cycle[face_id][cycle_id] = Some(face_id);
+            }
         }
     }
 
@@ -667,5 +608,20 @@ mod tests {
             !inner.possible_cycles.is_empty(),
             "Inner face has no possible cycles"
         );
+
+        // Every full cycle is retained, with self adjacency; all other entries
+        // are absent from both the allowed set and the adjacency tables.
+        for face_id in [0, NFACES - 1] {
+            for cycle_id in 0..NCYCLES {
+                let full_cycle = cycles.get(cycle_id as u64).len() == NCOLORS;
+                let adjacent = if full_cycle { Some(face_id) } else { None };
+                assert_eq!(
+                    memo.faces[face_id].possible_cycles.contains(cycle_id as u64),
+                    full_cycle
+                );
+                assert_eq!(memo.next_face_by_cycle[face_id][cycle_id], adjacent);
+                assert_eq!(memo.previous_face_by_cycle[face_id][cycle_id], adjacent);
+            }
+        }
     }
 }

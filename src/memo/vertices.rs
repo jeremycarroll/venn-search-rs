@@ -10,101 +10,37 @@ use crate::geometry::{Color, ColorSet, Vertex};
 
 /// MEMO data for all possible vertices in the diagram.
 ///
-/// # The Vertex Allocation Strategy (Mental Somersault Required!)
+/// The sparse array is indexed by `[outside_face][primary][secondary]`.
+/// `outside_face` is the face bitmask with the two crossing colors removed:
+/// it identifies the incident region outside those two curves, while retaining
+/// membership in every other curve. Primary and secondary distinguish the two
+/// crossing orientations.
 ///
-/// A monotone 6-Venn diagram has only **126 actual vertices** (by Euler's formula:
-/// V - E + F = 2, with V=126, E=189, F=64).
+/// For example, `[0b100][0][1]` is outside curves 0 and 1 and inside curve 2.
+/// Its four incident faces have masks 0b100, 0b101, 0b110 and 0b111.
+/// Swapping primary and secondary gives a separate possible configuration.
 ///
-/// ## Theoretical vs Actual Allocation
+/// # Allocation and construction
 ///
-/// - **Theoretical possible vertices**: NPOINTS = 2^(NCOLORS-2) × NCOLORS × (NCOLORS-1) = 16 × 6 × 5 = **480**
-/// - **Actual array allocation**: NFACES × NCOLORS × NCOLORS = 64 × 6 × 6 = **2304 slots**
-/// - **Precomputed vertices**: **480** (all theoretically possible configurations)
-/// - **Used in any specific solution**: **126** (from Euler's formula: V - E + F = 2)
+/// For NCOLORS=6 the boxed array has 64 × 6 × 6 = 2304 slots, of which
+/// NPOINTS = 2^(6-2) × 6 × 5 = 480 contain possible configurations.
+/// Diagonal color pairs and face masks containing a crossing color stay None.
+/// The spare slots allow direct indexing without a packed-index calculation.
 ///
-/// **Memory utilization during search**: 480 of 2304 slots are Some(Vertex) (21% utilization).
-/// The remaining 1824 slots stay None. This enables **O(1) indexing** with simple 3D array lookup.
-///
-/// ## Why Allocate 2304 Instead of 480?
-///
-/// The array includes:
-/// 1. **Diagonal entries** (primary == secondary): These are never valid vertices, but
-///    including them simplifies indexing (no need to subtract 1 or remap indices).
-/// 2. **All NFACES combinations**: Not all faces will have vertices for all color pairs,
-///    but computing which faces are valid would require complex precomputation.
-///
-/// **Trade-off**: We sacrifice ~140 KB of memory to gain:
-/// - Simple 3D array indexing: `vertices[face][primary][secondary]`
-/// - No conditional logic in hot path lookups
-/// - Faster constraint propagation during search
-///
-/// **Alternative considered**: Use `[NFACES][NCOLORS][NCOLORS-1]` to exclude diagonal,
-/// reducing to 1920 slots (~34% smaller). However, this would require index remapping
-/// (`secondary - (secondary > primary ? 1 : 0)`) on every lookup. The current approach
-/// prioritizes simplicity and performance over memory efficiency
-///
-/// ## The Indexing Trick (This is the confusing part!)
-///
-/// **Warning**: Understanding this indexing scheme is like telling your left hand from
-/// your right - some people find it super hard. Read slowly!
-///
-/// Vertices are indexed by `[outside_face][primary_color][secondary_color]` where:
-///
-/// - **`outside_face`**: The face ID (colorset bitmask) of colors that are
-///   **outside BOTH** the primary and secondary curves. This is the "squinting"
-///   you have to do - we identify the vertex not by what's crossing, but by
-///   what's NOT crossing!
-///
-/// - **`primary_color`**: The curve that crosses from **inside** secondary to **outside**
-///
-/// - **`secondary_color`**: The curve that crosses from **outside** primary to **inside**
-///
-/// **IMPORTANT**: Primary vs secondary matters! Swapping them gives a **different vertex**
-/// with opposite orientation. Both `[face][a][b]` and `[face][b][a]` exist as distinct
-/// vertices representing the same geometric crossing point viewed from opposite directions.
-///
-/// Example: Vertex `[0b111100][0][1]` (face {c,d,e,f}, primary=a, secondary=b) is
-/// different from `[0b111100][1][0]` (same face, primary=b, secondary=a).
-///
-/// ## Why This Weird Indexing?
-///
-/// This scheme allows us to:
-/// 1. Uniquely identify all possible vertex configurations
-/// 2. Precompute which vertices can exist in any valid diagram
-/// 3. Store relationships between vertices, edges, and faces efficiently
-/// 4. Enable O(1) lookups during constraint propagation
-///
-/// **Performance Impact**: This indexing scheme, combined with negative constraints,
-/// is a key optimization that reduced search time from **~1 year CPU time (1999
-/// implementation)** to **~5 seconds (2025 implementation)**. The seemingly wasteful
-/// memory overhead (2304 slots, 480 precomputed, 126 used per solution) enables
-/// dramatic algorithmic speedups through simple O(1) array indexing.
-///
-/// # Memory Layout
-///
-/// - `vertices`: **Heap-allocated** via Box
-///   - Reason: Large 3D array (NFACES × NCOLORS × NCOLORS = 2304 elements for NCOLORS=6)
-///   - Size: 64 × 6 × 6 × sizeof(Option<Vertex>) ≈ 147 KB for NCOLORS=6
-///   - Box keeps only a pointer (8 bytes) on stack, array lives on heap
-///   - Prevents stack overflow for large arrays
-///   - 480 of 2304 slots precomputed (21% utilization), rest remain None
+/// The first pass assigns IDs in face/edge/other-color traversal order and
+/// creates vertices with initialized placeholder edges. The second pass fills
+/// all four incoming slots. The flat lookup then copies the completed vertices
+/// in ID order. Both lookups belong to this context and stay fixed during search.
 #[derive(Debug, Clone)]
 pub struct VerticesMemo {
     /// All possible vertex configurations indexed by outside face and crossing orientation.
     ///
     /// **Indexing**: `vertices[outside_face][primary][secondary]`
     ///
-    /// Where:
-    /// - `outside_face` = face ID (bitmask) of colors outside BOTH crossing curves
-    /// - `primary` = curve crossing from inside secondary to outside
-    /// - `secondary` = curve crossing from outside primary to inside
+    /// The face mask excludes both crossing colors; primary and secondary select
+    /// the orientation. Invalid configurations contain None.
     ///
-    /// Returns `Some(Vertex)` if this configuration is valid, `None` otherwise.
-    ///
-    /// **Note**: After precomputation, 480 of 2304 slots contain possible vertex configurations.
-    /// In any specific solution, only 126 vertices are actually used (Euler's formula: V - E + F = 2).
-    ///
-    /// **Heap-allocated** via Box - 3D array is too large for stack (147 KB).
+    /// Heap-allocated because the full face/color grid is large.
     pub vertices: Box<[[[Option<Vertex>; NCOLORS]; NCOLORS]; NFACES]>,
 
     /// Flat lookup by vertex ID for corner checking.
@@ -204,8 +140,9 @@ pub fn determine_primary_secondary(
 
 /// Compute the "outside face" index for vertex indexing.
 ///
-/// The outside face is the set of colors that are outside BOTH the primary
-/// and secondary curves. This is used as the first index in the 3D vertex array.
+/// Remove the two crossing colors from the face mask, retaining membership in
+/// all other curves. This identifies the incident face outside both crossing
+/// curves and supplies the first index in the 3D vertex array.
 ///
 /// # Formula
 ///
@@ -219,12 +156,35 @@ pub fn determine_primary_secondary(
 ///
 /// # Returns
 ///
-/// Face ID (bitmask) of colors outside both crossing curves.
+/// Face ID (bitmask) with both crossing colors removed.
 pub fn compute_outside_face(face_colors: ColorSet, primary: Color, secondary: Color) -> usize {
     let mut outside = face_colors;
     outside.remove(primary);
     outside.remove(secondary);
     outside.bits() as usize
+}
+
+/// The table address and incoming slot for a crossing seen from one face.
+/// Shared by both vertex passes and face-link construction; not a stored table.
+pub(super) struct VertexLocation {
+    pub(super) outside_face: usize,
+    pub(super) primary: Color,
+    pub(super) secondary: Color,
+    pub(super) slot: usize,
+}
+
+impl VertexLocation {
+    pub(super) fn new(edge_color: Color, other_color: Color, face_colors: ColorSet) -> Self {
+        let slot = compute_incoming_edge_slot(edge_color, other_color, face_colors);
+        let (primary, secondary) = determine_primary_secondary(slot, edge_color, other_color);
+        let outside_face = compute_outside_face(face_colors, primary, secondary);
+        Self {
+            outside_face,
+            primary,
+            secondary,
+            slot,
+        }
+    }
 }
 
 impl VerticesMemo {
@@ -239,7 +199,7 @@ impl VerticesMemo {
     ///   For each color pair (edge_color, other_color) where edge_color ≠ other_color:
     ///     1. Determine incoming edge slot (0-3) based on edge orientation and face membership
     ///     2. Determine primary/secondary colors from slot
-    ///     3. Compute outside_face = colors outside BOTH primary and secondary
+    ///     3. Compute outside_face by removing primary and secondary from the face mask
     ///     4. Create vertex at vertices[outside_face][primary][secondary] if it doesn't exist
     ///
     /// **Phase 2: Populate incoming_edges**
@@ -277,11 +237,12 @@ impl VerticesMemo {
                     }
                     let other_color = Color::new(other_color_val as u8);
 
-                    // Compute vertex parameters
-                    let slot = compute_incoming_edge_slot(edge_color, other_color, face_colors);
-                    let (primary, secondary) =
-                        determine_primary_secondary(slot, edge_color, other_color);
-                    let outside_face = compute_outside_face(face_colors, primary, secondary);
+                    let VertexLocation {
+                        outside_face,
+                        primary,
+                        secondary,
+                        ..
+                    } = VertexLocation::new(edge_color, other_color, face_colors);
 
                     // Create vertex if it doesn't exist
                     let primary_idx = primary.value() as usize;
@@ -333,11 +294,12 @@ impl VerticesMemo {
                     }
                     let other_color = Color::new(other_color_val as u8);
 
-                    // Compute vertex parameters (same as Phase 1)
-                    let slot = compute_incoming_edge_slot(edge_color, other_color, face_colors);
-                    let (primary, secondary) =
-                        determine_primary_secondary(slot, edge_color, other_color);
-                    let outside_face = compute_outside_face(face_colors, primary, secondary);
+                    let VertexLocation {
+                        outside_face,
+                        primary,
+                        secondary,
+                        slot,
+                    } = VertexLocation::new(edge_color, other_color, face_colors);
 
                     // Get mutable reference to vertex
                     let primary_idx = primary.value() as usize;
@@ -358,7 +320,7 @@ impl VerticesMemo {
         }
 
         eprintln!(
-            "[VerticesMemo] Initialization complete: {} vertices with incoming_edges (21% utilization of {} slots).",
+            "[VerticesMemo] Initialization complete: {} vertices with incoming_edges in {} slots.",
             vertex_id_counter, total_slots
         );
 
@@ -385,9 +347,9 @@ impl VerticesMemo {
     ///
     /// # Arguments
     ///
-    /// * `face_id` - The face at whose boundary the vertex lies
-    /// * `color_a` - First color crossing at this vertex
-    /// * `color_b` - Second color crossing at this vertex
+    /// * `face_id` - Outside face mask, with both crossing colors removed
+    /// * `color_a` - Primary color crossing at this vertex
+    /// * `color_b` - Secondary color crossing at this vertex
     ///
     /// # Returns
     ///
