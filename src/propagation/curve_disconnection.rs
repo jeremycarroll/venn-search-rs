@@ -1,43 +1,28 @@
 // Copyright (C) 2025 Jeremy J. Carroll. See LICENSE for details.
 
-//! Disconnected curve detection during Venn diagram search.
+//! Inactive disconnected-curve helpers for Venn diagram search.
 //!
-//! This module implements disconnected curve checking from C code edge.c.
-//! It detects when a curve forms multiple separate components instead of
-//! a single connected loop.
+//! These helpers compare a connected component's length with the assigned edge
+//! count for its color and direction. A mismatch returns `DisconnectedCurve`
+//! with the color, visited length, total edge count and propagation depth.
 //!
-//! **This is separate from:**
-//! - Crossing limit checks (in vertices.rs)
-//! - Corner detection checks (in corner_detection.rs)
+//! # Production boundary
 //!
-//! # Algorithm Overview
+//! The `edge_curve_checks` invocation in `vertices.rs` is intentionally disabled.
+//! Disconnection pruning needs further investigation before activation; retaining
+//! callable helpers does not establish that this rule is ready for the search.
+//! Crossing-limit and corner checks remain separate active constraints. Helper
+//! cleanup must preserve this deferred boundary and the existing search results.
 //!
-//! From C edge.c:24-52, 54-83:
+//! # Traversal assumptions
 //!
-//! 1. `curve_length()` - Count edges in curve by following links
-//!    - Starts from an edge
-//!    - Follows edge->to->next until back at start
-//!    - Returns count
-//!
-//! 2. `check_for_disconnected_curve()` - Compare curve length to total
-//!    - If edge->reversed->to != NULL (closed curve):
-//!      - Count curve length
-//!      - Compare to EdgeColorCountState (total edges assigned)
-//!      - If length < count → disconnected!
-//!      - If equal → mark color as complete
-//!    - This detects separate components
-//!
-//! 3. `find_start_of_curve()` - Find starting edge
-//!    - Walks backwards to find start (or detects loop)
-//!
-//! 4. `edge_curve_checks()` - Entry point
-//!    - If curve already complete, skip
-//!    - Otherwise check for disconnection
-//!
-//! # When Called
-//!
-//! From C venn.c:53 in dynamicCheckEdgeCurvesAndCorners():
-//! Called for each edge when a facial cycle is assigned to a face.
+//! Face/color indices must belong to the configured state and MEMO tables.
+//! Consistent links follow one color curve, forming an open path or a closed
+//! loop that returns to the starting edge. Backward traversal uses adjacent
+//! faces to reverse edges; forward traversal follows each connection's `next`.
+//! The current walks rely on those link invariants: malformed links entering a
+//! different cycle can make them non-terminating. Bounded traversal and finite
+//! regression fixtures remain required work for these callable helpers.
 
 use crate::context::{DynamicState, MemoizedData};
 use crate::trail::Trail;
@@ -278,10 +263,9 @@ fn check_for_disconnected_curve(
 
 /// Check edges in a cycle for disconnection.
 ///
-/// Ported from C edge.c:76-83.
-///
-/// This is called during the main Venn diagram search for each edge
-/// when a facial cycle is assigned to a face.
+/// The production invocation during facial-cycle assignment in `vertices.rs`
+/// is disabled. This entry point is retained for the deferred disconnection
+/// feature; see the module's traversal assumptions and limitations.
 ///
 /// If the curve is already marked complete, skips the check.
 /// Otherwise checks if the curve forms a single connected component.
