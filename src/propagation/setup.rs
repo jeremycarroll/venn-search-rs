@@ -6,10 +6,9 @@
 //! based on degree signatures from InnerFacePredicate or command-line flags.
 //! Sets up the inner face and restricts neighboring faces to specific cycle lengths.
 
-use crate::context::{DynamicState, MemoizedData};
+use crate::context::MemoizedData;
 use crate::geometry::CycleSet;
-use crate::trail::Trail;
-use std::ptr::NonNull;
+use crate::trail::TrailedState;
 
 use super::core::{propagate_cycle_choice, restrict_face_cycles};
 use super::errors::PropagationFailure;
@@ -24,8 +23,7 @@ use super::errors::PropagationFailure;
 /// # Arguments
 ///
 /// * `memo` - Immutable MEMO data
-/// * `state` - Mutable search state
-/// * `trail` - Trail for backtracking
+/// * `state` - Paired state and undo-log owner
 /// * `face_id` - Face to restrict
 /// * `length` - Required cycle length (or 0 for no restriction)
 ///
@@ -34,8 +32,7 @@ use super::errors::PropagationFailure;
 /// `Ok(())` if restriction succeeds, `Err(PropagationFailure)` if no cycles match.
 fn restrict_face_to_cycle_length(
     memo: &MemoizedData,
-    state: &mut DynamicState,
-    trail: &mut Trail,
+    state: &mut TrailedState,
     face_id: usize,
     length: usize,
 ) -> Result<(), PropagationFailure> {
@@ -56,7 +53,7 @@ fn restrict_face_to_cycle_length(
     }
 
     // Restrict the face to these cycles
-    restrict_face_cycles(memo, state, trail, face_id, &allowed_cycles, 0)
+    restrict_face_cycles(memo, state, face_id, &allowed_cycles, 0)
 }
 
 /// Set up the central face configuration for the search.
@@ -84,8 +81,7 @@ fn restrict_face_to_cycle_length(
 /// # Arguments
 ///
 /// * `memo` - Immutable MEMO data
-/// * `state` - Mutable search state
-/// * `trail` - Trail for backtracking
+/// * `state` - Paired state and undo-log owner
 /// * `face_degrees` - Array of cycle lengths for neighboring faces (0 = no restriction)
 ///
 /// # Returns
@@ -104,8 +100,7 @@ fn restrict_face_to_cycle_length(
 /// - Face 63 (all colors) set to canonical cycle (a,b,c,d,e,f)
 pub fn setup_central_face(
     memo: &MemoizedData,
-    state: &mut DynamicState,
-    trail: &mut Trail,
+    state: &mut TrailedState,
     face_degrees: &[u64; crate::geometry::constants::NCOLORS],
 ) -> Result<(), PropagationFailure> {
     use crate::geometry::constants::{NCOLORS, NCYCLES, NFACES};
@@ -118,7 +113,7 @@ pub fn setup_central_face(
         // Face with all colors except i
         let face_id = (!(1 << i)) & (NFACES - 1);
 
-        restrict_face_to_cycle_length(memo, state, trail, face_id, degree)?;
+        restrict_face_to_cycle_length(memo, state, face_id, degree)?;
     }
 
     // 2. Set inner face to canonical cycle (last cycle in array)
@@ -126,16 +121,10 @@ pub fn setup_central_face(
     let canonical_cycle_id = (NCYCLES - 1) as u64;
 
     // Set the cycle directly (trail-tracked)
-    let encoded = canonical_cycle_id + 1;
-    unsafe {
-        trail.record_and_set(
-            NonNull::from(&mut state.faces.faces[inner_face_id].current_cycle_encoded),
-            encoded,
-        );
-    }
+    state.set_face_cycle(inner_face_id, canonical_cycle_id);
 
     // 3. Propagate this choice
-    propagate_cycle_choice(memo, state, trail, inner_face_id, canonical_cycle_id, 0)?;
+    propagate_cycle_choice(memo, state, inner_face_id, canonical_cycle_id, 0)?;
 
     Ok(())
 }

@@ -6,12 +6,13 @@
 //! trail-tracked edge vertex connections. DynamicEdge is paired with
 //! [`crate::geometry::EdgeMemo`] (which contains immutable precomputed data).
 
+use crate::geometry::constants::{NCOLORS, NFACES, NPOINTS};
 use crate::geometry::edge::{CurveLink, EdgeRef};
 
 /// Sentinel bit used to distinguish None from Some in CurveLink encoding.
 ///
 /// When bit 63 is set, the value represents Some(CurveLink). When clear (value is 0),
-/// it represents None. This is a standard tagged pointer pattern.
+/// it represents None. This tags an indexed connection, not a memory address.
 const CURVELINK_SOME_BIT: u64 = 1 << 63;
 
 /// DYNAMIC (mutable, trail-tracked) edge data.
@@ -37,7 +38,7 @@ pub struct DynamicEdge {
     ///   - bit 63: sentinel bit (always 1 for Some)
     ///
     /// Use `get_to()` and `encode_to()` accessor methods to work with Option<CurveLink>.
-    pub to_encoded: u64,
+    pub(crate) to_encoded: u64,
 }
 
 impl DynamicEdge {
@@ -52,13 +53,8 @@ impl DynamicEdge {
         decode_curve_link(self.to_encoded)
     }
 
-    /// Set the current vertex connection (returns encoded value for trail tracking).
-    ///
-    /// This method is used with trail tracking like:
-    /// ```ignore
-    /// let encoded = DynamicEdge::encode_to(Some(link));
-    /// trail.record_and_set(ptr_to_to_encoded, encoded);
-    /// ```
+    /// Encode a connection after checking both configured and packed-field bounds.
+    /// Search mutations use `TrailedState::set_edge_connection` to record old values.
     #[inline]
     pub fn encode_to(link: Option<CurveLink>) -> u64 {
         encode_curve_link(link)
@@ -84,26 +80,24 @@ fn encode_curve_link(link: Option<CurveLink>) -> u64 {
             let vertex_id = l.vertex_id as u64;
 
             // Validate bounds to prevent data corruption
-            debug_assert!(
-                face_id < 64,
-                "face_id {} exceeds 6-bit limit (0-63)",
+            assert!(
+                face_id < NFACES as u64 && face_id < 64,
+                "face_id {} outside configured or 6-bit domain",
                 face_id
             );
-            debug_assert!(
-                color_idx < 8,
-                "color_idx {} exceeds 3-bit limit (0-7)",
+            assert!(
+                color_idx < NCOLORS as u64 && color_idx < 8,
+                "color_idx {} outside configured or 3-bit domain",
                 color_idx
             );
-            debug_assert!(
-                vertex_id < 512,
-                "vertex_id {} exceeds 9-bit limit (0-511)",
+            assert!(
+                vertex_id < NPOINTS as u64 && vertex_id < 512,
+                "vertex_id {} outside configured or 9-bit domain",
                 vertex_id
             );
 
             // Pack into u64: face_id (6 bits) | color_idx (3 bits) | vertex_id (9 bits)
-            let encoded = (face_id & 0x3F)           // bits 0-5
-                | ((color_idx & 0x7) << 6)           // bits 6-8
-                | ((vertex_id & 0x1FF) << 9); // bits 9-17
+            let encoded = face_id | (color_idx << 6) | (vertex_id << 9);
 
             // Set sentinel bit to mark as Some
             encoded | CURVELINK_SOME_BIT
@@ -159,7 +153,7 @@ mod tests {
         assert_eq!(decode_curve_link(encoded_none), None);
 
         // Test Some(CurveLink) encoding
-        let link = CurveLink::new(EdgeRef::new(42, 3), 123);
+        let link = CurveLink::new(EdgeRef::new(NFACES - 1, NCOLORS - 1), NPOINTS - 1);
         let encoded = DynamicEdge::encode_to(Some(link));
         assert_ne!(encoded, 0);
 
@@ -173,11 +167,35 @@ mod tests {
     }
 
     #[test]
+    fn rejects_configured_and_packed_field_overflow() {
+        for link in [
+            CurveLink::new(EdgeRef::new(NFACES, 0), 0),
+            CurveLink::new(EdgeRef::new(0, NCOLORS), 0),
+            CurveLink::new(EdgeRef::new(0, 0), NPOINTS),
+            CurveLink::new(EdgeRef::new(64, 0), 0),
+            CurveLink::new(EdgeRef::new(0, 8), 0),
+            CurveLink::new(EdgeRef::new(0, 0), 512),
+            CurveLink::new(EdgeRef::new(usize::MAX, 0), 0),
+        ] {
+            assert!(std::panic::catch_unwind(|| DynamicEdge::encode_to(Some(link))).is_err());
+        }
+    }
+
+    #[test]
+    fn zero_fields_are_distinct_from_none() {
+        let link = CurveLink::new(EdgeRef::new(0, 0), 0);
+        let encoded = DynamicEdge::encode_to(Some(link));
+        assert_eq!(encoded, CURVELINK_SOME_BIT);
+        assert_eq!(decode_curve_link(encoded), Some(link));
+        assert_eq!(decode_curve_link(0), None);
+    }
+
+    #[test]
     fn test_curve_link_encoding_bounds() {
         // Test maximum values for each field
-        let max_face = 63; // 6 bits (0-63)
-        let max_color = 5; // 3 bits (0-7, we use 0-5)
-        let max_vertex = 479; // 9 bits (0-511, we use 0-479)
+        let max_face = NFACES - 1; // 6 bits (0-63)
+        let max_color = NCOLORS - 1; // 3 bits (0-7, we use 0-5)
+        let max_vertex = NPOINTS - 1; // 9 bits (0-511, we use 0-479)
 
         let link = CurveLink::new(EdgeRef::new(max_face, max_color), max_vertex);
         let encoded = DynamicEdge::encode_to(Some(link));

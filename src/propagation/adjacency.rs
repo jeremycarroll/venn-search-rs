@@ -6,9 +6,9 @@
 //! share an edge. Uses the direction tables (same_direction, opposite_direction)
 //! from cycle data to restrict adjacent faces.
 
-use crate::context::{DynamicState, MemoizedData};
+use crate::context::MemoizedData;
 use crate::geometry::CycleId;
-use crate::trail::Trail;
+use crate::trail::TrailedState;
 
 use super::core::restrict_face_cycles;
 use super::errors::PropagationFailure;
@@ -31,8 +31,7 @@ use super::errors::PropagationFailure;
 /// cycle initialization.
 pub(super) fn propagate_edge_adjacency(
     memo: &MemoizedData,
-    state: &mut DynamicState,
-    trail: &mut Trail,
+    state: &mut TrailedState,
     face_id: usize,
     cycle_id: CycleId,
     depth: usize,
@@ -63,10 +62,10 @@ pub(super) fn propagate_edge_adjacency(
         let opposite_dir_cycles = cycle.opposite_direction(i);
 
         // Propagate to doubly-adjacent face (same direction)
-        restrict_face_cycles(memo, state, trail, ab_face_id, same_dir_cycles, depth)?;
+        restrict_face_cycles(memo, state, ab_face_id, same_dir_cycles, depth)?;
 
         // Propagate to singly-adjacent face (opposite direction)
-        restrict_face_cycles(memo, state, trail, a_face_id, opposite_dir_cycles, depth)?;
+        restrict_face_cycles(memo, state, a_face_id, opposite_dir_cycles, depth)?;
     }
 
     Ok(())

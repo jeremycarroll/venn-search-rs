@@ -19,9 +19,21 @@
 //! ## Tier 2: DYNAMIC Data (Mutable)
 //!
 //! Search state that changes during search, tracked on the trail:
-//! - Trail - records state changes for O(1) backtracking
+//! - Trail - records indexed changes for O(k) rewind of k writes
 //! - Faces - current facial cycle assignments
 //! - EdgeColorCount - crossing counts
+//!
+//! State reads and propagation share one owned undo boundary:
+//! ```
+//! use venn_search::{SearchContext, propagation};
+//! use venn_search::geometry::NCOLORS;
+//! let mut ctx = SearchContext::new();
+//! let checkpoint = ctx.checkpoint();
+//! let (memo, state) = ctx.parts_mut();
+//! let _result = propagation::setup_central_face(memo, state, &[0; NCOLORS]);
+//! ctx.rewind_to(checkpoint);
+//! assert!(ctx.trail().is_empty());
+//! ```
 //!
 //! # Search Algorithm
 //!
@@ -61,4 +73,4 @@ pub mod trail;
 pub use context::SearchContext;
 pub use engine::{Predicate, PredicateResult, SearchEngine};
 pub use symmetry::{check_symmetry, SymmetryType};
-pub use trail::Trail;
+pub use trail::{Trail, TrailedState};

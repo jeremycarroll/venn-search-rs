@@ -203,7 +203,7 @@ impl SearchEngine {
             in_choice_mode: false,
             current_choice: 0,
             num_choices: 0,
-            trail_checkpoint: ctx.trail.len(),
+            trail_checkpoint: ctx.trail().len(),
         });
 
         // Main execution loop
@@ -216,7 +216,7 @@ impl SearchEngine {
             let entry = self.stack.last_mut().unwrap();
 
             // Rewind trail to this entry's checkpoint
-            ctx.trail.rewind_to(entry.trail_checkpoint);
+            ctx.rewind_to(entry.trail_checkpoint);
 
             if !entry.in_choice_mode {
                 // Call mode: try_pred
@@ -248,7 +248,7 @@ impl SearchEngine {
                         entry.in_choice_mode = true;
                         entry.current_choice = 0;
                         entry.num_choices = n;
-                        entry.trail_checkpoint = ctx.trail.len();
+                        entry.trail_checkpoint = ctx.trail().len();
                     }
                     PredicateResult::Suspend => {
                         // Pause execution, return engine for resumption
@@ -319,7 +319,7 @@ impl SearchEngine {
             in_choice_mode: false,
             current_choice: 0,
             num_choices: 0,
-            trail_checkpoint: ctx.trail.len(),
+            trail_checkpoint: ctx.trail().len(),
         });
     }
 
@@ -335,7 +335,7 @@ impl SearchEngine {
             in_choice_mode: false,
             current_choice: 0,
             num_choices: 0,
-            trail_checkpoint: ctx.trail.len(),
+            trail_checkpoint: ctx.trail().len(),
         });
     }
 

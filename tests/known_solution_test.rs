@@ -164,7 +164,7 @@ fn test_known_solution_in_order() {
         let face_id = colorset_to_face_id(face_colorset);
 
         // Check if face is already assigned (forced by propagation)
-        let current_cycle = ctx.state.faces.faces[face_id].current_cycle();
+        let current_cycle = ctx.state().faces.faces[face_id].current_cycle();
         if current_cycle.is_some() {
             eprintln!("Face {} already assigned (forced by propagation)", face_id);
             forced_by_propagation += 1;
@@ -176,7 +176,7 @@ fn test_known_solution_in_order() {
             .unwrap_or_else(|| panic!("Could not find cycle for colors '{}'", cycle_colors_str));
 
         // Check that this cycle is in the face's possible set
-        let possible_cycles = &ctx.state.faces.faces[face_id].possible_cycles;
+        let possible_cycles = &ctx.state().faces.faces[face_id].possible_cycles;
         assert!(
             possible_cycles.contains(cycle_id),
             "Face {} cannot have cycle {} (colors '{}')",
@@ -189,17 +189,11 @@ fn test_known_solution_in_order() {
         manually_assigned.borrow_mut().insert(face_id);
 
         // Set the cycle directly (simulating VennPredicate choice)
-        ctx.state.faces.faces[face_id].set_current_cycle(Some(cycle_id));
+        ctx.set_retry_cursor_untrailed(face_id, Some(cycle_id));
 
         // Propagate constraints
-        let result = propagation::propagate_cycle_choice(
-            &ctx.memo,
-            &mut ctx.state,
-            &mut ctx.trail,
-            face_id,
-            cycle_id,
-            0,
-        );
+        let (memo, state) = ctx.parts_mut();
+        let result = propagation::propagate_cycle_choice(memo, state, face_id, cycle_id, 0);
 
         if let Err(failure) = result {
             eprintln!("Propagation failed at face {}: {:?}", face_id, failure);
@@ -231,7 +225,7 @@ fn test_known_solution_in_order() {
     use venn_search::geometry::constants::NFACES;
     let mut unassigned_count = 0;
     for face_id in 0..NFACES {
-        if ctx.state.faces.faces[face_id].current_cycle().is_none() {
+        if ctx.state().faces.faces[face_id].current_cycle().is_none() {
             unassigned_count += 1;
             eprintln!("WARNING: Face {} is unassigned!", face_id);
         }

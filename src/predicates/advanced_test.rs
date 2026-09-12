@@ -40,14 +40,14 @@ impl OpenClose for OpenCloseFile {
         let buffered_writer = BufWriter::new(
             File::create(&filename).unwrap_or_else(|_| panic!("Cannot open file: {}", filename)),
         );
-        self.old = ctx.state.output.replace(Box::new(buffered_writer));
+        self.old = ctx.replace_output(Some(Box::new(buffered_writer)));
         self.counter += 1;
         true
     }
 
     fn close(&mut self, ctx: &mut SearchContext) {
-        let our_boxed_writer = ctx.state.output.take();
-        ctx.state.output = self.old.take();
+        let our_boxed_writer = ctx.replace_output(None);
+        let _ = ctx.replace_output(self.old.take());
         let mut writer = *(our_boxed_writer
             .expect("Invariant failure, output field should only be mutated by OpenCloseFile"));
         writer.flush().expect("I/O error on close of file");
@@ -59,18 +59,15 @@ pub struct PrintHeaderPredicate;
 
 impl Predicate for PrintHeaderPredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        let symmetry = check_solution_canonicality(&ctx.state, &ctx.memo);
-        let writer = ctx
-            .state
-            .output
-            .as_deref_mut()
-            .expect("Must open file to save solution");
+        let symmetry = check_solution_canonicality(ctx.state(), &ctx.memo);
+        let (_, state, statistics, output) = ctx.output_parts();
+        let writer = output.expect("Must open file to save solution");
         let _ = write!(
             writer,
             "## {:?} Solution {} - inner face degrees: {:?}\n\n",
             symmetry,
-            ctx.statistics.get(Counters::VennSolutions),
-            ctx.state.current_face_degrees
+            statistics.get(Counters::VennSolutions),
+            state.current_face_degrees
         );
 
         PredicateResult::Success
@@ -82,21 +79,18 @@ pub struct PrintFacesPredicate;
 
 impl Predicate for PrintFacesPredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        let writer = ctx
-            .state
-            .output
-            .as_deref_mut()
-            .expect("Must open file to save solution");
+        let (memo, state, _, output) = ctx.output_parts();
+        let writer = output.expect("Must open file to save solution");
 
         for face_id in 0..NFACES {
-            let face = &ctx.state.faces.faces[face_id];
-            let face_memo = ctx.memo.faces.get_face(face_id);
+            let face = &state.faces.faces[face_id];
+            let face_memo = memo.faces.get_face(face_id);
 
             let next_id = face.next_face().map(|id| id as u64).unwrap_or(0);
             let prev_id = face.previous_face().map(|id| id as u64).unwrap_or(0);
 
             if let Some(cycle_id) = face.current_cycle() {
-                let cycle = ctx.memo.cycles.get(cycle_id);
+                let cycle = memo.cycles.get(cycle_id);
                 writeln!(
                     writer,
                     "Face {:2} ({:0width$b}): cycle {:2} = {} [next={:0width$b}, prev={:0width$b}]",
@@ -131,22 +125,18 @@ pub struct PrintFaceCyclesPredicate;
 
 impl Predicate for PrintFaceCyclesPredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        let writer = ctx
-            .state
-            .output
-            .as_deref_mut()
-            .expect("Must open file to save solution");
+        let (memo, state, _, output) = ctx.output_parts();
+        let writer = output.expect("Must open file to save solution");
 
         writeln!(writer, "\n--- Face Cycles by Color Count ---").unwrap();
 
         for color_count in 0..=NCOLORS {
             // Find first face with this color count
             let first_face =
-                (0..NFACES).find(|&id| ctx.memo.faces.get_face(id).colors.len() == color_count);
+                (0..NFACES).find(|&id| memo.faces.get_face(id).colors.len() == color_count);
 
             if let Some(start_id) = first_face {
-                let _expected_length =
-                    ctx.memo.faces.face_degree_by_color_count[color_count] as usize;
+                let _expected_length = memo.faces.face_degree_by_color_count[color_count] as usize;
                 let mut current_id = start_id;
                 let mut iterations = 0;
 
@@ -158,7 +148,7 @@ impl Predicate for PrintFaceCyclesPredicate {
                         break;
                     }
 
-                    let next_id = ctx.state.faces.faces[current_id]
+                    let next_id = state.faces.faces[current_id]
                         .next_face()
                         .expect("Incomplete cycle of faces");
                     if next_id == start_id {
@@ -189,11 +179,8 @@ impl PrintEdgeCyclesPredicate {
 
 impl Predicate for PrintEdgeCyclesPredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        let writer = ctx
-            .state
-            .output
-            .as_deref_mut()
-            .expect("Must open file to save solution");
+        let (_, state, _, output) = ctx.output_parts();
+        let writer = output.expect("Must open file to save solution");
 
         writeln!(writer, "\n--- Edge Cycles (Curves) by Color ---").unwrap();
 
@@ -216,7 +203,7 @@ impl Predicate for PrintEdgeCyclesPredicate {
                 let _ = write!(writer, "{:0width$b}, ", current_face_id, width = NCOLORS);
 
                 // Get edge->to for this color at this face
-                let link = ctx.state.faces.faces[current_face_id].edge_dynamic[color_idx]
+                let link = state.faces.faces[current_face_id].edge_dynamic[color_idx]
                     .get_to()
                     .expect("Incomplete cycle of edges");
 
@@ -243,11 +230,8 @@ pub struct PrintCornerCountPredicate;
 
 impl Predicate for PrintCornerCountPredicate {
     fn try_pred(&mut self, ctx: &mut SearchContext, _round: usize) -> PredicateResult {
-        let writer = ctx
-            .state
-            .output
-            .as_deref_mut()
-            .expect("Must open file to save solution");
+        let (_, _, _, output) = ctx.output_parts();
+        let writer = output.expect("Must open file to save solution");
         writeln!(writer, "\n--- Corner Counts by Color ---").unwrap();
 
         for color_idx in 0..NCOLORS {

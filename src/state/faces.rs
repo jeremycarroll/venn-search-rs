@@ -88,18 +88,6 @@ impl DynamicFace {
         }
     }
 
-    /// Set current cycle (encodes to u64).
-    ///
-    /// This is for direct assignment (NOT trail-tracked).
-    /// Use SearchContext::reset_face_cycle() or set_face_cycle() for trail-tracked updates.
-    #[inline]
-    pub fn set_current_cycle(&mut self, cycle: Option<CycleId>) {
-        self.current_cycle_encoded = match cycle {
-            None => 0,
-            Some(id) => id + 1,
-        };
-    }
-
     /// Get next face in dual graph cycle (decodes from u64).
     #[inline]
     pub fn next_face(&self) -> Option<usize> {
@@ -153,5 +141,43 @@ impl DynamicFaces {
     #[inline]
     pub fn get_mut(&mut self, face_id: usize) -> &mut DynamicFace {
         &mut self.faces[face_id]
+    }
+}
+
+/// Shared optional index encoding. Validate before adding the sentinel offset.
+pub(crate) fn encode_optional_index(index: Option<u64>, limit: usize) -> u64 {
+    match index {
+        None => 0,
+        Some(id) => {
+            assert!(
+                id < limit as u64,
+                "Optional index {} out of range 0..{}",
+                id,
+                limit
+            );
+            id.checked_add(1).expect("Optional index overflow")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geometry::constants::{NCYCLES, NFACES};
+
+    #[test]
+    fn optional_index_encoding_boundaries() {
+        for limit in [NCYCLES, NFACES] {
+            assert_eq!(encode_optional_index(None, limit), 0);
+            assert_eq!(encode_optional_index(Some(0), limit), 1);
+            assert_eq!(
+                encode_optional_index(Some((limit - 1) as u64), limit),
+                limit as u64
+            );
+            assert!(
+                std::panic::catch_unwind(|| encode_optional_index(Some(limit as u64), limit))
+                    .is_err()
+            );
+        }
     }
 }

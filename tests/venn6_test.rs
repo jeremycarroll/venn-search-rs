@@ -33,16 +33,13 @@ impl OpenClose for PrintSolutionCountPerInnerFace {
     }
 
     fn close(&mut self, ctx: &mut SearchContext) {
-        let writer = ctx
-            .state
-            .output
-            .as_deref_mut()
-            .expect("Must open file to save solution");
+        let (_, state, statistics, output) = ctx.output_parts();
+        let writer = output.expect("Must open file to save solution");
         writeln!(
             writer,
             "{:?} has {} solutions.",
-            ctx.state.current_face_degrees,
-            ctx.statistics.get(VennSolutions) - self.on_enter
+            state.current_face_degrees,
+            statistics.get(VennSolutions) - self.on_enter
         )
         .unwrap();
     }

@@ -7,9 +7,9 @@
 //! serves as a disconnection check: if any face needs the completed color,
 //! then the curve must be disconnected.
 
-use crate::context::{DynamicState, MemoizedData};
+use crate::context::MemoizedData;
 use crate::geometry::CycleSet;
-use crate::trail::Trail;
+use crate::trail::TrailedState;
 
 use super::core::restrict_face_cycles;
 use super::errors::PropagationFailure;
@@ -26,8 +26,7 @@ use super::errors::PropagationFailure;
 /// # Arguments
 ///
 /// * `memo` - Immutable MEMO data
-/// * `state` - Mutable search state
-/// * `trail` - Trail for backtracking
+/// * `state` - Paired state and undo-log owner
 /// * `color_idx` - Index of the completed color to remove
 ///
 /// # Returns
@@ -36,8 +35,7 @@ use super::errors::PropagationFailure;
 /// needs this color (indicating disconnection).
 pub(super) fn remove_completed_color_from_search(
     memo: &MemoizedData,
-    state: &mut DynamicState,
-    trail: &mut Trail,
+    state: &mut TrailedState,
     color_idx: usize,
 ) -> Result<(), PropagationFailure> {
     use crate::geometry::constants::NFACES;
@@ -48,7 +46,7 @@ pub(super) fn remove_completed_color_from_search(
 
     // For each unassigned face
     for face_id in 0..NFACES {
-        let face = &state.faces.faces[face_id];
+        let face = &state.state().faces.faces[face_id];
 
         // Skip faces that already have a cycle assigned
         if face.current_cycle().is_some() {
@@ -64,7 +62,7 @@ pub(super) fn remove_completed_color_from_search(
 
         // Restrict this face to cycles omitting the completed color
         // If this fails, the face needs this color → disconnected curve
-        restrict_face_cycles(memo, state, trail, face_id, &omitting_cycleset, 0).map_err(|_| {
+        restrict_face_cycles(memo, state, face_id, &omitting_cycleset, 0).map_err(|_| {
             PropagationFailure::DisconnectedCurve {
                 color: color_idx,
                 edges_visited: 0, // Not applicable here

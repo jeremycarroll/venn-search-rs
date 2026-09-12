@@ -35,7 +35,6 @@
 
 use crate::context::{DynamicState, MemoizedData};
 use crate::geometry::{constants::NFACES, ColorSet};
-use crate::trail::Trail;
 
 use super::errors::PropagationFailure;
 
@@ -227,7 +226,6 @@ fn find_corners_by_traversal(
 ///
 /// * `memo` - Immutable MEMO data
 /// * `state` - Search state with edge connections
-/// * `_trail` - Trail for backtracking (unused here)
 /// * `face_id` - Face containing the edge to check
 /// * `color_idx` - Color index of the edge to check
 /// * `depth` - Recursion depth for error messages
@@ -239,7 +237,6 @@ fn find_corners_by_traversal(
 pub fn vertex_corner_check(
     memo: &MemoizedData,
     state: &DynamicState,
-    _trail: &mut Trail,
     face_id: usize,
     color_idx: usize,
     depth: usize,

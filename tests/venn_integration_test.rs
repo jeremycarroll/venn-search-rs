@@ -44,7 +44,7 @@ impl Predicate for ValidationPredicate {
 
         // Validate all faces have assigned cycles
         for face_id in 0..NFACES {
-            let face = &ctx.state.faces.faces[face_id];
+            let face = &ctx.state().faces.faces[face_id];
             let current_cycle = face.current_cycle();
 
             assert!(

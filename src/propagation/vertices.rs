@@ -5,11 +5,9 @@
 //! This module handles setting up edge->to pointers to connect edges to vertices,
 //! and enforces the triangle constraint by counting crossings at vertices.
 
-use crate::context::{DynamicState, MemoizedData};
+use crate::context::MemoizedData;
 use crate::geometry::{CycleId, MAX_CROSSINGS_PER_PAIR};
-use crate::state::DynamicEdge;
-use crate::trail::Trail;
-use std::ptr::NonNull;
+use crate::trail::TrailedState;
 
 use super::errors::PropagationFailure;
 
@@ -35,8 +33,7 @@ use super::errors::PropagationFailure;
 /// # Arguments
 ///
 /// * `memo` - Immutable MEMO data (contains vertex array)
-/// * `state` - Mutable search state (contains edge_dynamic arrays, crossing counts, vertex tracking)
-/// * `trail` - Trail for backtracking
+/// * `state` - Paired state and undo-log owner (contains edge_dynamic arrays, crossing counts, vertex tracking)
 /// * `face_id` - Face that was assigned a cycle
 /// * `cycle_id` - The cycle assigned to this face
 /// * `depth` - Recursion depth for error messages
@@ -47,8 +44,7 @@ use super::errors::PropagationFailure;
 /// `Err(PropagationFailure::CrossingLimitExceeded)` if triangle constraint violated.
 pub(super) fn check_face_vertices(
     memo: &MemoizedData,
-    state: &mut DynamicState,
-    trail: &mut Trail,
+    state: &mut TrailedState,
     face_id: usize,
     cycle_id: CycleId,
     depth: usize,
@@ -69,7 +65,7 @@ pub(super) fn check_face_vertices(
         let edge_memo = &face_memo.edges[color_a_idx];
 
         // Check if edge already has a vertex assigned
-        let face_dynamic = &state.faces.faces[face_id];
+        let face_dynamic = &state.state().faces.faces[face_id];
         let existing_to = face_dynamic.edge_dynamic[color_a_idx].get_to();
 
         if let Some(existing_link) = existing_to {
@@ -94,7 +90,9 @@ pub(super) fn check_face_vertices(
             let vertex_id = link.vertex_id;
 
             // Check if vertex already processed
-            if vertex_id < state.vertex_processed.len() && state.vertex_processed[vertex_id] == 0 {
+            if vertex_id < state.state().vertex_processed.len()
+                && state.state().vertex_processed[vertex_id] == 0
+            {
                 // First time seeing this vertex - process all 4 incoming edges
                 // C: dynamicface.c:161-166 - loops through all 4 incoming edges
 
@@ -105,13 +103,10 @@ pub(super) fn check_face_vertices(
                     (color_b_idx, color_a_idx)
                 };
 
-                let current_count = state.crossing_counts.get(color_i, color_j);
+                let current_count = state.state().crossing_counts.get(color_i, color_j);
                 let new_count = current_count + 1;
 
-                unsafe {
-                    let ptr = state.crossing_counts.get_mut_ptr(color_i, color_j);
-                    trail.record_and_set(NonNull::new_unchecked(ptr), new_count);
-                }
+                state.set_crossing_count(color_i, color_j, new_count);
 
                 if new_count as usize > MAX_CROSSINGS_PER_PAIR {
                     return Err(PropagationFailure::CrossingLimitExceeded {
@@ -131,8 +126,9 @@ pub(super) fn check_face_vertices(
                     let edge_color_idx = edge_ref.color_idx;
 
                     // Set edge->to if not already set (C: dynamicProcessIncomingEdge)
-                    let existing_to =
-                        state.faces.faces[edge_face_id].edge_dynamic[edge_color_idx].get_to();
+                    let existing_to = state.state().faces.faces[edge_face_id].edge_dynamic
+                        [edge_color_idx]
+                        .get_to();
                     if existing_to.is_none() {
                         // Find which color this edge connects to at this vertex
                         let edge_color = crate::geometry::Color::new(edge_color_idx as u8);
@@ -148,17 +144,11 @@ pub(super) fn check_face_vertices(
                             [edge_color_idx]
                             .possibly_to[other_color_idx]
                         {
-                            let encoded = DynamicEdge::encode_to(Some(link_to_set));
-                            unsafe {
-                                trail.record_and_set(
-                                    NonNull::from(
-                                        &mut state.faces.faces[edge_face_id].edge_dynamic
-                                            [edge_color_idx]
-                                            .to_encoded,
-                                    ),
-                                    encoded,
-                                );
-                            }
+                            state.set_edge_connection(
+                                edge_face_id,
+                                edge_color_idx,
+                                Some(link_to_set),
+                            );
                         }
                     }
 
@@ -170,19 +160,11 @@ pub(super) fn check_face_vertices(
                     } else {
                         1
                     };
-                    let current_count = state.edge_color_counts[direction][edge_color_idx];
-                    unsafe {
-                        trail.record_and_set(
-                            NonNull::from(&mut state.edge_color_counts[direction][edge_color_idx]),
-                            current_count + 1,
-                        );
-                    }
+                    state.increment_edge_color_count(direction, edge_color_idx);
                 }
 
                 // Mark vertex as processed (trail-tracked)
-                unsafe {
-                    trail.record_and_set(NonNull::from(&mut state.vertex_processed[vertex_id]), 1);
-                }
+                state.mark_vertex_processed(vertex_id);
             }
         }
         // If vertex_link is None, that's OK - not all edges may have vertices
@@ -210,7 +192,11 @@ pub(super) fn check_face_vertices(
             // Corner detection check
             // C: vertex.c:180-191 vertexCornerCheck
             super::corner_detection::vertex_corner_check(
-                memo, state, trail, face_id, color_idx, depth,
+                memo,
+                state.state(),
+                face_id,
+                color_idx,
+                depth,
             )?
 
             // TODO: Disconnected curve check
@@ -219,7 +205,7 @@ pub(super) fn check_face_vertices(
             // The corner detection check above is sufficient to reject the invalid solution-02.txt
             /*
             if let Err(failure) =
-                super::curve_disconnection::edge_curve_checks(memo, state, trail, face_id, color_idx, depth)
+                super::curve_disconnection::edge_curve_checks(memo, state, face_id, color_idx, depth)
             {
                 return Err(failure);
             }
