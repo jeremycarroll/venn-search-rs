@@ -5,7 +5,7 @@
 //! This module provides mutable per-face state that changes during search
 //! and is tracked on the trail for backtracking.
 
-use crate::geometry::constants::{NCOLORS, NCYCLES};
+use crate::geometry::constants::NCOLORS;
 use crate::geometry::{CycleId, CycleSet};
 use crate::memo::FacesMemo;
 use crate::state::DynamicEdge;
@@ -158,7 +158,7 @@ pub(crate) fn encode_optional_index(index: Option<u64>, limit: usize) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::constants::NFACES;
+    use crate::geometry::constants::{NCYCLES, NFACES};
 
     #[test]
     fn optional_index_encoding_boundaries() {
