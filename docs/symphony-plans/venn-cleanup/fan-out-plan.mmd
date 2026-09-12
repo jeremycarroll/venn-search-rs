@@ -1,16 +1,16 @@
 %% symphony-dag/v1
 flowchart LR
-  RECOVER["Round 1: Recover PR 14 cleanup with compatibility"]
-  SAFETY["Round 2: Own state and indexed undo log; migrate every caller"]
-  MEMO["Round 2: Clarify MEMO construction without changing tables"]
-  VERTEX["Round 3: Clarify vertex linking and crossing checks"]
-  RESTRICT["Round 3: Clarify restriction cascade and central setup"]
-  DISCONNECT["Round 3: Bound inactive disconnection helpers"]
-  ENGINE["Round 3: Clarify engine re-entry and predicate contracts"]
-  TESTS["Round 3: Isolate Venn fixtures and add missing invariants"]
-  MEASURE["Round 4: Assess cursor selection with paired runner evidence"]
-  DOCS["Round 4: Explain the implemented search and contribution path"]
-  FINAL["Round 5: Reconcile cleanup and remove measurement scaffolding"]
+  RECOVER["100-123: Round 1: Recover PR 14 cleanup with compatibility"]
+  SAFETY["100-124: Round 2: Own state and indexed undo log; migrate every caller"]
+  MEMO["100-125: Round 2: Clarify MEMO construction without changing tables"]
+  VERTEX["100-126: Round 3: Clarify vertex linking and crossing checks"]
+  RESTRICT["100-127: Round 3: Clarify restriction cascade and central setup"]
+  DISCONNECT["100-128: Round 3: Bound inactive disconnection helpers"]
+  ENGINE["100-129: Round 3: Clarify engine re-entry and predicate contracts"]
+  TESTS["100-130: Round 3: Isolate Venn fixtures and add missing invariants"]
+  MEASURE["100-131: Round 4: Assess cursor selection with paired runner evidence"]
+  DOCS["100-132: Round 4: Explain the implemented search and contribution path"]
+  FINAL["100-133: Round 5: Reconcile cleanup and remove measurement scaffolding"]
   RECOVER --> SAFETY
   RECOVER --> MEMO
   SAFETY --> VERTEX
