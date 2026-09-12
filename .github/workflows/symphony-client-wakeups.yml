@@ -8,7 +8,7 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened, edited, labeled]
   workflow_run:
-    workflows: ["*"]
+    workflows: ["CI"]
     types: [completed]
   check_run:
     types: [completed]
@@ -34,13 +34,13 @@ jobs:
         github.event.check_run.check_suite.app.slug != 'github-actions') ||
       github.event_name == 'status' ||
       github.event_name == 'push' || github.event_name == 'schedule'
-    uses: 1000lines/symphony-client-workflows/.github/workflows/symphony-linear-wakeups.yml@alpha
+    uses: 1000lines/symphony-client-workflows/.github/workflows/symphony-linear-wakeups.yml@main
     with:
       target-repository: "jeremycarroll/venn-search-rs"
       target-default-branch: "main"
       event-name: ${{ github.event_name }}
       event-payload: ${{ toJSON(github.event) }}
       helpers-repository: 1000lines/symphony-client-workflows
-      helpers-ref: alpha
+      helpers-ref: main
     secrets:
       CADENCE_LINEAR_API_TOKEN: ${{ secrets.CADENCE_LINEAR_API_TOKEN }}

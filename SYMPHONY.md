@@ -29,12 +29,22 @@ pending or missing uses Unhappy with `wake:15m`; failures return nonterminal
 tickets to Active; passing checks return them to Inactive for review. Preserve
 terminal states and current-head guards. Live mode/bridge proof remains CT-A.
 
-Review event/manual, handoff and cleanup callers share a reviewed workflow/helper
-revision and explicit named secrets. Ingress is secret-free. Follow review context
+Review event/manual, handoff and cleanup callers use shared workflows and helpers
+from `main` with explicit named secrets. Ingress is secret-free. Follow review context
 for provider selection; report live execution separately from generated files.
 
 Run the [PR guidance](docs/engineering/symphony/pull-requests.md) fetch/render
 commands on creation and every refresh; retain generated state colors and links.
+
+## Repository CI integration
+
+Validation runs in GitHub Actions using the existing `.github/workflows/ci.yml`
+(`CI`), with `ci.mode: remote`. Its four NCOLORS test jobs, Clippy and formatting
+are the required checks recorded in `.symphony.cfg.json`. Symphony wakeups consume
+completion of that workflow and evaluate the current PR head. The redundant
+generated command workflow is omitted; do not add a second Rust CI pipeline.
+Use `/Users/jeremy/hackathon/symphony-example` as `SYMPHONY_TOOLING_ROOT`
+for this local onboarding session. Hosted workers resolve their own tooling path.
 
 ## Merge conflict wakeups
 
@@ -44,7 +54,7 @@ branch without needing a new head. Recovery at minutes 7, 22, 37 and 52 UTC also
 checks other bases and retries unknown mergeability. GitHub may delay schedules
 or disable them after inactivity; recovery has no guaranteed 15-minute deadline.
 
-Publish the accepted bridge to `symphony-client-workflows@alpha`, install the
+Publish the accepted bridge to `symphony-client-workflows@main`, install the
 caller on the default branch, and enable Actions/schedules. Map only
 `CADENCE_LINEAR_API_TOKEN`: its owner needs issue/team/project reads, Cadence
 workpad writes and team issue-state updates. Record the authenticated owner;
@@ -99,7 +109,7 @@ names/scopes, App installation/grants and environment admission. `Symphony Clien
 checks repository/protected-job credentials without AI review; complete onboarding
 requires installed callers and a real review/check/Linear handoff.
 
-Author App: "1000lines-symphony[bot]". Reviewer App: "jeremycarroll-cadence[bot]".
+Author App: "1000lines-symphony". Reviewer App: "hackcadence".
 Reviewer choice: "codex"; see [review context](.github/symphony/REVIEW.md).
 Provision credentials separately from answers and commands. At runtime an OpenAI
 key selects Codex (including when both keys exist), otherwise an Anthropic key
