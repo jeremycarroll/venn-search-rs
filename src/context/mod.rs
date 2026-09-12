@@ -9,186 +9,19 @@
 //! This design enables parallelization by allowing multiple independent SearchContext
 //! instances to operate on the same MEMO data.
 
+pub mod dynamic;
+pub mod memoized;
+
+// Re-export for convenience
+pub use dynamic::DynamicState;
+pub use memoized::MemoizedData;
+
 use crate::geometry::constants::NCOLORS;
-use crate::geometry::{CrossingCounts, CycleId, CycleSet};
-use crate::memo::{CyclesArray, CyclesMemo, FacesMemo, VerticesMemo};
-use crate::state::{DynamicFaces, Statistics};
+use crate::geometry::{CycleId, CycleSet};
+use crate::state::Statistics;
 use crate::trail::Trail;
-use std::fs::File;
-use std::io::BufWriter;
 use std::mem::size_of;
 use std::ptr::NonNull;
-
-/// Immutable precomputed data (Tier 1: MEMO).
-///
-/// This data is computed once during initialization and never changes during search.
-/// It can be shared across multiple SearchContext instances (via copy or reference).
-///
-/// # Size Estimation
-///
-/// Measured size (Phase 6, NCOLORS=6):
-/// - Stack: ~16 KB (CyclesMemo lookup tables) + 88 bytes (Vec/Box headers + arrays)
-/// - Heap: ~214 KB
-///   - CyclesArray: ~12 KB (394 Cycle structs in Vec)
-///   - FacesMemo: ~55 KB (5 KB Face structs + 50 KB next/previous arrays)
-///   - VerticesMemo: ~147 KB (64×6×6 Option<Vertex> array in Box)
-/// - **Total: ~230 KB**
-///
-/// Future additions may increase size:
-/// - Edge relationship tables
-/// - PCO/Chirotope structures
-/// - Expected final size: ~250-300 KB
-///
-/// **Decision: Copy strategy confirmed** - At <1MB, copying per SearchContext
-/// provides excellent cache locality while enabling parallelization.
-#[derive(Debug, Clone)]
-pub struct MemoizedData {
-    /// All possible facial cycles (NCYCLES = 394 for NCOLORS=6)
-    pub cycles: CyclesArray,
-
-    /// Cycle-related MEMO data (lookup tables for constraint propagation)
-    pub cycles_memo: CyclesMemo,
-
-    /// All face-related MEMO data (binomial coefficients, adjacency, etc.)
-    pub faces: FacesMemo,
-
-    /// All vertex-related MEMO data (crossing point configurations)
-    pub vertices: VerticesMemo,
-    // TODO: Add more MEMO fields in later phases:
-    // - Edge relationship tables
-    // - PCO/Chirotope structures
-}
-
-impl MemoizedData {
-    /// Initialize all MEMO data structures.
-    ///
-    /// Computes all immutable precomputed data needed for the search.
-    /// This is called once at SearchContext creation.
-    pub fn new() -> Self {
-        eprintln!("[MemoizedData] Initializing all MEMO structures...");
-
-        let mut cycles = CyclesArray::generate();
-        let cycles_memo = CyclesMemo::initialize(&mut cycles);
-        let mut faces = FacesMemo::initialize(&cycles);
-        let vertices = VerticesMemo::initialize();
-
-        // Phase 3: Link edges to vertices for corner detection
-        faces.populate_vertex_links(&vertices);
-
-        eprintln!(
-            "[MemoizedData] Initialization complete ({} cycles, {} faces, {} possible vertices)",
-            cycles.len(),
-            faces.faces.len(),
-            vertices.vertices.len()
-        );
-
-        Self {
-            cycles,
-            cycles_memo,
-            faces,
-            vertices,
-        }
-    }
-}
-
-impl Default for MemoizedData {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Mutable search state (Tier 2: DYNAMIC).
-///
-/// This data changes during search and is tracked on the trail for backtracking.
-/// Each SearchContext owns its own mutable state.
-///
-/// # Memory Allocation
-///
-/// Like MEMO data, DYNAMIC state uses mixed stack/heap allocation:
-/// - **Stack**: Small fixed-size arrays (e.g., `current_face_degrees: [u64; 6]`)
-/// - **Heap**: Variable-size collections (e.g., Vecs for edge lists, cycle sets)
-///
-/// The trail records raw pointers to these locations for O(1) backtracking.
-#[derive(Debug)]
-pub struct DynamicState {
-    /// Current face degree assignments (for InnerFacePredicate).
-    ///
-    /// During the InnerFacePredicate phase, this array stores the degree
-    /// of each of the NCOLORS symmetric faces bordering the central face.
-    ///
-    /// Note: Stored as u64 to work with the trail system, even though values are small.
-    pub current_face_degrees: [u64; NCOLORS],
-
-    /// Per-face mutable state (Phase 7.1).
-    ///
-    /// Contains current_cycle, possible_cycles, and cycle_count for each face.
-    pub faces: DynamicFaces,
-
-    /// Crossing counts between color pairs (for corner detection).
-    ///
-    /// Tracks how many times each pair of colors crosses in the current solution.
-    /// Used to enforce the triangle constraint (max 6 crossings per pair).
-    ///
-    /// All modifications must be trail-tracked.
-    pub crossing_counts: CrossingCounts,
-
-    /// Tracks which vertices have been processed for crossing counts.
-    ///
-    /// Array of u64 flags (0 = not processed, 1 = processed).
-    /// Size 512 to accommodate up to 480 possible vertices (see VerticesMemo).
-    ///
-    /// When a vertex is first encountered during facial cycle assignment,
-    /// we increment the crossing count for that vertex's color pair and
-    /// mark the vertex as processed to avoid double-counting.
-    ///
-    /// All modifications must be trail-tracked.
-    pub vertex_processed: Vec<u64>,
-
-    /// Tracks the number of edges assigned for each color and direction.
-    ///
-    /// Index [0][color] = clockwise edges (face contains the color)
-    /// Index [1][color] = counterclockwise edges (face doesn't contain the color)
-    ///
-    /// Used to detect disconnected curves during corner checking.
-    /// When we traverse a curve, we only follow one direction (all clockwise or all counterclockwise).
-    ///
-    /// All modifications must be trail-tracked.
-    pub edge_color_counts: [[u64; NCOLORS]; 2],
-
-    /// Tracks which colors have been checked for disconnection.
-    ///
-    /// Once a color's curve forms a complete closed loop and passes the
-    /// disconnection check, we mark it here to avoid checking again.
-    ///
-    /// All modifications must be trail-tracked.
-    pub colors_checked: [u64; NCOLORS],
-
-    /// Temporary accumulator for colors that completed during current propagation.
-    ///
-    /// Reset before each top-level propagate_cycle_choice, then checked after.
-    /// NOT trail-tracked (temporary per-call state).
-    pub colors_completed_this_call: u64,
-
-    /// Current default output within backtracking context - can only have one.
-    /// Replace with a vector, and a trailed index to provide better functionality.
-    pub output: Option<Box<BufWriter<File>>>,
-}
-
-impl DynamicState {
-    /// Create initial dynamic state from MEMO data.
-    pub fn new(memo: &MemoizedData) -> Self {
-        Self {
-            current_face_degrees: [0; NCOLORS],
-            faces: DynamicFaces::new(&memo.faces),
-            crossing_counts: CrossingCounts::new(),
-            vertex_processed: vec![0u64; 512], // 512 slots for up to 480 vertices
-            edge_color_counts: [[0; NCOLORS]; 2],
-            colors_checked: [0; NCOLORS],
-            colors_completed_this_call: 0,
-            output: None,
-        }
-    }
-}
 
 /// Search context combining MEMO and DYNAMIC state.
 ///
